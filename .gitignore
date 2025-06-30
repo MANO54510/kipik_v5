@@ -43,3 +43,22 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# 🧱 Exclure les APKs et fichiers binaires lourds
+*.apk
+*.ap_
+*.aab
+*.dex
+*.so
+*.bin
+*.jar
+*.keystore
+
+# 🔒 Empêcher le commit des fichiers de sortie lourds
+**/outputs/
+**/intermediates/
+**/kernel_blob.bin
+
+# 🚫 Ciblage spécifique du problème rencontré
+android/build/
+android/app/outputs/
