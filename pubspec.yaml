@@ -1,0 +1,144 @@
+name: kipik_v5
+description: Nouvelle application KIPIK V5 pour la gestion de projets tatouage.
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.7.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Firebase - Versions compatibles entre elles
+  firebase_core: ^3.13.1
+  firebase_auth: ^5.3.1
+  cloud_firestore: ^5.4.3
+  # ✅ AJOUTS MANQUANTS
+  firebase_storage: ^12.3.4      # Pour upload d'images
+  firebase_messaging: ^15.1.4    # Pour notifications
+  firebase_analytics: ^11.3.3    # Analytics
+  
+  # État & navigation
+  provider: ^6.1.1
+  
+  # Fichiers & uploads (pour documents + RIB)
+  file_picker: ^8.0.0+1
+  file_selector: ^1.0.3
+  
+  # UI essentiels
+  url_launcher: ^6.2.4
+  
+  # UI avancées
+  flutter_staggered_grid_view: ^0.6.2
+  flutter_svg: ^2.0.0
+  
+  # Calendrier
+  table_calendar: ^3.0.8
+  syncfusion_flutter_calendar: ^28.1.37
+  device_calendar: ^4.3.3
+  
+  # Localisation & cartes - Versions compatibles
+  easy_localization: ^3.0.7
+  google_maps_flutter: ^2.2.0
+  location: ^7.0.0
+  flutter_google_places: ^0.3.0
+  google_place: ^0.4.7
+  geocoding: ^2.1.0
+  google_maps_webservice: ^0.0.19
+  geolocator: ^14.0.0
+  
+  # Média & audio
+  video_player: ^2.9.5
+  just_audio: ^0.10.1
+  vibration: ^3.1.3
+  
+  # Utilitaires
+  get_it: ^7.6.0
+  flutter_dotenv: ^5.0.2
+  http: ^0.13.6
+  uuid: ^4.5.1
+  
+  # Fichiers & partage
+  screenshot: ^3.0.0
+  path_provider: ^2.1.2
+  share_plus: ^7.2.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  mockito: ^5.0.0
+  build_runner: ^2.0.0
+  flutter_launcher_icons: ^0.10.0
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/k.png"
+
+# Overrides pour forcer la compatibilité
+dependency_overrides:
+  web: ^1.1.0
+  firebase_core_platform_interface: ^5.2.1
+  cloud_firestore_platform_interface: ^6.5.0
+  collection: ^1.18.0
+  meta: ^1.12.0
+  google_api_headers: ^4.2.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/k.png
+    - assets/logo_kipik.png
+    - assets/background_charbon.png
+    - assets/background1.png
+    - assets/background2.png
+    - assets/background3.png
+    - assets/background4.png
+    - assets/animation_loader.gif
+    - assets/marker_machine.png
+    - assets/marker_tattoo_machine.png
+    - assets/videos/animation_background.mp4
+    - assets/videos/splash_background.mp4
+    - assets/sounds/tattoo_machine.mp3
+    - assets/translations/en.json
+    - assets/translations/fr.json
+    - assets/translations/de.json
+    - assets/translations/es.json
+    - assets/fonts/PermanentMarker-Regular.ttf
+    - assets/avatars/avatar1.jpg
+    - assets/avatars/avatar2.jpg
+    - assets/avatars/avatar3.jpg
+    - assets/avatars/avatar4.jpg
+    - assets/avatars/avatar5.jpg
+    - assets/avatars/body_front.png
+    - assets/avatars/body_back.png
+    - assets/avatars/tatoueur1.jpg
+    - assets/avatars/tatoueur2.jpg
+    - assets/avatars/tatoueur3.jpg
+    - assets/avatars/tatoueur4.jpg
+    - assets/avatars/tatoueur5.jpg
+    - assets/background_tatoo2.png
+    - assets/esquisse_tatouage.jpg
+    - assets/placeholder_image.jpg
+    - assets/reference_tatouage.jpg
+    - assets/avatars/avatar_assistant_kipik.png
+    - assets/avatars/avatar_neutre.png
+    - assets/avatars/avatar_user_neutre.png
+    - assets/avatars/avatar_user_generic.png
+    - assets/avatar_zones.png
+    - assets/avatars/avatar_profil_pro.jpg
+    - assets/flags/
+    - assets/banniere_kipik.jpg
+    - assets/pro/shop_gen.jpg
+    - assets/pro/shop_profil_gen.jpg
+    - assets/images/header_tattoo_wallpaper.png
+    - assets/images/header_tattoo_wallpaper2.png
+    - assets/images/header_tattoo_wallpaper3.png
+
+  fonts:
+    - family: PermanentMarker
+      fonts:
+        - asset: assets/fonts/PermanentMarker-Regular.ttf

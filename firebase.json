@@ -1,0 +1,49 @@
+{
+  "hosting": {
+    "public": "public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+  "functions": {
+    "source": "functions",
+    "codebase": "default",
+    "ignore": [
+      "node_modules",
+      ".git",
+      "firebase-debug.log",
+      "firebase-debug.*.log",
+      "*.local"
+    ],
+    "predeploy": [
+      "npm --prefix \"$RESOURCE_DIR\" run lint"
+    ]
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "kipik-1c38c",
+          "appId": "1:541984941340:android:9d6093ba187e8d54cbc6d9",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "kipik-1c38c",
+          "configurations": {
+            "android": "1:541984941340:android:9d6093ba187e8d54cbc6d9"
+          }
+        }
+      }
+    }
+  }
+}

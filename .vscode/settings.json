@@ -1,0 +1,6 @@
+{
+    // Force le terminal intégré à s'ouvrir dans le dossier racine du workspace
+    "terminal.integrated.cwd": "${workspaceFolder}",
+    "java.configuration.updateBuildConfiguration": "automatic"
+  }
+  

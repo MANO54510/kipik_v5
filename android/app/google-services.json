@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "541984941340",
+    "project_id": "kipik-1c38c",
+    "storage_bucket": "kipik-1c38c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:541984941340:android:9d6093ba187e8d54cbc6d9",
+        "android_client_info": {
+          "package_name": "com.example.kipik_v5"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDaIHt8YnWJ1HCC0B8gdRVP7GsbaYYrmAs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

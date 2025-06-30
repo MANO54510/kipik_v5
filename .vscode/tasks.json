@@ -1,0 +1,66 @@
+// .vscode/tasks.json
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "❎ Flutter: Clean & Get",
+      "type": "shell",
+      "command": "flutter",
+      "args": ["clean", "&&", "flutter", "pub", "get"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "▶︎ Flutter: Run Android",
+      "type": "shell",
+      "command": "flutter",
+      "args": ["run", "-d", "android"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "▶︎ Flutter: Run iOS",
+      "type": "shell",
+      "command": "flutter",
+      "args": ["run", "-d", "ios"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "▶︎ Flutter: Run (auto)",
+      "type": "shell",
+      "command": "flutter",
+      "args": ["run"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

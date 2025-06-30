@@ -1,0 +1,37 @@
+{
+  "appTitle":     "Application Tatouage Kipik",
+  "welcome":      "Bienvenue sur Kipik !",
+  "loginButton":  "Se connecter",
+  "signupButton": "Créer un compte",
+  "logout":       "Se déconnecter",
+  "profile":      "Profil",
+
+  "login": {
+    "title":          "Connexion",
+    "subtitle":       "Connecte-toi à ton compte",
+    "emailLabel":     "Email",
+    "passwordLabel":  "Mot de passe",
+    "submit":         "Se connecter",
+    "signupPrompt":   "Pas encore inscrit ? Créer un compte",
+    "forgotPassword": "Mot de passe oublié ?",
+    "validation": {
+      "emailRequired":       "Email requis",
+      "emailInvalid":        "Format email invalide",
+      "passwordRequired":    "Mot de passe requis",
+      "passwordTooShort":    "6 caractères minimum",
+      "passwordUppercase":   "Ajoute une majuscule",
+      "passwordDigit":       "Ajoute un chiffre",
+      "passwordSpecialChar": "Ajoute un caractère spécial"
+    },
+    "error": {
+      "roleUnrecognized": "Rôle utilisateur non reconnu.",
+      "signInFailed":     "Échec de connexion ou email non vérifié."
+    }
+  },
+
+  "signup": {
+    "choiceTitle": "Choisissez votre profil",
+    "particulier":  "Particulier",
+    "pro":           "Tatoueur"
+  }
+}
