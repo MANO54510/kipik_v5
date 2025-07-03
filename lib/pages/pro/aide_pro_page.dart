@@ -4,17 +4,17 @@ import 'package:share_plus/share_plus.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
-// Import des services et modèles pour Kipik
-import 'package:kipik_v5/services/auth/auth_service.dart';
+// ✅ MIGRATION: Import des services Firebase
+import 'package:kipik_v5/services/auth/secure_auth_service.dart'; // ✅ MIGRATION
 import 'package:kipik_v5/services/help_center_service.dart';
 import 'package:kipik_v5/models/faq_item.dart';
 import 'package:kipik_v5/models/tutorial.dart';
-import 'package:kipik_v5/models/pro_user.dart';
+import 'package:kipik_v5/models/user_role.dart'; // ✅ MIGRATION
 
 // Import de vos widgets personnalisés existants
 import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
 import 'package:kipik_v5/widgets/common/drawers/custom_drawer_kipik.dart';
-import 'package:kipik_v5/utils/constants.dart';
+// ✅ SUPPRIMÉ: import inutilisé 'package:kipik_v5/utils/constants.dart';
 import 'package:kipik_v5/utils/styles.dart';
 
 class AideProPage extends StatefulWidget {
@@ -35,7 +35,7 @@ class _AideProPageState extends State<AideProPage>
   List<FAQItem> _filteredFaqItems = [];
   List<Tutorial> _tutorials = [];
   List<Tutorial> _filteredTutorials = [];
-  ProUser? _currentUser;
+  Map<String, dynamic>? _currentUser; // ✅ MIGRATION: Type générique
   final ScrollController _scrollController = ScrollController();
 
   // Liste des catégories d'aide
@@ -55,6 +55,11 @@ class _AideProPageState extends State<AideProPage>
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _sujetController = TextEditingController();
   final TextEditingController _messageController = TextEditingController();
+
+  // ✅ MIGRATION: Getters sécurisés
+  SecureAuthService get _authService => SecureAuthService.instance;
+  String? get _currentUserId => _authService.currentUserId;
+  UserRole? get _currentUserRole => _authService.currentUserRole;
 
   @override
   void initState() {
@@ -84,22 +89,29 @@ class _AideProPageState extends State<AideProPage>
     }
   }
 
+  // ✅ MIGRATION: Méthode de chargement avec SecureAuthService
   Future<void> _loadData() async {
     setState(() {
       _isLoading = true;
     });
 
     try {
+      // ✅ SÉCURITÉ: Vérifier l'authentification
+      if (_currentUserId == null) {
+        throw Exception('Utilisateur non connecté');
+      }
+
       final helpCenterService = Provider.of<HelpCenterService>(
         context,
         listen: false,
       );
-      final authService = Provider.of<AuthService>(context, listen: false);
 
       // Charger les données de la FAQ et des tutoriels
       final faqItems = await helpCenterService.getFAQItems(userType: 'pro');
       final tutorials = await helpCenterService.getTutorials(userType: 'pro');
-      final currentUser = await authService.getCurrentProUser();
+      
+      // ✅ MIGRATION: Utiliser SecureAuthService pour l'utilisateur actuel
+      final currentUser = _authService.currentUser;
 
       setState(() {
         _faqItems = faqItems;
@@ -109,20 +121,24 @@ class _AideProPageState extends State<AideProPage>
         _currentUser = currentUser;
         _isLoading = false;
       });
+
+      print('✅ Données d\'aide chargées: ${faqItems.length} FAQ, ${tutorials.length} tutoriels');
     } catch (e) {
-      print('Erreur lors du chargement des données d\'aide: $e');
+      print('❌ Erreur chargement données d\'aide: $e');
       setState(() {
         _isLoading = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Erreur lors du chargement des données. Veuillez réessayer.',
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Erreur lors du chargement des données. Veuillez réessayer.',
+            ),
+            backgroundColor: Colors.red,
           ),
-          backgroundColor: Colors.red,
-        ),
-      );
+        );
+      }
     }
   }
 
@@ -184,11 +200,13 @@ class _AideProPageState extends State<AideProPage>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        tutorial.title,
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                      Expanded(
+                        child: Text(
+                          tutorial.title,
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                       IconButton(
@@ -228,7 +246,6 @@ class _AideProPageState extends State<AideProPage>
                           SizedBox(height: 16),
                           Text('Cliquez pour lancer la vidéo'),
                           SizedBox(height: 24),
-                          // Utiliser un ElevatedButton standard au lieu de TattooAssistantButton
                           ElevatedButton.icon(
                             onPressed: () => _launchUrl(tutorial.videoUrl!),
                             icon: Icon(Icons.play_arrow),
@@ -293,14 +310,20 @@ class _AideProPageState extends State<AideProPage>
   }
 
   Future<void> _launchUrl(String url) async {
-    final Uri uri = Uri.parse(url);
-    if (!await launchUrl(uri)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Impossible d\'ouvrir: $url'),
-          backgroundColor: Colors.red,
-        ),
-      );
+    try {
+      final Uri uri = Uri.parse(url);
+      if (!await launchUrl(uri)) {
+        throw Exception('Impossible d\'ouvrir l\'URL');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Impossible d\'ouvrir: $url'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -311,8 +334,20 @@ class _AideProPageState extends State<AideProPage>
     );
   }
 
+  // ✅ MIGRATION: Méthode de soumission avec SecureAuthService
   Future<void> _submitContactForm() async {
     if (_formKey.currentState!.validate()) {
+      // ✅ SÉCURITÉ: Vérifier l'authentification avant soumission
+      if (_currentUserId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Vous devez être connecté pour contacter le support'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
       setState(() {
         _isLoading = true;
       });
@@ -323,9 +358,10 @@ class _AideProPageState extends State<AideProPage>
           listen: false,
         );
 
+        // ✅ MIGRATION: Utiliser les données de SecureAuthService
         await helpCenterService.submitSupportRequest(
-          userId: _currentUser?.id ?? '',
-          userEmail: _currentUser?.email ?? '',
+          userId: _currentUserId!,
+          userEmail: _currentUser?['email'] ?? '',
           subject: _sujetController.text,
           message: _messageController.text,
           userType: 'pro',
@@ -339,34 +375,74 @@ class _AideProPageState extends State<AideProPage>
         _sujetController.clear();
         _messageController.clear();
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Votre demande a été envoyée avec succès. Notre équipe vous répondra sous 24h.',
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Votre demande a été envoyée avec succès. Notre équipe vous répondra sous 24h.',
+              ),
+              backgroundColor: Colors.green,
             ),
-            backgroundColor: Colors.green,
-          ),
-        );
+          );
+        }
+
+        print('✅ Demande de support envoyée pour ${_currentUser?['email']}');
       } catch (e) {
-        print('Erreur lors de l\'envoi du formulaire: $e');
+        print('❌ Erreur envoi formulaire support: $e');
         setState(() {
           _isLoading = false;
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Erreur lors de l\'envoi du formulaire. Veuillez réessayer.',
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Erreur lors de l\'envoi du formulaire. Veuillez réessayer.',
+              ),
+              backgroundColor: Colors.red,
             ),
-            backgroundColor: Colors.red,
-          ),
-        );
+          );
+        }
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // ✅ SÉCURITÉ: Vérifier l'authentification au niveau du build
+    if (_currentUserId == null) {
+      return Scaffold(
+        appBar: CustomAppBarKipik(
+          title: 'Centre d\'Aide Pro',
+          showBackButton: true,
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.lock, size: 64, color: Colors.grey),
+              SizedBox(height: 16),
+              Text(
+                'Accès restreint',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Vous devez être connecté pour accéder au centre d\'aide.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+              SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
+                child: Text('Se connecter'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: CustomAppBarKipik(
         title: 'Centre d\'Aide Pro',
@@ -381,11 +457,32 @@ class _AideProPageState extends State<AideProPage>
             },
             tooltip: 'Contacter le support',
           ),
+          // ✅ NOUVEAU: Indicateur de rôle utilisateur
+          if (_currentUserRole != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: Chip(
+                label: Text(
+                  _currentUserRole!.name.toUpperCase(),
+                  style: TextStyle(fontSize: 10, color: Colors.white),
+                ),
+                backgroundColor: Theme.of(context).primaryColor,
+              ),
+            ),
         ],
       ),
       drawer: CustomDrawerKipik(),
       body: _isLoading
-          ? Center(child: CircularProgressIndicator())
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Chargement des données d\'aide...'),
+                ],
+              ),
+            )
           : Column(
               children: [
                 // Barre de recherche
@@ -469,13 +566,13 @@ class _AideProPageState extends State<AideProPage>
     );
   }
 
-  // Création d'une barre de recherche personnalisée
+  // ✅ AMÉLIORÉ: Barre de recherche avec valeur par défaut corrigée
   Widget _buildSearchBar() {
     return Container(
       height: 50,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(kDefaultBorderRadius),
+        borderRadius: BorderRadius.circular(12), // ✅ Utilise une valeur fixe
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.1),
@@ -502,7 +599,7 @@ class _AideProPageState extends State<AideProPage>
                 )
               : null,
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(kDefaultBorderRadius),
+            borderRadius: BorderRadius.circular(12), // ✅ Utilise une valeur fixe
             borderSide: BorderSide.none,
           ),
           contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -515,27 +612,10 @@ class _AideProPageState extends State<AideProPage>
 
   Widget _buildFAQTab() {
     if (_filteredFaqItems.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SvgPicture.asset(
-              'assets/images/no_results.svg',
-              width: 150,
-              height: 150,
-            ),
-            SizedBox(height: 16),
-            Text(
-              'Aucun résultat trouvé',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Essayez de modifier vos critères de recherche',
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-          ],
-        ),
+      return _buildEmptyState(
+        'Aucun résultat trouvé',
+        'Essayez de modifier vos critères de recherche',
+        Icons.search_off,
       );
     }
 
@@ -638,27 +718,10 @@ class _AideProPageState extends State<AideProPage>
 
   Widget _buildTutorialsTab() {
     if (_filteredTutorials.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SvgPicture.asset(
-              'assets/images/no_results.svg',
-              width: 150,
-              height: 150,
-            ),
-            SizedBox(height: 16),
-            Text(
-              'Aucun tutoriel trouvé',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Essayez de modifier vos critères de recherche',
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-          ],
-        ),
+      return _buildEmptyState(
+        'Aucun tutoriel trouvé',
+        'Essayez de modifier vos critères de recherche',
+        Icons.video_library,
       );
     }
 
@@ -801,6 +864,7 @@ class _AideProPageState extends State<AideProPage>
     );
   }
 
+  // ✅ MIGRATION: Onglet contact avec données SecureAuthService
   Widget _buildContactTab() {
     if (_showContactForm) {
       return SingleChildScrollView(
@@ -822,7 +886,7 @@ class _AideProPageState extends State<AideProPage>
               ),
               SizedBox(height: 24),
 
-              // Informations de contact
+              // ✅ MIGRATION: Informations de contact avec SecureAuthService
               Card(
                 elevation: 2,
                 child: Padding(
@@ -839,10 +903,10 @@ class _AideProPageState extends State<AideProPage>
                       ),
                       SizedBox(height: 16),
                       ListTile(
-                        leading: Icon(Icons.business),
-                        title: Text('Entreprise'),
+                        leading: Icon(Icons.person),
+                        title: Text('Utilisateur'),
                         subtitle: Text(
-                          _currentUser?.nomEntreprise ?? 'Non disponible',
+                          _currentUser?['displayName'] ?? _currentUser?['name'] ?? 'Non disponible',
                         ),
                         dense: true,
                         contentPadding: EdgeInsets.zero,
@@ -850,15 +914,24 @@ class _AideProPageState extends State<AideProPage>
                       ListTile(
                         leading: Icon(Icons.email),
                         title: Text('Adresse e-mail'),
-                        subtitle: Text(_currentUser?.email ?? 'Non disponible'),
+                        subtitle: Text(_currentUser?['email'] ?? 'Non disponible'),
                         dense: true,
                         contentPadding: EdgeInsets.zero,
                       ),
                       ListTile(
-                        leading: Icon(Icons.card_membership),
-                        title: Text('Type d\'abonnement'),
+                        leading: Icon(Icons.account_circle),
+                        title: Text('Rôle'),
+                        subtitle: Text(_currentUserRole?.name ?? 'Utilisateur'),
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      ListTile(
+                        leading: Icon(Icons.access_time),
+                        title: Text('Membre depuis'),
                         subtitle: Text(
-                          _currentUser?.abonnementType ?? 'Standard',
+                          _currentUser?['createdAt'] != null 
+                              ? 'Récent' 
+                              : 'Non disponible',
                         ),
                         dense: true,
                         contentPadding: EdgeInsets.zero,
@@ -918,7 +991,6 @@ class _AideProPageState extends State<AideProPage>
                 contentPadding: EdgeInsets.zero,
               ),
               SizedBox(height: 24),
-              // Remplacé TattooAssistantButton par un ElevatedButton standard
               SizedBox(
                 width: double.infinity,
                 height: 50,
@@ -944,6 +1016,7 @@ class _AideProPageState extends State<AideProPage>
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
+                            color: Colors.white,
                           ),
                         ),
                 ),
@@ -976,12 +1049,12 @@ class _AideProPageState extends State<AideProPage>
                     ListTile(
                       leading: CircleAvatar(
                         backgroundColor: Colors.green[50],
-                        child: Icon(Icons.message, color: Colors.green), // Utilisé 'message' au lieu de 'whatsapp'
+                        child: Icon(Icons.message, color: Colors.green),
                       ),
                       title: Text('WhatsApp'),
                       subtitle: Text('Chat avec notre équipe'),
                       trailing: IconButton(
-                        icon: Icon(Icons.launch), // Utilisé 'launch' au lieu de 'open_in_new'
+                        icon: Icon(Icons.launch),
                         onPressed: () => _launchUrl('https://wa.me/33123456789'),
                       ),
                     ),
@@ -994,7 +1067,7 @@ class _AideProPageState extends State<AideProPage>
                       title: Text('Communauté Kipik'),
                       subtitle: Text('Discutez avec d\'autres utilisateurs'),
                       trailing: IconButton(
-                        icon: Icon(Icons.launch), // Utilisé 'launch' au lieu de 'open_in_new'
+                        icon: Icon(Icons.launch),
                         onPressed: () => _launchUrl('https://communaute.kipik.fr'),
                       ),
                     ),
@@ -1006,14 +1079,22 @@ class _AideProPageState extends State<AideProPage>
         ),
       );
     } else {
-      return Center(
+      return _buildContactWelcome();
+    }
+  }
+
+  // ✅ NOUVEAU: Widget d'accueil contact séparé
+  Widget _buildContactWelcome() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            SvgPicture.asset(
-              'assets/images/support.svg',
-              width: 200,
-              height: 200,
+            Icon(
+              Icons.support_agent,
+              size: 80,
+              color: Theme.of(context).primaryColor,
             ),
             SizedBox(height: 24),
             Text(
@@ -1027,7 +1108,6 @@ class _AideProPageState extends State<AideProPage>
               style: TextStyle(color: Colors.grey[600]),
             ),
             SizedBox(height: 32),
-            // Remplacé TattooAssistantButton par un ElevatedButton.icon standard
             ElevatedButton.icon(
               onPressed: () {
                 setState(() {
@@ -1078,7 +1158,6 @@ class _AideProPageState extends State<AideProPage>
                   icon: Icons.chat,
                   label: 'Chat',
                   onTap: () {
-                    // Ouvrir le chat en direct
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Ouverture du chat en direct...')),
                     );
@@ -1088,8 +1167,35 @@ class _AideProPageState extends State<AideProPage>
             ),
           ],
         ),
-      );
-    }
+      ),
+    );
+  }
+
+  // ✅ NOUVEAU: Widget d'état vide réutilisable
+  Widget _buildEmptyState(String title, String subtitle, IconData icon) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            size: 64,
+            color: Colors.grey[400],
+          ),
+          SizedBox(height: 16),
+          Text(
+            title,
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          SizedBox(height: 8),
+          Text(
+            subtitle,
+            style: TextStyle(color: Colors.grey[600]),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildSupportOption({

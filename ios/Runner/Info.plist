@@ -28,22 +28,98 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+	
+	<!-- ✅ ORIENTATIONS: Gardé portrait uniquement pour KIPIK -->
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	
+	<!-- Configuration existante -->
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	
+	<!-- ✅ AJOUT: Configuration reCAPTCHA et WebView -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>google.com</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.0</string>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+			<key>gstatic.com</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.0</string>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
+	
+	<!-- Support WebView Flutter pour reCAPTCHA -->
+	<key>io.flutter.embedded_views_preview</key>
+	<true/>
+	
+	<!-- Support URL Schemes pour reCAPTCHA -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.kipik.v5</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>https</string>
+				<string>http</string>
+			</array>
+		</dict>
+	</array>
+	
+	<!-- ✅ PERMISSIONS pour géolocalisation (si utilisée avec reCAPTCHA) -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>KIPIK utilise votre localisation pour améliorer l'expérience de sécurité et trouver des tatoueurs près de chez vous.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>KIPIK utilise votre localisation pour améliorer l'expérience de sécurité et trouver des tatoueurs près de chez vous.</string>
+	
+	<!-- ✅ PERMISSIONS pour caméra/photos (si utilisée dans l'app) -->
+	<key>NSCameraUsageDescription</key>
+	<string>KIPIK a besoin d'accéder à votre caméra pour prendre des photos de vos tatouages.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>KIPIK a besoin d'accéder à vos photos pour gérer votre galerie de tatouages.</string>
+	
+	<!-- ✅ PERMISSIONS pour notifications -->
+	<key>NSUserNotificationUsageDescription</key>
+	<string>KIPIK souhaite vous envoyer des notifications pour vos rendez-vous tatouages.</string>
+	
+	<!-- ✅ Configuration UserAgent pour reCAPTCHA -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>https</string>
+		<string>http</string>
+	</array>
+	
+	<!-- ✅ Support background modes si nécessaire -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>background-fetch</string>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>

@@ -1,7 +1,7 @@
 // lib/widgets/app_menu.dart
 
 import 'package:flutter/material.dart';
-import '../utils/auth_helper.dart'; // votre enum UserRole et méthode de récupération du rôle
+import 'package:kipik_v5/models/user_role.dart';
 
 /// Un item de menu générique
 class MenuItem {

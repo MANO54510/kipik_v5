@@ -10,7 +10,7 @@ import 'package:geocoding/geocoding.dart';
 
 import 'package:kipik_v5/locator.dart';
 import 'package:kipik_v5/models/convention.dart';
-import 'package:kipik_v5/services/convention/convention_service.dart';
+import 'package:kipik_v5/services/convention/firebase_convention_service.dart';
 import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
 import 'package:kipik_v5/widgets/common/drawers/drawer_factory.dart';
 import 'package:kipik_v5/widgets/common/buttons/tattoo_assistant_button.dart';
@@ -24,7 +24,7 @@ class ConventionMapPage extends StatefulWidget {
 }
 
 class _ConventionMapPageState extends State<ConventionMapPage> {
-  final ConventionService _service = locator<ConventionService>();
+  final FirebaseConventionService _service = locator<FirebaseConventionService>();
   final Completer<GoogleMapController> _controller = Completer<GoogleMapController>();
   
   // Utiliser un alias pour éviter les conflits avec d'autres classes Location

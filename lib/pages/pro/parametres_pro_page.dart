@@ -7,9 +7,10 @@ import 'package:easy_localization/easy_localization.dart';
 
 // Import des modèles et services adaptés
 import 'package:kipik_v5/models/user.dart';
-import 'package:kipik_v5/services/auth/auth_service.dart';
+import 'package:kipik_v5/models/user_role.dart';
+import 'package:kipik_v5/services/auth/secure_auth_service.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
-import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart'; // Modification de l'import de l'AppBar
+import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
 import 'package:kipik_v5/widgets/common/drawers/drawer_factory.dart';
 import 'package:kipik_v5/utils/constants.dart';
 
@@ -37,7 +38,7 @@ class _ParametresProPageState extends State<ParametresProPage> {
   
   bool _isLoading = true;
   User? _currentUser;
-  String? _abonnementType = 'Standard'; // Pour stocker le type d'abonnement
+  String? _abonnementType = 'Standard';
   
   @override
   void initState() {
@@ -60,51 +61,66 @@ class _ParametresProPageState extends State<ParametresProPage> {
     });
     
     try {
-      // Charger les préférences utilisateur depuis SharedPreferences
-      final prefs = await SharedPreferences.getInstance();
-      final authService = AuthService.instance; // Utilisation du singleton
+      final secureAuth = context.read<SecureAuthService>();
       
-      _currentUser = authService.currentUser; // Obtenir l'utilisateur actuel
+      // Vérifier si l'utilisateur est connecté
+      if (!secureAuth.isAuthenticated) {
+        Navigator.of(context).pushReplacementNamed(Constants.routeLogin);
+        return;
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Utilisation du modèle User
+      final currentUserData = secureAuth.currentUser;
+      if (currentUserData != null) {
+        _currentUser = UserFromDynamic.fromDynamic(currentUserData);
+      }
       
       setState(() {
-        // Charger les préférences
-        _isDarkMode = prefs.getBool('dark_mode') ?? false;
-        _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true;
-        _locationEnabled = prefs.getBool('location_enabled') ?? true;
+        // Charger les préférences avec CONSTANTS
+        _isDarkMode = prefs.getBool(Constants.prefsDarkMode) ?? false;
+        _notificationsEnabled = prefs.getBool(kPrefNotificationsEnabled) ?? true;
+        _locationEnabled = prefs.getBool(kPrefLocationEnabled) ?? true;
+        
         _selectedLanguage = context.locale.languageCode == 'fr' ? 'Français' 
                           : context.locale.languageCode == 'en' ? 'English'
                           : context.locale.languageCode == 'es' ? 'Español'
                           : context.locale.languageCode == 'de' ? 'Deutsch'
                           : 'Français';
         
-        // Remplir les champs du formulaire avec les données de l'utilisateur
+        // Utilisation du modèle User
         if (_currentUser != null) {
           _nomEntrepriseController.text = _currentUser!.name;
           _emailController.text = _currentUser!.email ?? '';
           
           // Récupérer téléphone et adresse depuis les préférences 
-          // (ou vous pourriez étendre le modèle User pour inclure ces champs)
-          _telephoneController.text = prefs.getString('user_telephone') ?? '';
+          _telephoneController.text = prefs.getString('user_telephone') ?? _currentUser!.phone ?? '';
           _adresseController.text = prefs.getString('user_adresse') ?? '';
           
           // Récupérer le type d'abonnement
-          _abonnementType = prefs.getString('abonnement_type') ?? 'Standard';
+          _abonnementType = prefs.getString('abonnement_type') ?? kSubscriptionTypes[0];
         }
         
         _isLoading = false;
       });
+      
+      print('✅ Préférences chargées pour: ${_currentUser?.displayName ?? 'Utilisateur'}');
+      
     } catch (e) {
-      print('Erreur lors du chargement des préférences: $e');
+      print('❌ Erreur lors du chargement des préférences: $e');
       setState(() {
         _isLoading = false;
       });
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erreur lors du chargement des préférences. Veuillez réessayer.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(Constants.errorMessageGeneric),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
   
@@ -115,64 +131,96 @@ class _ParametresProPageState extends State<ParametresProPage> {
     
     try {
       final prefs = await SharedPreferences.getInstance();
-      final authService = AuthService.instance;
+      final secureAuth = context.read<SecureAuthService>();
       
-      // Sauvegarder les préférences
-      await prefs.setBool('dark_mode', _isDarkMode);
-      await prefs.setBool('notifications_enabled', _notificationsEnabled);
-      await prefs.setBool('location_enabled', _locationEnabled);
+      // Sauvegarder les préférences avec CONSTANTS
+      await prefs.setBool(Constants.prefsDarkMode, _isDarkMode);
+      await prefs.setBool(kPrefNotificationsEnabled, _notificationsEnabled);
+      await prefs.setBool(kPrefLocationEnabled, _locationEnabled);
       
       // Sauvegarder la langue
       if (_selectedLanguage == 'Français') {
-        await context.setLocale(Locale('fr'));
+        await context.setLocale(const Locale('fr'));
+        await prefs.setString(Constants.prefsLanguage, 'fr');
       } else if (_selectedLanguage == 'English') {
-        await context.setLocale(Locale('en'));
+        await context.setLocale(const Locale('en'));
+        await prefs.setString(Constants.prefsLanguage, 'en');
       } else if (_selectedLanguage == 'Español') {
-        await context.setLocale(Locale('es'));
+        await context.setLocale(const Locale('es'));
+        await prefs.setString(Constants.prefsLanguage, 'es');
       } else if (_selectedLanguage == 'Deutsch') {
-        await context.setLocale(Locale('de'));
+        await context.setLocale(const Locale('de'));
+        await prefs.setString(Constants.prefsLanguage, 'de');
       }
       
       // Stocker téléphone et adresse dans les préférences
       await prefs.setString('user_telephone', _telephoneController.text);
       await prefs.setString('user_adresse', _adresseController.text);
+      await prefs.setString('abonnement_type', _abonnementType ?? kSubscriptionTypes[0]);
       
       // Mettre à jour les informations du profil utilisateur
       if (_currentUser != null) {
-        final updatedUser = _currentUser!.copyWith(
-          name: _nomEntrepriseController.text,
-          email: _emailController.text,
-        );
-        
-        // Mettre à jour l'utilisateur (vous devrez implémenter cette méthode)
-        // await authService.updateUser(updatedUser);
-        
-        // En attendant, mettre à jour l'utilisateur en mémoire
-        authService.currentUser = updatedUser;
+        try {
+          await secureAuth.updateUserProfile(
+            displayName: _nomEntrepriseController.text,
+            additionalData: {
+              'phone': _telephoneController.text,
+              'address': _adresseController.text,
+              'subscriptionType': _abonnementType,
+            },
+          );
+          
+          // Mettre à jour l'objet User local
+          _currentUser = _currentUser!.copyWith(
+            name: _nomEntrepriseController.text,
+            phone: _telephoneController.text,
+          );
+          
+          print('✅ Profil utilisateur mis à jour avec succès');
+          
+        } catch (updateError) {
+          print('⚠️ Erreur mise à jour profil: $updateError');
+        }
       }
       
       setState(() {
         _isLoading = false;
       });
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Paramètres enregistrés avec succès!'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check, color: Colors.white),
+                const SizedBox(width: 8),
+                Text(kSaveSuccessMessage),
+              ],
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+      
     } catch (e) {
-      print('Erreur lors de la sauvegarde des préférences: $e');
+      print('❌ Erreur lors de la sauvegarde des préférences: $e');
       setState(() {
         _isLoading = false;
       });
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erreur lors de la sauvegarde des paramètres. Veuillez réessayer.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${kNetworkErrorMessage}: $e'),
+            backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: 'Réessayer',
+              textColor: Colors.white,
+              onPressed: _saveUserPreferences,
+            ),
+          ),
+        );
+      }
     }
   }
   
@@ -180,30 +228,45 @@ class _ParametresProPageState extends State<ParametresProPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Déconnexion'),
-        content: Text('Êtes-vous sûr de vouloir vous déconnecter?'),
+        title: const Text('Déconnexion'),
+        content: const Text('Êtes-vous sûr de vouloir vous déconnecter?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: Text('Annuler'),
+            child: const Text('Annuler'),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text('Déconnecter'),
             style: TextButton.styleFrom(
               foregroundColor: Colors.red,
             ),
+            child: const Text('Déconnecter'),
           ),
         ],
       ),
     );
     
     if (confirmed == true) {
-      final authService = AuthService.instance;
-      await authService.signOut();
-      
-      // Rediriger vers la page de connexion
-      Navigator.of(context).pushReplacementNamed('/login');
+      try {
+        await context.read<SecureAuthService>().signOut();
+        
+        if (mounted) {
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            Constants.routeLogin,
+            (route) => false,
+          );
+        }
+      } catch (e) {
+        print('❌ Erreur lors de la déconnexion: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${kAuthErrorMessage}: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
     }
   }
   
@@ -211,22 +274,22 @@ class _ParametresProPageState extends State<ParametresProPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Supprimer le compte'),
-        content: Text(
+        title: const Text('Supprimer le compte'),
+        content: const Text(
           'Êtes-vous sûr de vouloir supprimer votre compte? '
           'Cette action est irréversible et toutes vos données seront perdues.'
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: Text('Annuler'),
+            child: const Text('Annuler'),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text('Supprimer'),
             style: TextButton.styleFrom(
               foregroundColor: Colors.red,
             ),
+            child: const Text('Supprimer'),
           ),
         ],
       ),
@@ -238,27 +301,48 @@ class _ParametresProPageState extends State<ParametresProPage> {
       });
       
       try {
-        // Implémenter votre logique de suppression de compte
-        // await AuthService.instance.deleteAccount();
+        await context.read<SecureAuthService>().signOut();
         
-        // Rediriger vers la page d'accueil
-        Navigator.of(context).pushReplacementNamed('/');
+        if (mounted) {
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            Constants.routeHome,
+            (route) => false,
+          );
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Déconnexion effectuée. Contactez le support pour supprimer définitivement votre compte.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
         
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Votre compte a été supprimé avec succès.'),
-            backgroundColor: Colors.green,
-          ),
-        );
       } catch (e) {
-        print('Erreur lors de la suppression du compte: $e');
+        print('❌ Erreur lors de la suppression du compte: $e');
         setState(() {
           _isLoading = false;
         });
         
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${kUnknownErrorMessage}: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+  
+  void _openSupportWebsite() async {
+    final Uri url = Uri.parse(Constants.urlSupport);
+    if (!await launchUrl(url)) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erreur lors de la suppression du compte. Veuillez réessayer.'),
+          const SnackBar(
+            content: Text('Impossible d\'ouvrir la page de support'),
             backgroundColor: Colors.red,
           ),
         );
@@ -266,43 +350,34 @@ class _ParametresProPageState extends State<ParametresProPage> {
     }
   }
   
-  void _openSupportWebsite() async {
-    final Uri url = Uri.parse('https://www.kipik.fr/support');
-    if (!await launchUrl(url)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Impossible d\'ouvrir la page de support'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-  
   void _contactSupport() async {
+    final userName = _currentUser?.displayName ?? 'Utilisateur';
+    
     final Uri emailLaunchUri = Uri(
       scheme: 'mailto',
       path: 'support@kipik.fr',
       queryParameters: {
-        'subject': 'Support Kipik Pro - ${_currentUser?.name ?? ''}',
-        'body': 'Bonjour,\n\nJ\'ai besoin d\'aide concernant mon compte Kipik Pro.\n\nCordialement,\n${_currentUser?.name ?? ''}'
+        'subject': 'Support ${Constants.appName} Pro - $userName',
+        'body': 'Bonjour,\n\nJ\'ai besoin d\'aide concernant mon compte ${Constants.appName} Pro.\n\nCordialement,\n$userName'
       }
     );
     
     if (!await launchUrl(emailLaunchUri)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Impossible d\'ouvrir l\'application de messagerie'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Impossible d\'ouvrir l\'application de messagerie'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
   
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Utilisation de CustomAppBarKipik au lieu de KipikAppBar
-      appBar: CustomAppBarKipik(
+      appBar: const CustomAppBarKipik(
         title: 'Paramètres Professionnels',
         showBackButton: true,
         showBurger: true,
@@ -310,366 +385,518 @@ class _ParametresProPageState extends State<ParametresProPage> {
       ),
       drawer: DrawerFactory.of(context),
       body: _isLoading
-          ? Center(child: CircularProgressIndicator(color: KipikTheme.rouge))
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
+          ? Center(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Section Profil Professionnel
-                  _buildSectionTitle('Profil Professionnel'),
-                  Card(
-                    elevation: 2,
-                    margin: EdgeInsets.only(bottom: 16),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          TextFormField(
-                            controller: _nomEntrepriseController,
-                            decoration: InputDecoration(
-                              labelText: 'Nom de l\'entreprise',
-                              prefixIcon: Icon(Icons.business),
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                          SizedBox(height: 16),
-                          TextFormField(
-                            controller: _emailController,
-                            decoration: InputDecoration(
-                              labelText: 'Email professionnel',
-                              prefixIcon: Icon(Icons.email),
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: TextInputType.emailAddress,
-                          ),
-                          SizedBox(height: 16),
-                          TextFormField(
-                            controller: _telephoneController,
-                            decoration: InputDecoration(
-                              labelText: 'Téléphone',
-                              prefixIcon: Icon(Icons.phone),
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: TextInputType.phone,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                            ],
-                          ),
-                          SizedBox(height: 16),
-                          TextFormField(
-                            controller: _adresseController,
-                            decoration: InputDecoration(
-                              labelText: 'Adresse',
-                              prefixIcon: Icon(Icons.location_on),
-                              border: OutlineInputBorder(),
-                            ),
-                            maxLines: 3,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  
-                  // Section Abonnement
-                  _buildSectionTitle('Abonnement'),
-                  Card(
-                    elevation: 2,
-                    margin: EdgeInsets.only(bottom: 16),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ListTile(
-                            title: Text(
-                              'Type d\'abonnement',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            subtitle: Text(_abonnementType ?? 'Standard'),
-                            trailing: OutlinedButton(
-                              onPressed: () {
-                                Navigator.of(context).pushNamed('/abonnements');
-                              },
-                              child: Text('Modifier'),
-                            ),
-                          ),
-                          Divider(),
-                          ListTile(
-                            title: Text(
-                              'Facturation',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            subtitle: Text('Gérer vos informations de paiement'),
-                            trailing: Icon(Icons.arrow_forward_ios, size: 16),
-                            onTap: () {
-                              Navigator.of(context).pushNamed('/facturation');
-                            },
-                          ),
-                          Divider(),
-                          ListTile(
-                            title: Text(
-                              'Historique des factures',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            subtitle: Text('Accéder à vos factures précédentes'),
-                            trailing: Icon(Icons.arrow_forward_ios, size: 16),
-                            onTap: () {
-                              Navigator.of(context).pushNamed('/historique-factures');
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  
-                  // Section Préférences
-                  _buildSectionTitle('Préférences'),
-                  Card(
-                    elevation: 2,
-                    margin: EdgeInsets.only(bottom: 16),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ListTile(
-                            title: Text('Mode sombre'),
-                            leading: Icon(Icons.dark_mode),
-                            trailing: Switch(
-                              value: _isDarkMode,
-                              onChanged: (value) {
-                                setState(() {
-                                  _isDarkMode = value;
-                                });
-                              },
-                              activeColor: KipikTheme.rouge,
-                            ),
-                          ),
-                          Divider(),
-                          ListTile(
-                            title: Text('Notifications'),
-                            leading: Icon(Icons.notifications),
-                            trailing: Switch(
-                              value: _notificationsEnabled,
-                              onChanged: (value) {
-                                setState(() {
-                                  _notificationsEnabled = value;
-                                });
-                              },
-                              activeColor: KipikTheme.rouge,
-                            ),
-                          ),
-                          Divider(),
-                          ListTile(
-                            title: Text('Géolocalisation'),
-                            leading: Icon(Icons.location_on),
-                            trailing: Switch(
-                              value: _locationEnabled,
-                              onChanged: (value) {
-                                setState(() {
-                                  _locationEnabled = value;
-                                });
-                              },
-                              activeColor: KipikTheme.rouge,
-                            ),
-                          ),
-                          Divider(),
-                          ListTile(
-                            title: Text('Langue'),
-                            leading: Icon(Icons.language),
-                            trailing: DropdownButton<String>(
-                              value: _selectedLanguage,
-                              onChanged: (newValue) {
-                                if (newValue != null) {
-                                  setState(() {
-                                    _selectedLanguage = newValue;
-                                  });
-                                }
-                              },
-                              items: _availableLanguages.map((language) {
-                                return DropdownMenuItem<String>(
-                                  value: language,
-                                  child: Text(language),
-                                );
-                              }).toList(),
-                              underline: Container(),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  
-                  // Section Support
-                  _buildSectionTitle('Support et Aide'),
-                  Card(
-                    elevation: 2,
-                    margin: EdgeInsets.only(bottom: 16),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ListTile(
-                            title: Text('Centre d\'aide'),
-                            leading: Icon(Icons.help),
-                            trailing: Icon(Icons.arrow_forward_ios, size: 16),
-                            onTap: _openSupportWebsite,
-                          ),
-                          Divider(),
-                          ListTile(
-                            title: Text('Contacter le support'),
-                            leading: Icon(Icons.support_agent),
-                            trailing: Icon(Icons.arrow_forward_ios, size: 16),
-                            onTap: _contactSupport,
-                          ),
-                          Divider(),
-                          ListTile(
-                            title: Text('FAQ'),
-                            leading: Icon(Icons.question_answer),
-                            trailing: Icon(Icons.arrow_forward_ios, size: 16),
-                            onTap: () {
-                              Navigator.of(context).pushNamed('/faq');
-                            },
-                          ),
-                          Divider(),
-                          ListTile(
-                            title: Text('Tutoriels'),
-                            leading: Icon(Icons.play_circle_outline),
-                            trailing: Icon(Icons.arrow_forward_ios, size: 16),
-                            onTap: () {
-                              Navigator.of(context).pushNamed('/tutoriels');
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  
-                  // Section Sécurité
-                  _buildSectionTitle('Sécurité et Confidentialité'),
-                  Card(
-                    elevation: 2,
-                    margin: EdgeInsets.only(bottom: 16),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ListTile(
-                            title: Text('Changer le mot de passe'),
-                            leading: Icon(Icons.lock_outline),
-                            trailing: Icon(Icons.arrow_forward_ios, size: 16),
-                            onTap: () {
-                              Navigator.of(context).pushNamed('/change-password');
-                            },
-                          ),
-                          Divider(),
-                          ListTile(
-                            title: Text('Paramètres de confidentialité'),
-                            leading: Icon(Icons.privacy_tip_outlined),
-                            trailing: Icon(Icons.arrow_forward_ios, size: 16),
-                            onTap: () {
-                              Navigator.of(context).pushNamed('/privacy-settings');
-                            },
-                          ),
-                          Divider(),
-                          ListTile(
-                            title: Text('Authentification à deux facteurs'),
-                            leading: Icon(Icons.security),
-                            trailing: Icon(Icons.arrow_forward_ios, size: 16),
-                            onTap: () {
-                              Navigator.of(context).pushNamed('/two-factor-auth');
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  
-                  // Section Compte
-                  _buildSectionTitle('Compte'),
-                  Card(
-                    elevation: 2,
-                    margin: EdgeInsets.only(bottom: 24),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ListTile(
-                            title: Text(
-                              'Déconnexion',
-                              style: TextStyle(color: Colors.orange),
-                            ),
-                            leading: Icon(
-                              Icons.logout,
-                              color: Colors.orange,
-                            ),
-                            onTap: _confirmLogout,
-                          ),
-                          Divider(),
-                          ListTile(
-                            title: Text(
-                              'Supprimer le compte',
-                              style: TextStyle(color: Colors.red),
-                            ),
-                            leading: Icon(
-                              Icons.delete_forever,
-                              color: Colors.red,
-                            ),
-                            onTap: _confirmDeleteAccount,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  
-                  // Bouton de sauvegarde
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 32.0),
-                    child: Center(
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _saveUserPreferences,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: KipikTheme.rouge,
-                          foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          minimumSize: Size(double.infinity, 48),
-                        ),
-                        child: _isLoading
-                            ? CircularProgressIndicator(color: Colors.white)
-                            : Text(
-                                'Enregistrer les modifications',
-                                style: TextStyle(
-                                  fontFamily: 'PermanentMarker',
-                                  fontSize: 16,
-                                ),
-                              ),
-                      ),
-                    ),
-                  ),
-                  
-                  // Informations sur la version
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 16.0),
-                      child: Text(
-                        'Kipik v5.0.0 • © 2025 Kipik SAS',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ),
+                  CircularProgressIndicator(color: KipikTheme.rouge),
+                  const SizedBox(height: 16),
+                  Text(Constants.loadingMessage),
                 ],
               ),
+            )
+          : Consumer<SecureAuthService>(
+              builder: (context, authService, child) {
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Section d'informations utilisateur
+                      if (_currentUser != null) ...[
+                        Card(
+                          elevation: Constants.cardElevation,
+                          margin: const EdgeInsets.only(bottom: 16),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 30,
+                                  backgroundColor: KipikTheme.rouge,
+                                  backgroundImage: _currentUser!.profileImageUrl != null
+                                      ? NetworkImage(_currentUser!.profileImageUrl!)
+                                      : null,
+                                  child: _currentUser!.profileImageUrl == null
+                                      ? Text(
+                                          _currentUser!.initials,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 24,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        )
+                                      : null,
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _currentUser!.displayName,
+                                        style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        _currentUser!.email ?? '',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: KipikTheme.rouge.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(Constants.borderRadius),
+                                        ),
+                                        child: Text(
+                                          _currentUser!.role.name,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: KipikTheme.rouge,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // Badge super admin si applicable
+                                if (_currentUser!.isSuperAdmin) ...[
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.purple.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(Constants.borderRadius),
+                                      border: Border.all(color: Colors.purple),
+                                    ),
+                                    child: const Text(
+                                      '👑 SUPER',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.purple,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                      
+                      // Section Profil Professionnel
+                      _buildSectionTitle('Profil Professionnel'),
+                      Card(
+                        elevation: Constants.cardElevation,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              TextFormField(
+                                controller: _nomEntrepriseController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Nom de l\'entreprise',
+                                  prefixIcon: Icon(Icons.business),
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              TextFormField(
+                                controller: _emailController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Email professionnel',
+                                  prefixIcon: Icon(Icons.email),
+                                  border: OutlineInputBorder(),
+                                ),
+                                keyboardType: TextInputType.emailAddress,
+                                enabled: false, // Email non modifiable
+                              ),
+                              const SizedBox(height: 16),
+                              TextFormField(
+                                controller: _telephoneController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Téléphone',
+                                  prefixIcon: Icon(Icons.phone),
+                                  border: OutlineInputBorder(),
+                                ),
+                                keyboardType: TextInputType.phone,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              TextFormField(
+                                controller: _adresseController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Adresse',
+                                  prefixIcon: Icon(Icons.location_on),
+                                  border: OutlineInputBorder(),
+                                ),
+                                maxLines: 3,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      
+                      // Section Abonnement
+                      _buildSectionTitle('Abonnement'),
+                      Card(
+                        elevation: Constants.cardElevation,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ListTile(
+                                title: const Text(
+                                  'Type d\'abonnement',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                subtitle: Text(_abonnementType ?? kSubscriptionTypes[0]),
+                                trailing: OutlinedButton(
+                                  onPressed: () {
+                                    Navigator.of(context).pushNamed('/abonnements');
+                                  },
+                                  child: const Text('Modifier'),
+                                ),
+                              ),
+                              const Divider(),
+                              ListTile(
+                                title: const Text(
+                                  'Facturation',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                subtitle: const Text('Gérer vos informations de paiement'),
+                                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                onTap: () {
+                                  Navigator.of(context).pushNamed('/facturation');
+                                },
+                              ),
+                              const Divider(),
+                              ListTile(
+                                title: const Text(
+                                  'Historique des factures',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                subtitle: const Text('Accéder à vos factures précédentes'),
+                                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                onTap: () {
+                                  Navigator.of(context).pushNamed('/historique-factures');
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      
+                      // Section Préférences
+                      _buildSectionTitle('Préférences'),
+                      Card(
+                        elevation: Constants.cardElevation,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ListTile(
+                                title: const Text('Mode sombre'),
+                                leading: const Icon(Icons.dark_mode),
+                                trailing: Switch(
+                                  value: _isDarkMode,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _isDarkMode = value;
+                                    });
+                                  },
+                                  activeColor: KipikTheme.rouge,
+                                ),
+                              ),
+                              const Divider(),
+                              ListTile(
+                                title: const Text('Notifications'),
+                                leading: const Icon(Icons.notifications),
+                                trailing: Switch(
+                                  value: _notificationsEnabled,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _notificationsEnabled = value;
+                                    });
+                                  },
+                                  activeColor: KipikTheme.rouge,
+                                ),
+                              ),
+                              const Divider(),
+                              ListTile(
+                                title: const Text('Géolocalisation'),
+                                leading: const Icon(Icons.location_on),
+                                trailing: Switch(
+                                  value: _locationEnabled,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _locationEnabled = value;
+                                    });
+                                  },
+                                  activeColor: KipikTheme.rouge,
+                                ),
+                              ),
+                              const Divider(),
+                              ListTile(
+                                title: const Text('Langue'),
+                                leading: const Icon(Icons.language),
+                                trailing: DropdownButton<String>(
+                                  value: _selectedLanguage,
+                                  onChanged: (newValue) {
+                                    if (newValue != null) {
+                                      setState(() {
+                                        _selectedLanguage = newValue;
+                                      });
+                                    }
+                                  },
+                                  items: _availableLanguages.map((language) {
+                                    return DropdownMenuItem<String>(
+                                      value: language,
+                                      child: Text(language),
+                                    );
+                                  }).toList(),
+                                  underline: Container(),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      
+                      // Section Admin (seulement pour les admins)
+                      if (_currentUser?.isAdmin() == true) ...[
+                        _buildSectionTitle('Administration'),
+                        Card(
+                          elevation: Constants.cardElevation,
+                          margin: const EdgeInsets.only(bottom: 16),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                ListTile(
+                                  title: const Text('Panel Administrateur'),
+                                  leading: const Icon(Icons.admin_panel_settings),
+                                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                  onTap: () {
+                                    Navigator.of(context).pushNamed('/admin/dashboard');
+                                  },
+                                ),
+                                if (_currentUser?.isSuperAdmin == true) ...[
+                                  const Divider(),
+                                  ListTile(
+                                    title: const Text('Gestion des Admins'),
+                                    leading: const Icon(Icons.supervised_user_circle),
+                                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                    onTap: () {
+                                      Navigator.of(context).pushNamed('/admin/manage-admins');
+                                    },
+                                  ),
+                                  const Divider(),
+                                  ListTile(
+                                    title: const Text('Logs de Sécurité'),
+                                    leading: const Icon(Icons.security),
+                                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                    onTap: () {
+                                      Navigator.of(context).pushNamed('/admin/security-logs');
+                                    },
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                      
+                      // Section Support
+                      _buildSectionTitle('Support et Aide'),
+                      Card(
+                        elevation: Constants.cardElevation,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ListTile(
+                                title: const Text('Centre d\'aide'),
+                                leading: const Icon(Icons.help),
+                                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                onTap: _openSupportWebsite,
+                              ),
+                              const Divider(),
+                              ListTile(
+                                title: const Text('Contacter le support'),
+                                leading: const Icon(Icons.support_agent),
+                                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                onTap: _contactSupport,
+                              ),
+                              const Divider(),
+                              ListTile(
+                                title: const Text('FAQ'),
+                                leading: const Icon(Icons.question_answer),
+                                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                onTap: () {
+                                  Navigator.of(context).pushNamed('/faq');
+                                },
+                              ),
+                              const Divider(),
+                              ListTile(
+                                title: const Text('Tutoriels'),
+                                leading: const Icon(Icons.play_circle_outline),
+                                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                onTap: () {
+                                  Navigator.of(context).pushNamed('/tutoriels');
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      
+                      // Section Sécurité
+                      _buildSectionTitle('Sécurité et Confidentialité'),
+                      Card(
+                        elevation: Constants.cardElevation,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ListTile(
+                                title: const Text('Changer le mot de passe'),
+                                leading: const Icon(Icons.lock_outline),
+                                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                onTap: () {
+                                  Navigator.of(context).pushNamed('/change-password');
+                                },
+                              ),
+                              const Divider(),
+                              ListTile(
+                                title: const Text('Paramètres de confidentialité'),
+                                leading: const Icon(Icons.privacy_tip_outlined),
+                                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                onTap: () {
+                                  Navigator.of(context).pushNamed('/privacy-settings');
+                                },
+                              ),
+                              const Divider(),
+                              ListTile(
+                                title: const Text('Authentification à deux facteurs'),
+                                leading: const Icon(Icons.security),
+                                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                onTap: () {
+                                  Navigator.of(context).pushNamed('/two-factor-auth');
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      
+                      // Section Compte
+                      _buildSectionTitle('Compte'),
+                      Card(
+                        elevation: Constants.cardElevation,
+                        margin: const EdgeInsets.only(bottom: 24),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ListTile(
+                                title: const Text(
+                                  'Déconnexion',
+                                  style: TextStyle(color: Colors.orange),
+                                ),
+                                leading: const Icon(
+                                  Icons.logout,
+                                  color: Colors.orange,
+                                ),
+                                onTap: _confirmLogout,
+                              ),
+                              // Masquer suppression compte pour super admin
+                              if (_currentUser?.isSuperAdmin != true) ...[
+                                const Divider(),
+                                ListTile(
+                                  title: const Text(
+                                    'Supprimer le compte',
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                  leading: const Icon(
+                                    Icons.delete_forever,
+                                    color: Colors.red,
+                                  ),
+                                  onTap: _confirmDeleteAccount,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                      
+                      // Bouton de sauvegarde
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 32.0),
+                        child: Center(
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _saveUserPreferences,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: KipikTheme.rouge,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(Constants.borderRadius),
+                              ),
+                              minimumSize: const Size(double.infinity, Constants.buttonHeight),
+                            ),
+                            child: _isLoading
+                                ? const CircularProgressIndicator(color: Colors.white)
+                                : const Text(
+                                    'Enregistrer les modifications',
+                                    style: TextStyle(
+                                      fontFamily: 'PermanentMarker',
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ),
+                      
+                      // Informations sur la version
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 16.0),
+                          child: Text(
+                            '${Constants.appName} v${Constants.appVersion} • © 2025 Kipik SAS',
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
     );
   }

@@ -1,9 +1,78 @@
 {
-    "appTitle": "Kipik Tattoo App",
-    "welcome": "Willkommen bei Kipik !",
-    "loginButton": "Anmelden",
-    "signupButton": "Registrieren",
-    "logout": "Abmelden",
-    "profile": "Profil"
+  "appTitle": "Kipik Tattoo-Anwendung",
+  "welcome": "Willkommen bei Kipik!",
+  "loginButton": "Anmelden",
+  "signupButton": "Konto erstellen",
+  "logout": "Abmelden",
+  "profile": "Profil",
+
+  "login": {
+    "title": "Anmeldung",
+    "subtitle": "Melde dich bei deinem Konto an",
+    "emailLabel": "E-Mail",
+    "passwordLabel": "Passwort",
+    "passwordHelp": "8 Zeichen min • 1 Großbuchstabe • 1 Ziffer • 1 Sonderzeichen",
+    "submit": "Anmelden",
+    "signupPrompt": "Noch nicht registriert? Konto erstellen",
+    "forgotPassword": "Passwort vergessen?",
+    "validation": {
+      "emailRequired": "E-Mail erforderlich",
+      "emailInvalid": "Ungültiges E-Mail-Format",
+      "passwordRequired": "Passwort erforderlich",
+      "passwordMinLength": "Mindestens 8 Zeichen erforderlich",
+      "passwordTooShort": "8 Zeichen mindestens",
+      "passwordUppercase": "Mindestens 1 Großbuchstabe erforderlich",
+      "passwordDigit": "Mindestens 1 Ziffer erforderlich",
+      "passwordSpecialChar": "Mindestens 1 Sonderzeichen erforderlich (!@#$%^&*)"
+    },
+    "error": {
+      "roleUnrecognized": "Benutzerrolle nicht erkannt.",
+      "signInFailed": "Anmeldung fehlgeschlagen oder E-Mail nicht verifiziert.",
+      "captchaRequired": "Bitte CAPTCHA validieren"
+    }
+  },
+
+  "signup": {
+    "choiceTitle": "Wähle dein Profil",
+    "particulier": "Privatperson",
+    "pro": "Tätowierer",
+    "title": "Registrierung",
+    "confirmPassword": "Passwort bestätigen",
+    "validation": {
+      "passwordMismatch": "Passwörter stimmen nicht überein"
+    }
+  },
+
+  "captcha": {
+    "verification_required": "Verifizierung erforderlich",
+    "verification_success": "Verifizierung erfolgreich ✓",
+    "verification_error": "Verifizierungsfehler",
+    "verifying": "Verifizierung läuft...",
+    "verified": "Verifiziert ✓",
+    "verified_high": "Hochsicherheits-Verifizierung ✓",
+    "verified_medium": "Sichere Verifizierung ⚠️",
+    "verified_low": "Niedrige Verifizierung ❌",
+    "pending": "Ausstehende Verifizierung",
+    "verify_human": "Beweise, dass du ein Mensch bist",
+    "score_high": "Hoher Score - Vertrauenswürdiger Benutzer",
+    "score_medium": "Mittlerer Score - Zusätzliche Verifizierung",
+    "score_low": "Niedriger Score - Manuelle Verifizierung erforderlich",
+    "lockout_message": "Zu viele Versuche. Versuche es in {minutes} Minuten erneut.",
+    "security_check": "Sicherheitskontrolle"
+  },
+
+  "security": {
+    "account_locked": "Konto vorübergehend gesperrt",
+    "suspicious_activity": "Verdächtige Aktivität erkannt",
+    "too_many_attempts": "Zu viele Anmeldeversuche",
+    "verification_required": "Sicherheitsverifizierung erforderlich",
+    "high_security_mode": "Hochsicherheitsmodus aktiviert"
+  },
+
+  "common": {
+    "cancel": "Abbrechen",
+    "retry": "Wiederholen",
+    "continue": "Fortfahren",
+    "loading": "Laden..."
   }
-  
+}

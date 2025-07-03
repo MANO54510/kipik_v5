@@ -68,7 +68,8 @@ class _CustomAppBarParticulierState extends State<CustomAppBarParticulier> {
     return StreamBuilder<Object>(
       stream: Stream.periodic(const Duration(seconds: 2)), // Refresh toutes les 2 secondes
       builder: (context, snapshot) {
-        final int unreadCount = _notificationService.getUnreadCount();
+        // Utiliser la méthode synchrone qui existe dans votre service
+        final int unreadCount = _notificationService.getUnreadCountSync();
 
         return AppBar(
           backgroundColor: Colors.transparent,

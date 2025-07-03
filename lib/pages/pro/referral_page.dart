@@ -3,19 +3,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../services/promo/promo_code_service.dart';
-import '../../widgets/common/app_bars/custom_app_bar_kipik.dart';
-import '../../theme/kipik_theme.dart';
+import 'package:kipik_v5/services/promo/firebase_promo_code_service.dart';
+import 'package:kipik_v5/services/auth/secure_auth_service.dart';
+import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
+import 'package:kipik_v5/theme/kipik_theme.dart';
 
 class ReferralPage extends StatefulWidget {
-  final String userId;
-  final String userEmail;
-
-  const ReferralPage({
-    Key? key,
-    required this.userId,
-    required this.userEmail,
-  }) : super(key: key);
+  const ReferralPage({Key? key}) : super(key: key);
 
   @override
   State<ReferralPage> createState() => _ReferralPageState();
@@ -24,8 +18,10 @@ class ReferralPage extends StatefulWidget {
 class _ReferralPageState extends State<ReferralPage> {
   String? _referralCode;
   bool _isLoading = true;
-  List<Referral> _referrals = [];
-  Map<String, dynamic> _stats = {};
+  bool _hasError = false;
+  String _errorMessage = '';
+  List<Map<String, dynamic>> _referrals = [];
+  Map<String, int> _stats = {};
 
   @override
   void initState() {
@@ -34,32 +30,60 @@ class _ReferralPageState extends State<ReferralPage> {
   }
 
   Future<void> _loadReferralData() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+      _errorMessage = '';
+    });
     
     try {
-      // Générer ou récupérer le code de parrainage
-      final code = await PromoCodeService.generateReferralCode(
-        widget.userId,
-        widget.userEmail,
-      );
-      
-      // Charger les parrainages existants
-      final referrals = await PromoCodeService.getUserReferrals(widget.userId);
-      
-      // Charger les statistiques
-      final stats = await PromoCodeService.getReferralStats(widget.userId);
+      // ✅ Vérifier que l'utilisateur est connecté
+      if (!SecureAuthService.instance.isAuthenticated) {
+        throw Exception('Vous devez être connecté pour accéder au parrainage');
+      }
+
+      // ✅ Utiliser les nouvelles méthodes statiques simplifiées
+      final futures = await Future.wait([
+        FirebasePromoCodeService.generateReferralCode(),
+        FirebasePromoCodeService.getReferralStats(),
+        FirebasePromoCodeService.instance.getCurrentUserReferrals(),
+      ]);
       
       setState(() {
-        _referralCode = code;
-        _referrals = referrals;
-        _stats = stats;
+        _referralCode = futures[0] as String?;
+        _stats = futures[1] as Map<String, int>;
+        _referrals = futures[2] as List<Map<String, dynamic>>;
         _isLoading = false;
       });
+
+      // Log pour debug
+      print('✅ Données de parrainage chargées:');
+      print('  - Code: $_referralCode');
+      print('  - Stats: $_stats');
+      print('  - Parrainages: ${_referrals.length}');
+      
     } catch (e) {
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur: $e')),
-      );
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+        _errorMessage = e.toString();
+      });
+      
+      print('❌ Erreur chargement parrainage: $e');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur: $e'),
+            backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: 'Réessayer',
+              textColor: Colors.white,
+              onPressed: _loadReferralData,
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -68,8 +92,15 @@ class _ReferralPageState extends State<ReferralPage> {
       Clipboard.setData(ClipboardData(text: _referralCode!));
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Code copié dans le presse-papiers !'),
+          content: Row(
+            children: [
+              Icon(Icons.check, color: Colors.white),
+              SizedBox(width: 8),
+              Text('Code copié dans le presse-papiers !'),
+            ],
+          ),
           backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
         ),
       );
     }
@@ -77,22 +108,82 @@ class _ReferralPageState extends State<ReferralPage> {
 
   void _shareCode() {
     if (_referralCode != null) {
+      // ✅ CORRECTION: Récupérer les infos utilisateur depuis SecureAuthService
+      final currentUser = SecureAuthService.instance.currentUser;
+      final userName = currentUser?['name'] ?? 
+                      currentUser?['displayName'] ?? 
+                      currentUser?['email']?.split('@')[0] ?? 
+                      'Un tatoueur';
+      
+      // ✅ UTILISER userName au lieu de $_userName
       final message = '''
 🎨 Rejoins-moi sur Kipik !
 
-Salut ! Je suis tatoueur et j'utilise l'app Kipik pour gérer mon business. 
+Salut ! Je suis $userName et j'utilise l'app Kipik pour gérer mon business de tatouage. 
 
 Utilise mon code de parrainage : $_referralCode
 
-Tu pourras t'inscrire et si tu prends un abonnement annuel, j'aurai 1 mois gratuit ! 
+✨ Avantages pour toi :
+• Gestion complète de tes projets
+• Agenda intelligent
+• Comptabilité simplifiée
+• Portfolio professionnel
 
-Télécharge l'app : [Lien vers l'app store]
+🎁 Et si tu prends un abonnement annuel, j'aurai 1 mois gratuit !
 
-#Kipik #Tatouage #Parrainage
+Télécharge l'app Kipik dès maintenant !
+
+#Kipik #Tatouage #Parrainage #TattooArtist
       ''';
       
       Share.share(message);
     }
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 64,
+              color: Colors.red[300],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Erreur de chargement',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.red[700],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _errorMessage,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _loadReferralData,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Réessayer'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: KipikTheme.rouge,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -104,278 +195,361 @@ Télécharge l'app : [Lien vers l'app store]
         showBurger: false,
         showNotificationIcon: false,
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Header avec explication
-                  Card(
-                    elevation: 4,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        gradient: LinearGradient(
-                          colors: [KipikTheme.rouge, KipikTheme.rouge.withOpacity(0.7)],
-                        ),
-                      ),
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        children: [
-                          const Icon(
-                            Icons.people,
-                            size: 48,
-                            color: Colors.white,
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            '🎉 Parraine un tatoueur et gagne 1 mois gratuit !',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              fontFamily: 'PermanentMarker',
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Quand ton filleul souscrit un abonnement annuel, tu reçois automatiquement 1 mois gratuit !',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.white,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
+      body: _hasError
+          ? _buildErrorState()
+          : _isLoading
+              ? const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Chargement de vos données de parrainage...'),
+                    ],
                   ),
-
-                  const SizedBox(height: 20),
-
-                  // Code de parrainage
-                  Card(
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        children: [
-                          const Text(
-                            'Ton code de parrainage',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              fontFamily: 'PermanentMarker',
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Container(
-                            padding: const EdgeInsets.all(16),
+                )
+              : RefreshIndicator(
+                  onRefresh: _loadReferralData,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Header avec explication
+                        Card(
+                          elevation: 4,
+                          child: Container(
                             decoration: BoxDecoration(
-                              color: Colors.grey[100],
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: KipikTheme.rouge, width: 2),
+                              gradient: LinearGradient(
+                                colors: [KipikTheme.rouge, KipikTheme.rouge.withOpacity(0.7)],
+                              ),
                             ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                            padding: const EdgeInsets.all(20),
+                            child: const Column(
                               children: [
+                                Icon(
+                                  Icons.people,
+                                  size: 48,
+                                  color: Colors.white,
+                                ),
+                                SizedBox(height: 16),
                                 Text(
-                                  _referralCode ?? 'Chargement...',
-                                  style: const TextStyle(
-                                    fontSize: 24,
+                                  '🎉 Parraine un tatoueur et gagne 1 mois gratuit !',
+                                  style: TextStyle(
+                                    fontSize: 20,
                                     fontWeight: FontWeight.bold,
-                                    fontFamily: 'monospace',
-                                    letterSpacing: 2,
+                                    color: Colors.white,
+                                    fontFamily: 'PermanentMarker',
                                   ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                SizedBox(height: 12),
+                                Text(
+                                  'Quand ton filleul souscrit un abonnement annuel, tu reçois automatiquement 1 mois gratuit !',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.white,
+                                  ),
+                                  textAlign: TextAlign.center,
                                 ),
                               ],
                             ),
                           ),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                  onPressed: _copyCode,
-                                  icon: const Icon(Icons.copy),
-                                  label: const Text('Copier'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: KipikTheme.rouge,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                  onPressed: _shareCode,
-                                  icon: const Icon(Icons.share),
-                                  label: const Text('Partager'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.green,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Statistiques
-                  Card(
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        children: [
-                          const Text(
-                            'Tes statistiques',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              fontFamily: 'PermanentMarker',
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _StatCard(
-                                  title: 'Parrainages',
-                                  value: '${_stats['totalReferrals'] ?? 0}',
-                                  icon: Icons.person_add,
-                                  color: Colors.blue,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _StatCard(
-                                  title: 'Validés',
-                                  value: '${_stats['completedReferrals'] ?? 0}',
-                                  icon: Icons.check_circle,
-                                  color: Colors.green,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _StatCard(
-                                  title: 'En attente',
-                                  value: '${_stats['pendingReferrals'] ?? 0}',
-                                  icon: Icons.hourglass_empty,
-                                  color: Colors.orange,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _StatCard(
-                                  title: 'Mois gagnés',
-                                  value: '${_stats['totalRewardMonths'] ?? 0}',
-                                  icon: Icons.emoji_events,
-                                  color: Colors.amber,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Comment ça marche
-                  Card(
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Comment ça marche ?',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              fontFamily: 'PermanentMarker',
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          _StepTile(
-                            step: '1',
-                            title: 'Partage ton code',
-                            description: 'Envoie ton code de parrainage à un tatoueur ami',
-                            icon: Icons.share,
-                          ),
-                          _StepTile(
-                            step: '2',
-                            title: 'Il s\'inscrit',
-                            description: 'Ton ami utilise ton code lors de son inscription',
-                            icon: Icons.person_add,
-                          ),
-                          _StepTile(
-                            step: '3',
-                            title: 'Il souscrit 1 an',
-                            description: 'Il choisit un abonnement annuel pour valider le parrainage',
-                            icon: Icons.calendar_today,
-                          ),
-                          _StepTile(
-                            step: '4',
-                            title: 'Tu gagnes !',
-                            description: 'Tu reçois automatiquement 1 mois gratuit',
-                            icon: Icons.emoji_events,
-                            isLast: true,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Historique des parrainages
-                  if (_referrals.isNotEmpty) ...[
-                    Card(
-                      elevation: 2,
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Tes parrainages',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'PermanentMarker',
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            ...List.generate(_referrals.length, (index) {
-                              final referral = _referrals[index];
-                              return _ReferralTile(referral: referral);
-                            }),
-                          ],
                         ),
-                      ),
+
+                        const SizedBox(height: 20),
+
+                        // Code de parrainage
+                        Card(
+                          elevation: 2,
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              children: [
+                                const Text(
+                                  'Ton code de parrainage',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'PermanentMarker',
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[100],
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: KipikTheme.rouge, width: 2),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        _referralCode ?? 'Aucun code disponible',
+                                        style: TextStyle(
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.bold,
+                                          fontFamily: 'monospace',
+                                          letterSpacing: 2,
+                                          color: _referralCode != null ? Colors.black : Colors.grey,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                if (_referralCode != null) ...[
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: ElevatedButton.icon(
+                                          onPressed: _copyCode,
+                                          icon: const Icon(Icons.copy),
+                                          label: const Text('Copier'),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: KipikTheme.rouge,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(vertical: 12),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: ElevatedButton.icon(
+                                          onPressed: _shareCode,
+                                          icon: const Icon(Icons.share),
+                                          label: const Text('Partager'),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.green,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(vertical: 12),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ] else ...[
+                                  ElevatedButton.icon(
+                                    onPressed: _loadReferralData,
+                                    icon: const Icon(Icons.refresh),
+                                    label: const Text('Générer un code'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: KipikTheme.rouge,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Statistiques
+                        Card(
+                          elevation: 2,
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              children: [
+                                const Text(
+                                  'Tes statistiques',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'PermanentMarker',
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _StatCard(
+                                        title: 'Parrainages',
+                                        value: '${_stats['totalReferrals'] ?? 0}',
+                                        icon: Icons.person_add,
+                                        color: Colors.blue,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: _StatCard(
+                                        title: 'Validés',
+                                        value: '${_stats['completedReferrals'] ?? 0}',
+                                        icon: Icons.check_circle,
+                                        color: Colors.green,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _StatCard(
+                                        title: 'En attente',
+                                        value: '${(_stats['totalReferrals'] ?? 0) - (_stats['completedReferrals'] ?? 0)}',
+                                        icon: Icons.hourglass_empty,
+                                        color: Colors.orange,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: _StatCard(
+                                        title: 'Mois gagnés',
+                                        value: '${_stats['totalRewardMonths'] ?? 0}',
+                                        icon: Icons.emoji_events,
+                                        color: Colors.amber,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Comment ça marche
+                        Card(
+                          elevation: 2,
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Comment ça marche ?',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'PermanentMarker',
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                const _StepTile(
+                                  step: '1',
+                                  title: 'Partage ton code',
+                                  description: 'Envoie ton code de parrainage à un tatoueur ami',
+                                  icon: Icons.share,
+                                ),
+                                const _StepTile(
+                                  step: '2',
+                                  title: 'Il s\'inscrit',
+                                  description: 'Ton ami utilise ton code lors de son inscription',
+                                  icon: Icons.person_add,
+                                ),
+                                const _StepTile(
+                                  step: '3',
+                                  title: 'Il souscrit 1 an',
+                                  description: 'Il choisit un abonnement annuel pour valider le parrainage',
+                                  icon: Icons.calendar_today,
+                                ),
+                                const _StepTile(
+                                  step: '4',
+                                  title: 'Tu gagnes !',
+                                  description: 'Tu reçois automatiquement 1 mois gratuit',
+                                  icon: Icons.emoji_events,
+                                  isLast: true,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Historique des parrainages
+                        if (_referrals.isNotEmpty) ...[
+                          Card(
+                            elevation: 2,
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Text(
+                                        'Tes parrainages',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          fontFamily: 'PermanentMarker',
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Text(
+                                          '${_referrals.length}',
+                                          style: const TextStyle(
+                                            color: Colors.blue,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  ...List.generate(_referrals.length, (index) {
+                                    final referral = _referrals[index];
+                                    return _ReferralTile(referral: referral);
+                                  }),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ] else if (!_isLoading) ...[
+                          Card(
+                            elevation: 2,
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.people_outline,
+                                    size: 48,
+                                    color: Colors.grey[400],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'Aucun parrainage pour le moment',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Commence à partager ton code pour inviter d\'autres tatoueurs !',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey[500],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+
+                        const SizedBox(height: 40),
+                      ],
                     ),
-                  ],
-                ],
-              ),
-            ),
+                  ),
+                ),
     );
   }
 }
@@ -517,17 +691,21 @@ class _StepTile extends StatelessWidget {
 }
 
 class _ReferralTile extends StatelessWidget {
-  final Referral referral;
+  final Map<String, dynamic> referral;
 
   const _ReferralTile({required this.referral});
 
   @override
   Widget build(BuildContext context) {
+    final status = referral['status'] as String? ?? 'pending';
+    final createdAt = referral['createdAt'] as DateTime?;
+    final completedAt = referral['completedAt'] as DateTime?;
+    
     Color statusColor;
     IconData statusIcon;
     String statusText;
 
-    switch (referral.status) {
+    switch (status) {
       case 'completed':
         statusColor = Colors.green;
         statusIcon = Icons.check_circle;
@@ -560,26 +738,28 @@ class _ReferralTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  referral.referredEmail,
+                  'Parrainage ${referral['referralCode'] ?? 'N/A'}',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  'Parrainé le ${referral.referralDate.day}/${referral.referralDate.month}/${referral.referralDate.year}',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 12,
-                  ),
-                ),
-                if (referral.subscriptionType != null)
+                if (createdAt != null)
                   Text(
-                    'Abonnement: ${referral.subscriptionType}',
+                    'Créé le ${createdAt.day}/${createdAt.month}/${createdAt.year}',
                     style: TextStyle(
                       color: Colors.grey[600],
                       fontSize: 12,
+                    ),
+                  ),
+                if (completedAt != null)
+                  Text(
+                    'Validé le ${completedAt.day}/${completedAt.month}/${completedAt.year}',
+                    style: const TextStyle(
+                      color: Colors.green,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
               ],
@@ -603,7 +783,7 @@ class _ReferralTile extends StatelessWidget {
                   ),
                 ),
               ),
-              if (referral.rewardGranted)
+              if (status == 'completed')
                 const Padding(
                   padding: EdgeInsets.only(top: 4),
                   child: Text(

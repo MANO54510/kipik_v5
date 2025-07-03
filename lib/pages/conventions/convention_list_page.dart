@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
 import 'package:kipik_v5/models/convention.dart';
-import 'package:kipik_v5/services/convention/convention_service.dart';
+import 'package:kipik_v5/services/convention/firebase_convention_service.dart';
 import 'package:kipik_v5/locator.dart';
 import 'package:kipik_v5/widgets/common/drawers/drawer_factory.dart';
 import 'package:kipik_v5/widgets/common/buttons/tattoo_assistant_button.dart';
@@ -20,7 +20,7 @@ class ConventionListPage extends StatefulWidget {
 }
 
 class _ConventionListPageState extends State<ConventionListPage> {
-  final ConventionService _service = locator<ConventionService>();
+  final FirebaseConventionService _service = locator<FirebaseConventionService>();
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   bool _isLoading = true;

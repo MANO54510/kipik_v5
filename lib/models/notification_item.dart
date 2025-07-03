@@ -1,4 +1,3 @@
-// lib/models/notification_item.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -9,6 +8,9 @@ enum NotificationType {
   projet,
   tatoueur,
   system,
+  rdv,
+  facture,
+  info,
 }
 
 // Modèle de données pour une notification
@@ -77,6 +79,12 @@ class NotificationItem {
         return Icons.person;
       case NotificationType.system:
         return Icons.info_outline;
+      case NotificationType.rdv:
+        return Icons.event;
+      case NotificationType.facture:
+        return Icons.receipt;
+      case NotificationType.info:
+        return Icons.info_outline;
     }
   }
   
@@ -91,6 +99,12 @@ class NotificationItem {
       case NotificationType.tatoueur:
         return Colors.teal;
       case NotificationType.system:
+        return Colors.orange;
+      case NotificationType.rdv:
+        return Colors.orange;
+      case NotificationType.facture:
+        return Colors.green;
+      case NotificationType.info:
         return Colors.orange;
     }
   }
@@ -164,13 +178,13 @@ class NotificationItem {
       case 'tatoueur':
         return NotificationType.tatoueur;
       case 'system':
-      case 'info': // ✅ Rétrocompatibilité
         return NotificationType.system;
-      // ✅ Mapping des anciens types vers les nouveaux
       case 'rdv':
-        return NotificationType.system;
+        return NotificationType.rdv;
       case 'facture':
-        return NotificationType.system;
+        return NotificationType.facture;
+      case 'info':
+        return NotificationType.info;
       default:
         return NotificationType.system;
     }
@@ -188,6 +202,12 @@ class NotificationItem {
         return 'tatoueur';
       case NotificationType.system:
         return 'system';
+      case NotificationType.rdv:
+        return 'rdv';
+      case NotificationType.facture:
+        return 'facture';
+      case NotificationType.info:
+        return 'info';
     }
   }
   

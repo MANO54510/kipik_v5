@@ -1,37 +1,78 @@
 {
-  "appTitle":     "Application Tatouage Kipik",
-  "welcome":      "Bienvenue sur Kipik !",
-  "loginButton":  "Se connecter",
+  "appTitle": "Application Tatouage Kipik",
+  "welcome": "Bienvenue sur Kipik !",
+  "loginButton": "Se connecter",
   "signupButton": "Créer un compte",
-  "logout":       "Se déconnecter",
-  "profile":      "Profil",
+  "logout": "Se déconnecter",
+  "profile": "Profil",
 
   "login": {
-    "title":          "Connexion",
-    "subtitle":       "Connecte-toi à ton compte",
-    "emailLabel":     "Email",
-    "passwordLabel":  "Mot de passe",
-    "submit":         "Se connecter",
-    "signupPrompt":   "Pas encore inscrit ? Créer un compte",
+    "title": "Connexion",
+    "subtitle": "Connecte-toi à ton compte",
+    "emailLabel": "Email",
+    "passwordLabel": "Mot de passe",
+    "passwordHelp": "8 caractères min • 1 majuscule • 1 chiffre • 1 spécial",
+    "submit": "Se connecter",
+    "signupPrompt": "Pas encore inscrit ? Créer un compte",
     "forgotPassword": "Mot de passe oublié ?",
     "validation": {
-      "emailRequired":       "Email requis",
-      "emailInvalid":        "Format email invalide",
-      "passwordRequired":    "Mot de passe requis",
-      "passwordTooShort":    "6 caractères minimum",
-      "passwordUppercase":   "Ajoute une majuscule",
-      "passwordDigit":       "Ajoute un chiffre",
-      "passwordSpecialChar": "Ajoute un caractère spécial"
+      "emailRequired": "Email requis",
+      "emailInvalid": "Format email invalide",
+      "passwordRequired": "Mot de passe requis",
+      "passwordMinLength": "8 caractères minimum requis",
+      "passwordTooShort": "8 caractères minimum",
+      "passwordUppercase": "Au moins 1 majuscule requise",
+      "passwordDigit": "Au moins 1 chiffre requis",
+      "passwordSpecialChar": "Au moins 1 caractère spécial requis (!@#$%^&*)"
     },
     "error": {
       "roleUnrecognized": "Rôle utilisateur non reconnu.",
-      "signInFailed":     "Échec de connexion ou email non vérifié."
+      "signInFailed": "Échec de connexion ou email non vérifié.",
+      "captchaRequired": "Veuillez valider le CAPTCHA"
     }
   },
 
   "signup": {
     "choiceTitle": "Choisissez votre profil",
-    "particulier":  "Particulier",
-    "pro":           "Tatoueur"
+    "particulier": "Particulier",
+    "pro": "Tatoueur",
+    "title": "Inscription",
+    "confirmPassword": "Confirmer le mot de passe",
+    "validation": {
+      "passwordMismatch": "Les mots de passe ne correspondent pas"
+    }
+  },
+
+  "captcha": {
+    "verification_required": "Vérification requise",
+    "verification_success": "Vérification réussie ✓",
+    "verification_error": "Erreur de vérification",
+    "verifying": "Vérification en cours...",
+    "verified": "Vérifié ✓",
+    "verified_high": "Vérification haute sécurité ✓",
+    "verified_medium": "Vérification sécurisée ⚠️",
+    "verified_low": "Vérification faible ❌",
+    "pending": "En attente de vérification",
+    "verify_human": "Prouver que vous êtes humain",
+    "score_high": "Score élevé - Utilisateur fiable",
+    "score_medium": "Score moyen - Vérification supplémentaire",
+    "score_low": "Score faible - Vérification manuelle requise",
+    "lockout_message": "Trop de tentatives. Réessayez dans {minutes} minutes.",
+    "security_check": "Contrôle de sécurité"
+  },
+
+  "security": {
+    "account_locked": "Compte temporairement verrouillé",
+    "suspicious_activity": "Activité suspecte détectée",
+    "too_many_attempts": "Trop de tentatives de connexion",
+    "verification_required": "Vérification de sécurité requise",
+    "high_security_mode": "Mode haute sécurité activé"
+  },
+
+  "common": {
+    "cancel": "Annuler",
+    "retry": "Réessayer",
+    "continue": "Continuer",
+    "loading": "Chargement..."
   }
 }

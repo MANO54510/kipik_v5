@@ -67,7 +67,6 @@ flutter {
 }
 
 dependencies {
-    // ❌ ERREUR CORRIGÉE : "multidx" -> "multidex"
     implementation("androidx.multidex:multidex:2.0.1")
     
     // Firebase BOM pour gérer les versions automatiquement
@@ -75,9 +74,6 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics-ktx")
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
-    
-    // ❌ SUPPRIMÉ : firebase-core est déprécié et inclus automatiquement
-    // implementation("com.google.firebase:firebase-core")
     
     // Dépendances supplémentaires
     implementation("androidx.work:work-runtime-ktx:2.9.0")

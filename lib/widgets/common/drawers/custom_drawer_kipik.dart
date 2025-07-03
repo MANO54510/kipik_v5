@@ -4,7 +4,10 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
 import 'package:kipik_v5/services/auth/auth_service.dart';
+import 'package:kipik_v5/services/auth/secure_auth_service.dart'; // AJOUTÉ
 import 'package:kipik_v5/models/user.dart';
+import 'package:kipik_v5/models/user_role.dart';
+import 'package:kipik_v5/widgets/common/drawers/secure_drawer_components.dart';
 
 // Navigation imports - organisés par catégorie
 import 'package:kipik_v5/pages/pro/home_page_pro.dart';
@@ -31,7 +34,7 @@ import 'package:kipik_v5/pages/pro/suppliers/suppliers_list_page.dart';
 // Gestion & Comptabilité
 import 'package:kipik_v5/pages/pro/comptabilite/comptabilite_page.dart';
 
-// Support & Chat - CORRIGÉ : On retire l'import AIAssistantPage
+// Support & Chat
 import 'package:kipik_v5/pages/support/support_chat_page.dart';
 import 'package:kipik_v5/widgets/chat/ai_chat_bottom_sheet.dart';
 
@@ -39,21 +42,24 @@ import 'package:kipik_v5/widgets/chat/ai_chat_bottom_sheet.dart';
 import 'package:kipik_v5/pages/pro/parametres_pro_page.dart';
 import 'package:kipik_v5/pages/pro/notifications_pro_page.dart';
 
-class CustomDrawerKipik extends StatelessWidget {
+class CustomDrawerKipik extends StatelessWidget with SecureDrawerMixin {
   const CustomDrawerKipik({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    // Utiliser AuthService pour le modèle User (compatibilité)
     final User? currentUser = AuthService.instance.currentUser;
     
-    // Si pas d'utilisateur connecté, ne pas afficher le drawer
-    if (currentUser == null) {
-      return const Drawer(
-        child: Center(
-          child: Text('Utilisateur non connecté'),
-        ),
-      );
+    // Vérifications de sécurité avec SecureAuthService
+    if (currentUser == null || !SecureAuthService.instance.isAuthenticated) {
+      return SecureDrawerFactory.buildFallbackDrawer();
     }
+    
+    final currentRole = SecureAuthService.instance.currentUserRole;
+    if (currentRole != UserRole.tatoueur) {
+      return SecureDrawerFactory.buildFallbackDrawer();
+    }
+    
     final headerImages = [
       'assets/images/header_tattoo_wallpaper.png',
       'assets/images/header_tattoo_wallpaper2.png',
@@ -65,7 +71,7 @@ class CustomDrawerKipik extends StatelessWidget {
       backgroundColor: const Color(0xFF0A0A0A),
       child: Column(
         children: [
-          // Header avec image aléatoire
+          // Header avec image aléatoire et thème tatoueur
           Container(
             width: double.infinity,
             height: 160,
@@ -77,6 +83,34 @@ class CustomDrawerKipik extends StatelessWidget {
             ),
             child: Stack(
               children: [
+                // Badge PRO
+                Positioned(
+                  top: 50,
+                  right: 16,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: KipikTheme.rouge.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: KipikTheme.rouge, width: 2),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.brush, color: Colors.white, size: 16),
+                        SizedBox(width: 4),
+                        Text(
+                          'PRO',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 Positioned(
                   top: -30,
                   right: -30,
@@ -97,9 +131,13 @@ class CustomDrawerKipik extends StatelessWidget {
                     children: [
                       CircleAvatar(
                         radius: 48,
-                        backgroundImage: currentUser.profileImageUrl?.isNotEmpty == true
-                            ? NetworkImage(currentUser.profileImageUrl!)
-                            : const AssetImage('assets/avatars/avatar_neutre.png') as ImageProvider,
+                        backgroundColor: KipikTheme.rouge,
+                        child: CircleAvatar(
+                          radius: 46,
+                          backgroundImage: currentUser.profileImageUrl?.isNotEmpty == true
+                              ? NetworkImage(currentUser.profileImageUrl!)
+                              : const AssetImage('assets/avatars/avatar_neutre.png') as ImageProvider,
+                        ),
                       ),
                       const SizedBox(width: 16),
                       Flexible(
@@ -156,19 +194,19 @@ class CustomDrawerKipik extends StatelessWidget {
                 
                 // SECTION PRINCIPALE - Accès rapide aux pages les plus utilisées
                 const _SectionHeader('TABLEAU DE BORD'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.home_outlined,
                   title: 'Accueil Pro',
                   onTap: () => _navigateTo(context, const HomePagePro()),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.dashboard_outlined,
                   title: 'Tableau de bord',
                   onTap: () => _navigateTo(context, const DashboardPage()),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.person_outline,
                   title: 'Mon profil',
@@ -179,14 +217,14 @@ class CustomDrawerKipik extends StatelessWidget {
                 
                 // SECTION CHAT & ASSISTANCE
                 const _SectionHeader('CHAT & ASSISTANCE'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.smart_toy_outlined,
                   title: 'Assistant IA Kipik',
                   subtitle: 'Questions, idées, aide navigation',
                   onTap: () => _openAIAssistant(context),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.support_agent_outlined,
                   title: 'Support Client',
@@ -198,13 +236,13 @@ class CustomDrawerKipik extends StatelessWidget {
                 
                 // SECTION AGENDA & PLANNING
                 const _SectionHeader('AGENDA & PLANNING'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.calendar_today_outlined,
                   title: 'Mon Agenda',
                   onTap: () => _navigateTo(context, const ProAgendaHomePage()),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.schedule_outlined,
                   title: 'Notifications Agenda',
@@ -215,19 +253,19 @@ class CustomDrawerKipik extends StatelessWidget {
                 
                 // SECTION PROJETS & CLIENTS
                 const _SectionHeader('PROJETS & CLIENTS'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.request_quote_outlined,
                   title: 'Devis en attente',
                   onTap: () => _navigateTo(context, const AttenteDevisPage()),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.folder_outlined,
                   title: 'Mes Projets',
                   onTap: () => _navigateTo(context, MesProjetsPage()),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.chat_bubble_outline,
                   title: 'Chat Projets',
@@ -239,13 +277,13 @@ class CustomDrawerKipik extends StatelessWidget {
                 
                 // SECTION PORTFOLIO & SHOP
                 const _SectionHeader('PORTFOLIO & SHOP'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.photo_library_outlined,
                   title: 'Mes Réalisations',
                   onTap: () => _navigateTo(context, const MesRealisationsPage()),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.store_outlined,
                   title: 'Mon Shop',
@@ -256,13 +294,13 @@ class CustomDrawerKipik extends StatelessWidget {
                 
                 // SECTION OUTILS PRO
                 const _SectionHeader('OUTILS PRO'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.map_outlined,
                   title: 'Conventions',
                   onTap: () => _navigateTo(context, const ConventionMapPage()),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.inventory_outlined,
                   title: 'Fournisseurs',
@@ -273,7 +311,7 @@ class CustomDrawerKipik extends StatelessWidget {
                 
                 // SECTION COMPTABILITÉ & GESTION
                 const _SectionHeader('COMPTABILITÉ'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.euro_outlined,
                   title: 'Comptabilité',
@@ -284,13 +322,13 @@ class CustomDrawerKipik extends StatelessWidget {
                 
                 // SECTION PARAMÈTRES
                 const _SectionHeader('PARAMÈTRES'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.notifications_outlined,
                   title: 'Notifications Pro',
                   onTap: () => _navigateTo(context, const NotificationsProPage()),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.settings_outlined,
                   title: 'Paramètres',
@@ -351,13 +389,13 @@ class CustomDrawerKipik extends StatelessWidget {
             decoration: const BoxDecoration(
               border: Border(top: BorderSide(color: Color(0xFF1F2937), width: 1)),
             ),
-            child: _buildMenuItem(
+            child: _buildSecureMenuItem(
               context,
               icon: Icons.logout_outlined,
               title: 'Se déconnecter',
               iconColor: KipikTheme.rouge,
               textColor: KipikTheme.rouge,
-              onTap: () => _showLogout(context),
+              onTap: () => secureSignOut(context),
             ),
           ),
         ],
@@ -365,7 +403,7 @@ class CustomDrawerKipik extends StatelessWidget {
     );
   }
 
-  Widget _buildMenuItem(
+  Widget _buildSecureMenuItem(
     BuildContext context, {
     required IconData icon,
     required String title,
@@ -401,7 +439,7 @@ class CustomDrawerKipik extends StatelessWidget {
   }
 
   void _navigateTo(BuildContext context, Widget page) {
-    Navigator.pushReplacement(
+    Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => page),
     );
@@ -416,28 +454,6 @@ class CustomDrawerKipik extends StatelessWidget {
       builder: (_) => const AIChatBottomSheet(
         allowImageGeneration: false, // Pas de génération d'images depuis le drawer
         contextPage: 'drawer',
-      ),
-    );
-  }
-
-  void _showLogout(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Déconnexion'),
-        content: const Text('Voulez-vous vraiment vous déconnecter ?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: KipikTheme.rouge),
-            onPressed: () {
-              Navigator.pop(context);
-              AuthService.instance.signOut();
-              Navigator.pushReplacementNamed(context, '/login');
-            },
-            child: const Text('Déconnecter', style: TextStyle(color: Colors.white)),
-          ),
-        ],
       ),
     );
   }

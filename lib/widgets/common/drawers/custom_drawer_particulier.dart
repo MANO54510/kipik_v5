@@ -3,27 +3,32 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
-import 'package:kipik_v5/services/auth/auth_service.dart';
+import 'package:kipik_v5/services/auth/secure_auth_service.dart';
 import 'package:kipik_v5/models/user.dart';
+import 'package:kipik_v5/models/user_role.dart';
+import 'package:kipik_v5/widgets/common/drawers/secure_drawer_components.dart';
 
-// Support & Chat - CORRIGÉ : On retire l'import AIAssistantPage
+// Support & Chat
 import 'package:kipik_v5/pages/support/support_chat_page.dart';
 import 'package:kipik_v5/widgets/chat/ai_chat_bottom_sheet.dart';
 
-class CustomDrawerParticulier extends StatelessWidget {
+class CustomDrawerParticulier extends StatelessWidget with SecureDrawerMixin {
   const CustomDrawerParticulier({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final User? currentUser = AuthService.instance.currentUser;
+    // ✅ Utiliser SecureAuthService avec conversion User
+    final dynamic currentUserData = SecureAuthService.instance.currentUser;
+    final User? currentUser = UserFromDynamic.fromDynamic(currentUserData);
     
-    // Si pas d'utilisateur connecté, ne pas afficher le drawer
-    if (currentUser == null) {
-      return const Drawer(
-        child: Center(
-          child: Text('Utilisateur non connecté'),
-        ),
-      );
+    // Vérifications de sécurité avec SecureAuthService
+    if (currentUser == null || !SecureAuthService.instance.isAuthenticated) {
+      return SecureDrawerFactory.buildFallbackDrawer();
+    }
+    
+    final currentRole = SecureAuthService.instance.currentUserRole;
+    if (currentRole != UserRole.client) {
+      return SecureDrawerFactory.buildFallbackDrawer();
     }
     
     final headerImages = [
@@ -155,7 +160,7 @@ class CustomDrawerParticulier extends StatelessWidget {
             ),
           ),
 
-          // Menu client
+          // Menu client sécurisé
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
@@ -164,125 +169,125 @@ class CustomDrawerParticulier extends StatelessWidget {
                 
                 // SECTION TABLEAU DE BORD
                 const _SectionHeader('TABLEAU DE BORD'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.dashboard_outlined,
                   title: 'Mon espace client',
                   subtitle: 'Vue d\'ensemble de mes projets',
-                  onTap: () => _navigateToPlaceholder(context, 'Dashboard client'),
+                  onTap: () => showDevelopmentMessage(context, 'Dashboard client'),
                 ),
 
                 const _SectionDivider(),
                 
                 // SECTION CHAT & ASSISTANCE
                 const _SectionHeader('CHAT & ASSISTANCE'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.smart_toy_outlined,
                   title: 'Assistant IA Kipik',
                   subtitle: 'Idées de tatouages, conseils',
                   onTap: () => _openAIAssistant(context),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.support_agent_outlined,
                   title: 'Support Client',
                   subtitle: 'Aide et questions',
-                  onTap: () => _navigateTo(context, SupportChatPage(userId: currentUser.id)),
+                  onTap: () => secureNavigate(context, SupportChatPage(userId: currentUser.id)),
                 ),
 
                 const _SectionDivider(),
                 
                 // SECTION MES PROJETS
                 const _SectionHeader('MES PROJETS'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.folder_outlined,
                   title: 'Mes projets tatouage',
                   subtitle: 'Projets en cours et terminés',
-                  onTap: () => _navigateToPlaceholder(context, 'Mes projets'),
+                  onTap: () => showDevelopmentMessage(context, 'Mes projets'),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.add_circle_outline,
                   title: 'Nouveau projet',
                   subtitle: 'Lancer un nouveau tatouage',
-                  onTap: () => _navigateToPlaceholder(context, 'Nouveau projet'),
+                  onTap: () => showDevelopmentMessage(context, 'Nouveau projet'),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.chat_bubble_outline,
                   title: 'Mes conversations',
                   subtitle: 'Chat avec mes tatoueurs',
-                  onTap: () => _navigateToPlaceholder(context, 'Conversations'),
+                  onTap: () => showDevelopmentMessage(context, 'Conversations'),
                 ),
 
                 const _SectionDivider(),
                 
                 // SECTION DÉCOUVERTE
                 const _SectionHeader('DÉCOUVERTE'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.search_outlined,
                   title: 'Trouver un tatoueur',
                   subtitle: 'Rechercher par style, ville...',
-                  onTap: () => _navigateToPlaceholder(context, 'Recherche tatoueurs'),
+                  onTap: () => showDevelopmentMessage(context, 'Recherche tatoueurs'),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.map_outlined,
                   title: 'Conventions',
                   subtitle: 'Événements tatouage près de moi',
-                  onTap: () => _navigateToPlaceholder(context, 'Carte des conventions'),
+                  onTap: () => showDevelopmentMessage(context, 'Carte des conventions'),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.photo_library_outlined,
                   title: 'Galerie d\'inspiration',
                   subtitle: 'Explorer les réalisations',
-                  onTap: () => _navigateToPlaceholder(context, 'Galerie'),
+                  onTap: () => showDevelopmentMessage(context, 'Galerie'),
                 ),
 
                 const _SectionDivider(),
                 
                 // SECTION OUTILS
                 const _SectionHeader('OUTILS'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.calculate_outlined,
                   title: 'Estimateur de prix',
                   subtitle: 'Estimer le coût de mon projet',
-                  onTap: () => _navigateToPlaceholder(context, 'Estimateur'),
+                  onTap: () => showDevelopmentMessage(context, 'Estimateur'),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.info_outline,
                   title: 'Guide du tatouage',
                   subtitle: 'Conseils et informations',
-                  onTap: () => _navigateToPlaceholder(context, 'Guide'),
+                  onTap: () => showDevelopmentMessage(context, 'Guide'),
                 ),
 
                 const _SectionDivider(),
                 
                 // SECTION PARAMÈTRES
                 const _SectionHeader('PARAMÈTRES'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.person_outline,
                   title: 'Mon profil',
-                  onTap: () => _navigateToPlaceholder(context, 'Profil client'),
+                  onTap: () => showDevelopmentMessage(context, 'Profil client'),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.notifications_outlined,
                   title: 'Notifications',
-                  onTap: () => _navigateToPlaceholder(context, 'Notifications'),
+                  onTap: () => showDevelopmentMessage(context, 'Notifications'),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.settings_outlined,
                   title: 'Paramètres',
-                  onTap: () => _navigateToPlaceholder(context, 'Paramètres'),
+                  onTap: () => showDevelopmentMessage(context, 'Paramètres'),
                 ),
 
                 const SizedBox(height: 24),
@@ -302,7 +307,7 @@ class CustomDrawerParticulier extends StatelessWidget {
                   child: ElevatedButton.icon(
                     onPressed: () {
                       Navigator.pop(context);
-                      _navigateToPlaceholder(context, 'Nouveau projet');
+                      showDevelopmentMessage(context, 'Nouveau projet');
                     },
                     icon: const Icon(Icons.add, size: 16),
                     label: const Text('Projet', style: TextStyle(fontSize: 12)),
@@ -333,19 +338,19 @@ class CustomDrawerParticulier extends StatelessWidget {
             ),
           ),
 
-          // Déconnexion
+          // Déconnexion sécurisée
           Container(
             padding: const EdgeInsets.all(24),
             decoration: const BoxDecoration(
               border: Border(top: BorderSide(color: Color(0xFF1F2937), width: 1)),
             ),
-            child: _buildMenuItem(
+            child: _buildSecureMenuItem(
               context,
               icon: Icons.logout_outlined,
               title: 'Se déconnecter',
               iconColor: KipikTheme.rouge,
               textColor: KipikTheme.rouge,
-              onTap: () => _showLogout(context),
+              onTap: () => secureSignOut(context),
             ),
           ),
         ],
@@ -353,7 +358,7 @@ class CustomDrawerParticulier extends StatelessWidget {
     );
   }
 
-  Widget _buildMenuItem(
+  Widget _buildSecureMenuItem(
     BuildContext context, {
     required IconData icon,
     required String title,
@@ -388,22 +393,6 @@ class CustomDrawerParticulier extends StatelessWidget {
     );
   }
 
-  void _navigateTo(BuildContext context, Widget page) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => page),
-    );
-  }
-
-  void _navigateToPlaceholder(BuildContext context, String pageName) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Page "$pageName" en cours de développement'),
-        backgroundColor: Colors.blue,
-      ),
-    );
-  }
-
   void _openAIAssistant(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -413,37 +402,6 @@ class CustomDrawerParticulier extends StatelessWidget {
       builder: (_) => const AIChatBottomSheet(
         allowImageGeneration: true, // Clients peuvent générer des images pour inspiration
         contextPage: 'client',
-      ),
-    );
-  }
-
-  void _showLogout(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.person, color: Colors.blue),
-            const SizedBox(width: 8),
-            const Text('Déconnexion'),
-          ],
-        ),
-        content: const Text('Voulez-vous vraiment vous déconnecter ?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context), 
-            child: const Text('Annuler'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: KipikTheme.rouge),
-            onPressed: () {
-              Navigator.pop(context);
-              AuthService.instance.signOut();
-              Navigator.pushReplacementNamed(context, '/login');
-            },
-            child: const Text('Déconnecter', style: TextStyle(color: Colors.white)),
-          ),
-        ],
       ),
     );
   }

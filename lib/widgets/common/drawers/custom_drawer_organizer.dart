@@ -3,27 +3,32 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
-import 'package:kipik_v5/services/auth/auth_service.dart';
+import 'package:kipik_v5/services/auth/secure_auth_service.dart';
 import 'package:kipik_v5/models/user.dart';
+import 'package:kipik_v5/models/user_role.dart';
+import 'package:kipik_v5/widgets/common/drawers/secure_drawer_components.dart';
 
-// Support & Chat - CORRIGÉ : On retire l'import AIAssistantPage
+// Support & Chat
 import 'package:kipik_v5/pages/support/support_chat_page.dart';
 import 'package:kipik_v5/widgets/chat/ai_chat_bottom_sheet.dart';
 
-class CustomDrawerOrganizer extends StatelessWidget {
+class CustomDrawerOrganizer extends StatelessWidget with SecureDrawerMixin {
   const CustomDrawerOrganizer({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final User? currentUser = AuthService.instance.currentUser;
+    // ✅ Utiliser SecureAuthService avec conversion User
+    final dynamic currentUserData = SecureAuthService.instance.currentUser;
+    final User? currentUser = UserFromDynamic.fromDynamic(currentUserData);
     
-    // Si pas d'utilisateur connecté, ne pas afficher le drawer
-    if (currentUser == null) {
-      return const Drawer(
-        child: Center(
-          child: Text('Utilisateur non connecté'),
-        ),
-      );
+    // Vérifications de sécurité avec SecureAuthService
+    if (currentUser == null || !SecureAuthService.instance.isAuthenticated) {
+      return SecureDrawerFactory.buildFallbackDrawer();
+    }
+    
+    final currentRole = SecureAuthService.instance.currentUserRole;
+    if (currentRole != UserRole.organisateur) {
+      return SecureDrawerFactory.buildFallbackDrawer();
     }
     
     final headerImages = [
@@ -155,7 +160,7 @@ class CustomDrawerOrganizer extends StatelessWidget {
             ),
           ),
 
-          // Menu organisateur
+          // Menu organisateur sécurisé
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
@@ -164,111 +169,165 @@ class CustomDrawerOrganizer extends StatelessWidget {
                 
                 // SECTION TABLEAU DE BORD
                 const _SectionHeader('TABLEAU DE BORD'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.dashboard_outlined,
                   title: 'Dashboard Organisateur',
                   subtitle: 'Vue d\'ensemble de mes événements',
-                  onTap: () => _navigateToPlaceholder(context, 'Dashboard Organisateur'),
+                  onTap: () => showDevelopmentMessage(context, 'Dashboard Organisateur'),
                 ),
 
                 const _SectionDivider(),
                 
                 // SECTION CHAT & ASSISTANCE
                 const _SectionHeader('CHAT & ASSISTANCE'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.smart_toy_outlined,
                   title: 'Assistant IA Kipik',
                   subtitle: 'Aide pour organiser vos événements',
                   onTap: () => _openAIAssistant(context),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.support_agent_outlined,
                   title: 'Support Organisateur',
                   subtitle: 'Aide spécialisée événements',
-                  onTap: () => _navigateTo(context, SupportChatPage(userId: currentUser.id)),
+                  onTap: () => secureNavigate(context, SupportChatPage(userId: currentUser.id)),
                 ),
 
                 const _SectionDivider(),
                 
                 // SECTION GESTION ÉVÉNEMENTS
                 const _SectionHeader('MES ÉVÉNEMENTS'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.event_outlined,
                   title: 'Mes événements',
                   subtitle: 'Gérer mes conventions/salons',
-                  onTap: () => _navigateToPlaceholder(context, 'Liste des événements'),
+                  onTap: () => showDevelopmentMessage(context, 'Liste des événements'),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.add_circle_outline,
                   title: 'Créer un événement',
-                  onTap: () => _navigateToPlaceholder(context, 'Création d\'événement'),
+                  onTap: () => showDevelopmentMessage(context, 'Création d\'événement'),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.people_outlined,
                   title: 'Participants',
                   subtitle: 'Tatoueurs et visiteurs inscrits',
-                  onTap: () => _navigateToPlaceholder(context, 'Gestion des participants'),
+                  onTap: () => showDevelopmentMessage(context, 'Gestion des participants'),
+                ),
+                _buildSecureMenuItem(
+                  context,
+                  icon: Icons.edit_calendar_outlined,
+                  title: 'Planning événements',
+                  subtitle: 'Calendrier et horaires',
+                  onTap: () => showDevelopmentMessage(context, 'Planning'),
+                ),
+
+                const _SectionDivider(),
+                
+                // SECTION GESTION & VALIDATION
+                const _SectionHeader('GESTION & VALIDATION'),
+                _buildSecureMenuItem(
+                  context,
+                  icon: Icons.pending_actions_outlined,
+                  title: 'Événements en attente',
+                  subtitle: 'Validation des créations',
+                  onTap: () => showDevelopmentMessage(context, 'Événements en attente'),
+                ),
+                _buildSecureMenuItem(
+                  context,
+                  icon: Icons.check_circle_outline,
+                  title: 'Événements validés',
+                  subtitle: 'Mes événements publiés',
+                  onTap: () => showDevelopmentMessage(context, 'Événements validés'),
+                ),
+                _buildSecureMenuItem(
+                  context,
+                  icon: Icons.receipt_long_outlined,
+                  title: 'Factures & Revenus',
+                  subtitle: 'Gestion financière',
+                  onTap: () => showDevelopmentMessage(context, 'Finances'),
                 ),
 
                 const _SectionDivider(),
                 
                 // SECTION COMMUNICATION
                 const _SectionHeader('COMMUNICATION'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.forum_outlined,
                   title: 'Forum Organisateurs',
                   subtitle: 'Échanger avec d\'autres organisateurs',
-                  onTap: () => _navigateToPlaceholder(context, 'Forum organisateurs'),
+                  onTap: () => showDevelopmentMessage(context, 'Forum organisateurs'),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
+                  context,
+                  icon: Icons.campaign_outlined,
+                  title: 'Promotion événements',
+                  subtitle: 'Outils marketing et communication',
+                  onTap: () => showDevelopmentMessage(context, 'Promotion'),
+                ),
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.notifications_outlined,
                   title: 'Notifications',
                   subtitle: 'Alertes et messages importants',
-                  onTap: () => _navigateToPlaceholder(context, 'Notifications'),
+                  onTap: () => showDevelopmentMessage(context, 'Notifications'),
                 ),
 
                 const _SectionDivider(),
                 
-                // SECTION OUTILS
-                const _SectionHeader('OUTILS'),
-                _buildMenuItem(
+                // SECTION OUTILS & ANALYTICS
+                const _SectionHeader('OUTILS & ANALYTICS'),
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.analytics_outlined,
                   title: 'Statistiques',
                   subtitle: 'Analyse de mes événements',
-                  onTap: () => _navigateToPlaceholder(context, 'Statistiques'),
+                  onTap: () => showDevelopmentMessage(context, 'Statistiques'),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.map_outlined,
                   title: 'Carte des conventions',
                   subtitle: 'Voir tous les événements',
-                  onTap: () => _navigateToPlaceholder(context, 'Carte des conventions'),
+                  onTap: () => showDevelopmentMessage(context, 'Carte des conventions'),
+                ),
+                _buildSecureMenuItem(
+                  context,
+                  icon: Icons.qr_code_outlined,
+                  title: 'QR Codes événements',
+                  subtitle: 'Codes d\'accès et check-in',
+                  onTap: () => showDevelopmentMessage(context, 'QR Codes'),
                 ),
 
                 const _SectionDivider(),
                 
                 // SECTION PARAMÈTRES
                 const _SectionHeader('PARAMÈTRES'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.person_outline,
                   title: 'Mon profil',
-                  onTap: () => _navigateToPlaceholder(context, 'Profil organisateur'),
+                  onTap: () => showDevelopmentMessage(context, 'Profil organisateur'),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
+                  context,
+                  icon: Icons.business_outlined,
+                  title: 'Informations entreprise',
+                  subtitle: 'Données légales et contact',
+                  onTap: () => showDevelopmentMessage(context, 'Infos entreprise'),
+                ),
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.settings_outlined,
                   title: 'Paramètres',
-                  onTap: () => _navigateToPlaceholder(context, 'Paramètres'),
+                  onTap: () => showDevelopmentMessage(context, 'Paramètres'),
                 ),
 
                 const SizedBox(height: 24),
@@ -288,7 +347,7 @@ class CustomDrawerOrganizer extends StatelessWidget {
                   child: ElevatedButton.icon(
                     onPressed: () {
                       Navigator.pop(context);
-                      _navigateToPlaceholder(context, 'Créer événement');
+                      showDevelopmentMessage(context, 'Créer événement');
                     },
                     icon: const Icon(Icons.add, size: 16),
                     label: const Text('Créer', style: TextStyle(fontSize: 12)),
@@ -319,19 +378,19 @@ class CustomDrawerOrganizer extends StatelessWidget {
             ),
           ),
 
-          // Déconnexion
+          // Déconnexion sécurisée
           Container(
             padding: const EdgeInsets.all(24),
             decoration: const BoxDecoration(
               border: Border(top: BorderSide(color: Color(0xFF1F2937), width: 1)),
             ),
-            child: _buildMenuItem(
+            child: _buildSecureMenuItem(
               context,
               icon: Icons.logout_outlined,
               title: 'Se déconnecter',
               iconColor: KipikTheme.rouge,
               textColor: KipikTheme.rouge,
-              onTap: () => _showLogout(context),
+              onTap: () => secureSignOut(context),
             ),
           ),
         ],
@@ -339,7 +398,7 @@ class CustomDrawerOrganizer extends StatelessWidget {
     );
   }
 
-  Widget _buildMenuItem(
+  Widget _buildSecureMenuItem(
     BuildContext context, {
     required IconData icon,
     required String title,
@@ -374,22 +433,6 @@ class CustomDrawerOrganizer extends StatelessWidget {
     );
   }
 
-  void _navigateTo(BuildContext context, Widget page) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => page),
-    );
-  }
-
-  void _navigateToPlaceholder(BuildContext context, String pageName) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Page "$pageName" en cours de développement'),
-        backgroundColor: Colors.purple,
-      ),
-    );
-  }
-
   void _openAIAssistant(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -399,37 +442,6 @@ class CustomDrawerOrganizer extends StatelessWidget {
       builder: (_) => const AIChatBottomSheet(
         allowImageGeneration: false, // Organisateurs n'ont pas besoin de génération d'images
         contextPage: 'organizer',
-      ),
-    );
-  }
-
-  void _showLogout(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.event, color: Colors.purple),
-            const SizedBox(width: 8),
-            const Text('Déconnexion Organisateur'),
-          ],
-        ),
-        content: const Text('Voulez-vous vraiment vous déconnecter de l\'espace organisateur ?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context), 
-            child: const Text('Annuler'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: KipikTheme.rouge),
-            onPressed: () {
-              Navigator.pop(context);
-              AuthService.instance.signOut();
-              Navigator.pushReplacementNamed(context, '/login');
-            },
-            child: const Text('Déconnecter', style: TextStyle(color: Colors.white)),
-          ),
-        ],
       ),
     );
   }

@@ -1,8 +1,78 @@
 {
-  "appTitle": "Kipik Tattoo App",
+  "appTitle": "Kipik Tattoo Application",
   "welcome": "Welcome to Kipik!",
-  "loginButton": "Log in",
-  "signupButton": "Sign up",
-  "logout": "Log out",
-  "profile": "Profile"
+  "loginButton": "Sign in",
+  "signupButton": "Create account",
+  "logout": "Sign out",
+  "profile": "Profile",
+
+  "login": {
+    "title": "Login",
+    "subtitle": "Sign in to your account",
+    "emailLabel": "Email",
+    "passwordLabel": "Password",
+    "passwordHelp": "8 chars min • 1 uppercase • 1 digit • 1 special",
+    "submit": "Sign in",
+    "signupPrompt": "Not registered yet? Create account",
+    "forgotPassword": "Forgot password?",
+    "validation": {
+      "emailRequired": "Email required",
+      "emailInvalid": "Invalid email format",
+      "passwordRequired": "Password required",
+      "passwordMinLength": "8 characters minimum required",
+      "passwordTooShort": "8 characters minimum",
+      "passwordUppercase": "At least 1 uppercase required",
+      "passwordDigit": "At least 1 digit required",
+      "passwordSpecialChar": "At least 1 special character required (!@#$%^&*)"
+    },
+    "error": {
+      "roleUnrecognized": "User role not recognized.",
+      "signInFailed": "Login failed or email not verified.",
+      "captchaRequired": "Please validate CAPTCHA"
+    }
+  },
+
+  "signup": {
+    "choiceTitle": "Choose your profile",
+    "particulier": "Individual",
+    "pro": "Tattoo Artist",
+    "title": "Sign Up",
+    "confirmPassword": "Confirm password",
+    "validation": {
+      "passwordMismatch": "Passwords do not match"
+    }
+  },
+
+  "captcha": {
+    "verification_required": "Verification Required",
+    "verification_success": "Verification Successful ✓",
+    "verification_error": "Verification Error",
+    "verifying": "Verifying...",
+    "verified": "Verified ✓",
+    "verified_high": "High Security Verification ✓",
+    "verified_medium": "Secure Verification ⚠️",
+    "verified_low": "Low Verification ❌",
+    "pending": "Pending Verification",
+    "verify_human": "Prove You're Human",
+    "score_high": "High Score - Trusted User",
+    "score_medium": "Medium Score - Additional Verification",
+    "score_low": "Low Score - Manual Verification Required",
+    "lockout_message": "Too many attempts. Try again in {minutes} minutes.",
+    "security_check": "Security Check"
+  },
+
+  "security": {
+    "account_locked": "Account Temporarily Locked",
+    "suspicious_activity": "Suspicious Activity Detected",
+    "too_many_attempts": "Too Many Login Attempts",
+    "verification_required": "Security Verification Required",
+    "high_security_mode": "High Security Mode Activated"
+  },
+
+  "common": {
+    "cancel": "Cancel",
+    "retry": "Retry",
+    "continue": "Continue",
+    "loading": "Loading..."
+  }
 }

@@ -53,8 +53,8 @@ import 'package:kipik_v5/pages/organisateur/organisateur_marketing_page.dart';
 import 'package:kipik_v5/pages/organisateur/organisateur_settings_page.dart';
 
 // Administration - Dashboard principal et espaces spécialisés
-import 'package:kipik_v5/pages/admin/admin_dashboard_home.dart'; // ✅ Dashboard principal
-import 'package:kipik_v5/pages/admin/admin_setup_page.dart'; // ✅ AJOUTÉ: Page de setup admin
+import 'package:kipik_v5/pages/admin/admin_dashboard_home.dart';
+import 'package:kipik_v5/pages/admin/admin_setup_page.dart';
 import 'package:kipik_v5/pages/admin/pros/admin_pros_management_page.dart';
 import 'package:kipik_v5/pages/admin/clients/admin_clients_management_page.dart';
 import 'package:kipik_v5/pages/admin/organizers/admin_organizers_management_page.dart';
@@ -62,6 +62,12 @@ import 'package:kipik_v5/pages/admin/users/admin_user_search_page.dart';
 import 'package:kipik_v5/pages/admin/users/admin_user_detail_page.dart';
 import 'package:kipik_v5/pages/admin/admin_free_codes_page.dart';
 import 'package:kipik_v5/pages/admin/admin_referrals_page.dart';
+
+// ✅ NOUVEAU: Page de setup temporaire pour premier admin
+import 'package:kipik_v5/pages/temp/first_setup_page.dart';
+
+// ✅ AJOUTÉ: Import pour AdminRouteGuard
+import 'package:kipik_v5/services/auth/secure_auth_service.dart';
 
 // Pages légales
 import 'package:kipik_v5/pages/legal/cgu_page.dart';
@@ -74,6 +80,9 @@ final Map<String, WidgetBuilder> appRoutes = {
   '/connexion': (_) => const ConnexionPage(),
   '/inscription': (_) => const InscriptionPage(),
   '/pro/inscriptionPro': (_) => InscriptionProPage(),
+
+  // ===== SETUP INITIAL (TEMPORAIRE) =====
+  '/first-setup': (_) => const FirstSetupPage(), // ✅ NOUVEAU: Page de setup initiale
 
   // ===== PARTICULIER =====
   // Pages principales
@@ -115,9 +124,9 @@ final Map<String, WidgetBuilder> appRoutes = {
   
   // ===== ADMINISTRATION =====
   // Dashboard principal et navigation
-  '/admin': (_) => const AdminDashboardHome(), // ✅ CORRIGÉ : Dashboard principal
+  '/admin': (_) => const AdminDashboardHome(),
   '/admin/dashboard': (_) => const AdminDashboardHome(),
-  '/admin/setup': (_) => const AdminSetupPage(), // ✅ AJOUTÉ: Page de setup admin
+  '/admin/setup': (_) => const AdminSetupPage(), // ✅ Page de setup admin sécurisée
   
   // Espaces de gestion spécialisés
   '/admin/pros': (_) => const AdminProsManagementPage(),
@@ -145,11 +154,70 @@ final Map<String, WidgetBuilder> appRoutes = {
   '/organisateur/settings': (_) => const OrganisateurSettingsPage(),
 };
 
+// ✅ NOUVEAU: Guard de sécurité pour les routes admin
+class AdminRouteGuard {
+  static Future<bool> canAccessAdminSetup() async {
+    try {
+      // Import direct de SecureAuthService
+      final exists = await SecureAuthService.instance.checkFirstAdminExists();
+      return !exists; // Accessible seulement si aucun admin n'existe
+    } catch (e) {
+      return true; // En cas d'erreur, permettre l'accès (première installation)
+    }
+  }
+}
+
 // Gestion des routes dynamiques
 Route<dynamic>? generateRoute(RouteSettings settings) {
   // Analyse du nom de la route
   final uri = Uri.parse(settings.name ?? '');
   final pathSegments = uri.pathSegments;
+  
+  // ✅ NOUVEAU: Sécurité spéciale pour la route admin setup
+  if (settings.name == '/admin/setup') {
+    return MaterialPageRoute(
+      builder: (context) => FutureBuilder<bool>(
+        future: AdminRouteGuard.canAccessAdminSetup(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Scaffold(
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Vérification accès admin...'),
+                  ],
+                ),
+              ),
+            );
+          }
+          
+          if (snapshot.data == true) {
+            // Accès autorisé - aucun admin n'existe encore
+            return const AdminSetupPage();
+          } else {
+            // Accès refusé - admin déjà créé
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              Navigator.of(context).pushReplacementNamed('/connexion');
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('L\'administrateur principal a déjà été créé'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            });
+            return Scaffold(
+              body: Center(
+                child: Text('Redirection...'),
+              ),
+            );
+          }
+        },
+      ),
+    );
+  }
   
   // ===== ROUTES DYNAMIQUES - FOURNISSEURS =====
   if (pathSegments.length >= 3 && pathSegments[0] == 'pro' && pathSegments[1] == 'suppliers') {

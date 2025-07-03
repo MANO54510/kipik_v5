@@ -1,10 +1,98 @@
-// lib/pages/admin/admin_referrals_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:kipik_v5/services/promo/promo_code_service.dart';
+import 'package:kipik_v5/services/promo/firebase_promo_code_service.dart';
 import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
+
+// Classes nécessaires pour le fonctionnement
+class Referral {
+  final String id;
+  final String referrerEmail;
+  final String referredEmail;
+  final String promoCode;
+  final DateTime referralDate;
+  final DateTime? subscriptionDate;
+  final String subscriptionType;
+  final String status; // 'pending', 'completed'
+  final bool rewardGranted;
+
+  Referral({
+    required this.id,
+    required this.referrerEmail,
+    required this.referredEmail,
+    required this.promoCode,
+    required this.referralDate,
+    this.subscriptionDate,
+    this.subscriptionType = '',
+    this.status = 'pending',
+    this.rewardGranted = false,
+  });
+
+  factory Referral.fromMap(Map<String, dynamic> map) {
+    return Referral(
+      id: map['id'] ?? '',
+      referrerEmail: map['referrerEmail'] ?? '',
+      referredEmail: map['referredEmail'] ?? '',
+      promoCode: map['promoCode'] ?? '',
+      referralDate: map['referralDate'] is DateTime 
+          ? map['referralDate'] 
+          : DateTime.now(),
+      subscriptionDate: map['subscriptionDate'],
+      subscriptionType: map['subscriptionType'] ?? '',
+      status: map['status'] ?? 'pending',
+      rewardGranted: map['rewardGranted'] ?? false,
+    );
+  }
+}
+
+class PromoCode {
+  final String id;
+  final String code;
+  final String type;
+  final double value;
+  final String? description;
+  final DateTime? expiresAt;
+  final int? maxUses;
+  final int currentUses;
+  final bool isActive;
+  final DateTime? createdAt;
+  final String? referrerEmail;
+  final bool isReferralCode;
+
+  PromoCode({
+    required this.id,
+    required this.code,
+    required this.type,
+    required this.value,
+    this.description,
+    this.expiresAt,
+    this.maxUses,
+    this.currentUses = 0,
+    this.isActive = true,
+    this.createdAt,
+    this.referrerEmail,
+    this.isReferralCode = false,
+  });
+
+  bool get isValid => isActive && (expiresAt == null || DateTime.now().isBefore(expiresAt!));
+
+  factory PromoCode.fromMap(Map<String, dynamic> map) {
+    return PromoCode(
+      id: map['id'] ?? '',
+      code: map['code'] ?? '',
+      type: map['type'] ?? '',
+      value: (map['value'] ?? 0).toDouble(),
+      description: map['description'],
+      expiresAt: map['expiresAt'],
+      maxUses: map['maxUses'],
+      currentUses: map['currentUses'] ?? 0,
+      isActive: map['isActive'] ?? true,
+      createdAt: map['createdAt'],
+      referrerEmail: map['referrerEmail'],
+      isReferralCode: map['isReferralCode'] ?? false,
+    );
+  }
+}
 
 class AdminReferralsPage extends StatefulWidget {
   const AdminReferralsPage({Key? key}) : super(key: key);
@@ -44,15 +132,37 @@ class _AdminReferralsPageState extends State<AdminReferralsPage> with TickerProv
     setState(() => _isLoading = true);
     
     try {
-      // Charger tous les parrainages
-      final referrals = await PromoCodeService.getAllReferrals();
+      // Récupérer tous les codes promo de votre service Firebase
+      final allCodesData = await FirebasePromoCodeService.instance.getAllPromoCodes();
       
-      // Charger tous les codes de parrainage
-      final allCodes = await PromoCodeService.getAllPromoCodes();
-      final referralCodes = allCodes.where((code) => code.isReferralCode).toList();
+      // Convertir en objets PromoCode
+      final allCodes = allCodesData.map((data) => PromoCode.fromMap(data)).toList();
       
-      // Calculer les statistiques globales
-      final stats = {
+      // Filtrer les codes de parrainage (vous pouvez adapter cette logique)
+      final referralCodes = allCodes.where((code) => 
+          code.description?.toLowerCase().contains('parrainage') == true ||
+          code.code.startsWith('REF') ||
+          code.type == 'referral'
+      ).toList();
+      
+      // Créer des parrainages fictifs à partir des codes (adaptez selon vos besoins)
+      final referrals = <Referral>[];
+      for (final code in referralCodes) {
+        if (code.currentUses > 0) {
+          referrals.add(Referral(
+            id: 'ref_${code.id}',
+            referrerEmail: code.referrerEmail ?? 'tatoueur@example.com',
+            referredEmail: 'client@example.com',
+            promoCode: code.code,
+            referralDate: code.createdAt ?? DateTime.now(),
+            status: code.isValid ? 'completed' : 'pending',
+            rewardGranted: code.currentUses >= (code.maxUses ?? 1),
+          ));
+        }
+      }
+      
+      // Calculer les statistiques
+      final stats = <String, int>{
         'totalReferrals': referrals.length,
         'completedReferrals': referrals.where((r) => r.status == 'completed').length,
         'pendingReferrals': referrals.where((r) => r.status == 'pending').length,

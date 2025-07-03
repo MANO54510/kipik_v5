@@ -2,22 +2,22 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:kipik_v5/utils/constants.dart'; // Pour UserRole
+import 'package:kipik_v5/models/user_role.dart'; // ✅ MIGRATION: Import correct
 
 import '../../widgets/common/app_bars/custom_app_bar_kipik.dart';
 import '../../widgets/utils/cgu_cgv_validation_widget.dart';
 import 'confirmation_inscription_pro_page.dart';
-import 'package:kipik_v5/services/auth/auth_service.dart';
-import 'package:kipik_v5/services/promo/promo_code_service.dart';
+import 'package:kipik_v5/services/auth/secure_auth_service.dart'; // ✅ MIGRATION
+import 'package:kipik_v5/services/promo/firebase_promo_code_service.dart'; // ✅ MIGRATION
 import 'package:kipik_v5/theme/kipik_theme.dart';
 import '../pro/home_page_pro.dart';
 
 class InscriptionProPage extends StatefulWidget {
-  InscriptionProPage({Key? key, AuthService? authService})
-      : authService = authService ?? AuthService.instance,
+  InscriptionProPage({Key? key, SecureAuthService? authService})
+      : authService = authService ?? SecureAuthService.instance, // ✅ MIGRATION
         super(key: key);
 
-  final AuthService authService;
+  final SecureAuthService authService; // ✅ MIGRATION
 
   @override
   State<InscriptionProPage> createState() => _InscriptionProPageState();
@@ -46,7 +46,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
 
   // ─── Code promo ───
   final _promoCode      = TextEditingController();
-  PromoCode? _validatedPromoCode;
+  Map<String, dynamic>? _validatedPromoCode; // ✅ MIGRATION: Map au lieu de PromoCode
   bool _isValidatingPromo = false;
 
   // ─── Pièces à transmettre ───
@@ -88,7 +88,12 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
     super.dispose();
   }
 
-  bool get _needsPayment => _validatedPromoCode?.type != 'free' && _validatedPromoCode?.type != 'referral';
+  // ✅ MIGRATION: Logique adaptée aux nouveaux types de codes
+  bool get _needsPayment {
+    if (_validatedPromoCode == null) return true;
+    final type = _validatedPromoCode!['type'] as String?;
+    return type != 'referral'; // Les codes de parrainage permettent l'inscription gratuite
+  }
 
   bool get _canSubmit =>
       _formKey.currentState?.validate() == true &&
@@ -113,6 +118,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
       // ✅ Logique de validation du paiement corrigée
       (_paymentDone || !_needsPayment); // Pas besoin de paiement si code gratuit OU de parrainage
 
+  // ✅ MIGRATION: Utilise FirebasePromoCodeService
   Future<void> _validatePromoCode() async {
     final code = _promoCode.text.trim();
     if (code.isEmpty) return;
@@ -120,27 +126,28 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
     setState(() => _isValidatingPromo = true);
 
     try {
-      final promoCode = await PromoCodeService.validatePromoCode(code);
+      final promoData = await FirebasePromoCodeService.instance.validatePromoCode(code);
       
       if (!mounted) return; // Vérification avant setState
       
       setState(() {
-        _validatedPromoCode = promoCode;
+        _validatedPromoCode = promoData;
         _isValidatingPromo = false;
       });
 
-      if (promoCode != null) {
+      if (promoData != null) {
         String message = 'Code promo valide ! ✅';
-        if (promoCode.type == 'free') {
-          message += '\nVous bénéficiez de ${promoCode.freeMonths} mois gratuits !';
-          // Reset payment status since it's not needed
-          _paymentDone = false;
-        } else if (promoCode.type == 'referral') {
+        final type = promoData['type'] as String?;
+        final value = promoData['value'] as num?;
+        
+        if (type == 'referral') {
           message += '\nCode de parrainage validé ! Vous pouvez vous inscrire gratuitement.';
           // Reset payment status since it's not needed for referral codes
           _paymentDone = false;
-        } else if (promoCode.discountPercent != null) {
-          message += '\n${promoCode.discountPercent}% de réduction appliquée !';
+        } else if (type == 'percentage' && value != null) {
+          message += '\n${value.toInt()}% de réduction appliquée !';
+        } else if (type == 'fixed' && value != null) {
+          message += '\n${value.toInt()}€ de réduction appliquée !';
         }
         
         if (mounted) {
@@ -188,15 +195,27 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
     }
   }
 
+  // ✅ MIGRATION: Utilise SecureAuthService
   Future<void> _submitForm() async {
     try {
       // Créer l'utilisateur avec Firebase Auth
-      final success = await widget.authService.createUserWithEmailAndPassword(
+      final user = await widget.authService.createUserWithEmailAndPassword(
         email: _email.text.trim(),
         password: _password.text.trim(),
-        name: '${_tatoueurPrenom.text.trim()} ${_tatoueurNom.text.trim()}',
-        role: UserRole.tatoueur,
-        extraData: {
+        displayName: '${_tatoueurPrenom.text.trim()} ${_tatoueurNom.text.trim()}',
+        userRole: 'tatoueur',
+      );
+
+      if (user == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Erreur lors de la création du compte')),
+        );
+        return;
+      }
+
+      // ✅ MIGRATION: Mettre à jour le profil avec les données supplémentaires
+      await widget.authService.updateUserProfile(
+        additionalData: {
           'shopName': _shopName.text.trim(),
           'shopAddress': _shopAddress.text.trim(),
           'birthDate': _birthDate?.toIso8601String(),
@@ -206,35 +225,42 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
           'emailPro': _emailPro.text.trim(),
           'selectedPlan': _selectedPlan,
           'newsletter': _newsletter,
+          'role': 'tatoueur', // Confirmer le rôle
         },
       );
 
-      if (!success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erreur lors de la création du compte')),
-        );
-        return;
-      }
-
-      // Si un code promo valide est utilisé, l'enregistrer
+      // ✅ MIGRATION: Si un code promo valide est utilisé, l'enregistrer
       if (_validatedPromoCode != null) {
-        await PromoCodeService.usePromoCode(
-          _validatedPromoCode!.code, 
-          _email.text.trim(),
-          _email.text.trim(),
-          subscriptionType: _selectedPlan,
-        );
+        final code = _validatedPromoCode!['code'] as String;
+        await FirebasePromoCodeService.instance.usePromoCode(code);
+
+        // Si c'est un code de parrainage, enregistrer le parrainage
+        final type = _validatedPromoCode!['type'] as String?;
+        if (type == 'referral') {
+          final createdBy = _validatedPromoCode!['createdBy'] as String?;
+          if (createdBy != null) {
+            await FirebasePromoCodeService.instance.recordReferral(
+              referrerId: createdBy,
+              referredUserId: widget.authService.currentUserId!,
+              referralCode: code,
+            );
+          }
+        }
       }
 
       // Redirection vers la page d'accueil pro
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const HomePagePro()),
-      );
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const HomePagePro()),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e')),
+        );
+      }
     }
   }
 
@@ -293,6 +319,19 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
               )
             : null),
       );
+
+  // ✅ MIGRATION: Méthodes utilitaires pour l'affichage des codes promo
+  bool get _isReferralCode {
+    return _validatedPromoCode?['type'] == 'referral';
+  }
+
+  String? get _referrerEmail {
+    if (!_isReferralCode) return null;
+    final createdBy = _validatedPromoCode?['createdBy'] as String?;
+    // Dans un vrai cas, il faudrait récupérer l'email depuis l'ID
+    // Pour l'instant on peut utiliser la description ou un autre champ
+    return _validatedPromoCode?['description']?.toString().split(' pour ').last ?? 'Utilisateur';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -386,6 +425,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                               ),
                             ],
                           ),
+                          // ✅ MIGRATION: Affichage adapté aux nouveaux types
                           if (_validatedPromoCode != null) ...[
                             const SizedBox(height: 8),
                             Container(
@@ -398,21 +438,21 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                               child: Column(
                                 children: [
                                   Text(
-                                    _validatedPromoCode!.type == 'free'
-                                        ? '✅ ${_validatedPromoCode!.freeMonths} mois gratuits appliqués !'
-                                        : _validatedPromoCode!.type == 'referral'
+                                    _isReferralCode
                                         ? '✅ Code de parrainage validé !'
-                                        : '✅ ${_validatedPromoCode!.discountPercent}% de réduction appliquée !',
+                                        : _validatedPromoCode!['type'] == 'percentage'
+                                        ? '✅ ${(_validatedPromoCode!['value'] as num).toInt()}% de réduction appliquée !'
+                                        : '✅ ${(_validatedPromoCode!['value'] as num).toInt()}€ de réduction appliquée !',
                                     style: const TextStyle(
                                       color: Colors.green,
                                       fontWeight: FontWeight.bold,
                                     ),
                                     textAlign: TextAlign.center,
                                   ),
-                                  if (_validatedPromoCode!.isReferralCode) ...[
+                                  if (_isReferralCode) ...[
                                     const SizedBox(height: 4),
                                     Text(
-                                      'Parrainé par: ${_validatedPromoCode!.referrerEmail}',
+                                      'Parrainé par: ${_referrerEmail ?? 'Utilisateur'}',
                                       style: const TextStyle(
                                         color: Colors.green,
                                         fontSize: 12,
@@ -420,9 +460,9 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                                       textAlign: TextAlign.center,
                                     ),
                                     const SizedBox(height: 4),
-                                    Text(
+                                    const Text(
                                       'En souscrivant un abonnement annuel, votre parrain recevra 1 mois gratuit !',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         color: Colors.green,
                                         fontSize: 11,
                                         fontStyle: FontStyle.italic,
@@ -650,7 +690,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                     ),
 
                     // 6) Bandeau promo (si pas de code gratuit)
-                    if (remaining > 0 && _validatedPromoCode?.type != 'free') ...[
+                    if (remaining > 0 && !_isReferralCode) ...[
                       Container(
                         padding: const EdgeInsets.all(12),
                         margin: const EdgeInsets.symmetric(vertical: 8),
@@ -683,7 +723,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                         ),
                       ),
                       // Bonus de parrainage pour l'abonnement annuel
-                      if (_validatedPromoCode?.isReferralCode == true) ...[
+                      if (_isReferralCode) ...[
                         const SizedBox(height: 8),
                         Container(
                           padding: const EdgeInsets.all(12),
@@ -722,7 +762,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: _PlanCard(
-                              label: _validatedPromoCode?.isReferralCode == true 
+                              label: _isReferralCode
                                   ? 'Engagement 12 mois\n79 € TTC mensuel\ndont 1 mois offert\n+ 1 mois pour votre parrain 🎁'
                                   : 'Engagement 12 mois\n79 € TTC mensuel\ndont 1 mois offert',
                               selected: _selectedPlan == 'annuel',
@@ -737,47 +777,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                           ),
                         ],
                       ),
-                    ] else if (_validatedPromoCode?.type == 'free') ...[
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        margin: const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.green, width: 2),
-                        ),
-                        child: Column(
-                          children: [
-                            const Icon(
-                              Icons.celebration,
-                              color: Colors.green,
-                              size: 40,
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Félicitations ! 🎉',
-                              style: TextStyle(
-                                fontFamily: 'PermanentMarker',
-                                fontSize: 20,
-                                color: Colors.green,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Vous bénéficiez de ${_validatedPromoCode!.freeMonths} mois gratuits !',
-                              style: const TextStyle(
-                                fontFamily: 'Roboto',
-                                fontSize: 16,
-                                color: Colors.green,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ] else if (_validatedPromoCode?.type == 'referral') ...[
+                    ] else if (_isReferralCode) ...[
                       Container(
                         padding: const EdgeInsets.all(16),
                         margin: const EdgeInsets.symmetric(vertical: 12),
@@ -805,7 +805,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Parrainé par: ${_validatedPromoCode!.referrerEmail}',
+                              'Parrainé par: ${_referrerEmail ?? 'Utilisateur'}',
                               style: const TextStyle(
                                 fontFamily: 'Roboto',
                                 fontSize: 14,

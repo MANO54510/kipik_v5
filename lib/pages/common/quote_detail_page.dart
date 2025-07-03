@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../models/quote_request.dart';
 import '../../services/quote/quote_service.dart';
 import '../../../locator.dart';
-import '../../services/payment/payment_service.dart';
+import '../../services/payment/firebase_payment_service.dart';
 
 class QuoteDetailPage extends StatefulWidget {
   final String requestId;
@@ -12,7 +12,7 @@ class QuoteDetailPage extends StatefulWidget {
 }
 class _QuoteDetailPageState extends State<QuoteDetailPage> {
   final _quoteService = locator<QuoteService>();
-  final _paymentService = locator<PaymentService>();
+  final _paymentService = locator<FirebasePaymentService>();
   late Future<QuoteRequest> _future;
   @override void initState() {
     super.initState();

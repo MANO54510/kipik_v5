@@ -1,15 +1,17 @@
 // lib/services/notification/firebase_notification_service.dart
 
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import '../auth/auth_service.dart';
+import '../auth/secure_auth_service.dart'; // ✅ MIGRATION
 import '../../models/notification_item.dart';
+import '../../models/user_role.dart'; // ✅ MIGRATION
 
 class FirebaseNotificationService {
   static FirebaseNotificationService? _instance;
   static FirebaseNotificationService get instance =>
       _instance ??= FirebaseNotificationService._();
-  FirebaseNotificationService._();
+  FirebaseNotificationService._(); // ✅ CORRIGÉ: Constructeur privé défini
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
@@ -17,6 +19,18 @@ class FirebaseNotificationService {
   // Variables pour stocker les notifications localement
   int _unreadCount = 0;
   List<NotificationItem> _notifications = [];
+
+  // ✅ MIGRATION: Getters sécurisés
+  String? get _currentUserId => SecureAuthService.instance.currentUserId;
+  UserRole? get _currentUserRole => SecureAuthService.instance.currentUserRole;
+  dynamic get _currentUser => SecureAuthService.instance.currentUser;
+
+  // ✅ SÉCURITÉ: Vérification d'authentification obligatoire
+  void _ensureAuthenticated() {
+    if (_currentUserId == null) {
+      throw Exception('Utilisateur non connecté');
+    }
+  }
 
   // ✅ CORRIGÉ: Méthodes asynchrones pour compatibilité avec la page
   Future<List<NotificationItem>> getAllNotifications() async {
@@ -59,16 +73,15 @@ class FirebaseNotificationService {
   Future<void> deleteNotification(String notificationId) async {
     final removedNotification = _notifications.firstWhere(
       (n) => n.id == notificationId,
-      orElse:
-          () => NotificationItem(
-            id: '',
-            title: '',
-            message: '',
-            date: DateTime.now(),
-            icon: Icons.notifications,
-            color: Colors.grey,
-            type: NotificationType.system,
-          ),
+      orElse: () => NotificationItem(
+        id: '',
+        title: '',
+        message: '',
+        date: DateTime.now(),
+        icon: Icons.notifications,
+        color: Colors.grey,
+        type: NotificationType.system,
+      ),
     );
 
     if (removedNotification.id.isNotEmpty) {
@@ -103,16 +116,15 @@ class FirebaseNotificationService {
   void removeNotification(String id) {
     final removedNotification = _notifications.firstWhere(
       (n) => n.id == id,
-      orElse:
-          () => NotificationItem(
-            id: '',
-            title: '',
-            message: '',
-            date: DateTime.now(),
-            icon: Icons.notifications,
-            color: Colors.grey,
-            type: NotificationType.system,
-          ),
+      orElse: () => NotificationItem(
+        id: '',
+        title: '',
+        message: '',
+        date: DateTime.now(),
+        icon: Icons.notifications,
+        color: Colors.grey,
+        type: NotificationType.system,
+      ),
     );
 
     if (removedNotification.id.isNotEmpty) {
@@ -198,6 +210,7 @@ class FirebaseNotificationService {
 
     // Recalculer le count
     _unreadCount = _notifications.where((n) => !n.read).length;
+    print('✅ ${_notifications.length} notifications factices générées');
   }
 
   // ✅ AJOUTÉ: S'assurer que les données sont initialisées
@@ -210,9 +223,11 @@ class FirebaseNotificationService {
     }
   }
 
-  // Initialisation Firebase
+  // ✅ MIGRATION: Initialisation Firebase avec SecureAuthService
   Future<void> initialize() async {
     try {
+      print('🔔 Initialisation du service de notifications...');
+
       // Demander permission
       await _messaging.requestPermission(alert: true, badge: true, sound: true);
 
@@ -237,45 +252,57 @@ class FirebaseNotificationService {
 
       // Charger les notifications existantes depuis Firestore
       await loadNotificationsFromFirestore();
+      
+      print('✅ Service de notifications initialisé');
     } catch (e) {
-      print('Erreur initialisation notifications: $e');
+      print('❌ Erreur initialisation notifications: $e');
       // En cas d'erreur, utiliser les notifications factices
       generateMockNotifications();
     }
   }
 
+  // ✅ MIGRATION: Sauvegarde token avec SecureAuthService
   Future<void> _saveTokenToFirestore(String token) async {
     try {
-      final user = AuthService.instance.currentUser;
-      if (user != null) {
-        await _firestore.collection('users').doc(user.uid).update({
+      if (_currentUserId != null) {
+        await _firestore.collection('users').doc(_currentUserId!).update({
           'fcmToken': token,
           'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
         });
+        print('✅ Token FCM sauvegardé');
       }
     } catch (e) {
-      print('Erreur sauvegarde token: $e');
+      print('❌ Erreur sauvegarde token: $e');
     }
   }
 
   void _handleForegroundMessage(RemoteMessage message) {
-    final notification = NotificationItem(
-      id: message.messageId ?? DateTime.now().millisecondsSinceEpoch.toString(),
-      title: message.notification?.title ?? 'Nouvelle notification',
-      message: message.notification?.body ?? '',
-      date: DateTime.now(),
-      icon: _getIconFromType(_getTypeFromData(message.data)),
-      color: _getColorFromType(_getTypeFromData(message.data)),
-      type: _getTypeFromData(message.data),
-      read: false,
-    );
+    try {
+      final notification = NotificationItem(
+        id: message.messageId ?? DateTime.now().millisecondsSinceEpoch.toString(),
+        title: message.notification?.title ?? 'Nouvelle notification',
+        message: message.notification?.body ?? '',
+        date: DateTime.now(),
+        icon: _getIconFromType(_getTypeFromData(message.data)),
+        color: _getColorFromType(_getTypeFromData(message.data)),
+        type: _getTypeFromData(message.data),
+        read: false,
+      );
 
-    addNotification(notification);
+      addNotification(notification);
+      print('✅ Notification reçue en premier plan: ${notification.title}');
+    } catch (e) {
+      print('❌ Erreur gestion message premier plan: $e');
+    }
   }
 
   void _handleNotificationClick(RemoteMessage message) {
-    print('Notification cliquée: ${message.data}');
-    // Gérer la navigation selon le type
+    try {
+      print('🔔 Notification cliquée: ${message.data}');
+      // TODO: Gérer la navigation selon le type
+    } catch (e) {
+      print('❌ Erreur gestion clic notification: $e');
+    }
   }
 
   NotificationType _getTypeFromData(Map<String, dynamic> data) {
@@ -296,6 +323,8 @@ class FirebaseNotificationService {
         return Icons.person;
       case NotificationType.system:
         return Icons.info_outline;
+      default:
+        return Icons.notifications;
     }
   }
 
@@ -311,9 +340,12 @@ class FirebaseNotificationService {
         return Colors.teal;
       case NotificationType.system:
         return Colors.orange;
+      default:
+        return Colors.grey;
     }
   }
 
+  // ✅ MIGRATION: Envoi notification avec SecureAuthService
   Future<void> sendNotification({
     required String userId,
     required String title,
@@ -323,9 +355,13 @@ class FirebaseNotificationService {
     Map<String, dynamic>? additionalData,
   }) async {
     try {
+      _ensureAuthenticated(); // ✅ Vérification sécurisée
+
       final data = {
         'type': type.name,
         'projectId': projectId,
+        'sentBy': _currentUserId,
+        'sentByRole': _currentUserRole?.name,
         ...?additionalData,
       };
 
@@ -336,62 +372,70 @@ class FirebaseNotificationService {
         'data': data,
         'type': type.name,
         'projectId': projectId,
+        'sentBy': _currentUserId,
         'read': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
+
+      print('✅ Notification envoyée à $userId: $title');
     } catch (e) {
-      print('Erreur envoi notification: $e');
+      print('❌ Erreur envoi notification: $e');
     }
   }
 
+  // ✅ MIGRATION: Chargement notifications avec SecureAuthService
   Future<void> loadNotificationsFromFirestore() async {
     try {
-      final user = AuthService.instance.currentUser;
-      if (user == null) {
+      if (_currentUserId == null) {
+        print('⚠️ Utilisateur non connecté, génération de notifications factices');
         generateMockNotifications();
         return;
       }
 
-      final snapshot =
-          await _firestore
-              .collection('notifications')
-              .where('userId', isEqualTo: user.uid)
-              .orderBy('createdAt', descending: true)
-              .limit(50)
-              .get();
+      final snapshot = await _firestore
+          .collection('notifications')
+          .where('userId', isEqualTo: _currentUserId)
+          .orderBy('createdAt', descending: true)
+          .limit(50)
+          .get();
 
       _notifications.clear();
 
       for (final doc in snapshot.docs) {
-        final data = doc.data();
-        final timestamp = data['createdAt'] as Timestamp?;
-        final type = _getTypeFromString(data['type']);
+        try {
+          final data = doc.data();
+          final timestamp = data['createdAt'] as Timestamp?;
+          final type = _getTypeFromString(data['type']);
 
-        final notification = NotificationItem(
-          id: doc.id,
-          title: data['title'] ?? '',
-          message: data['body'] ?? '',
-          fullMessage: data['fullMessage'],
-          date: timestamp?.toDate() ?? DateTime.now(),
-          icon: _getIconFromType(type),
-          color: _getColorFromType(type),
-          type: type,
-          read: data['read'] ?? false,
-        );
+          final notification = NotificationItem(
+            id: doc.id,
+            title: data['title'] ?? '',
+            message: data['body'] ?? '',
+            fullMessage: data['fullMessage'],
+            date: timestamp?.toDate() ?? DateTime.now(),
+            icon: _getIconFromType(type),
+            color: _getColorFromType(type),
+            type: type,
+            read: data['read'] ?? false,
+          );
 
-        _notifications.add(notification);
+          _notifications.add(notification);
+        } catch (e) {
+          print('❌ Erreur traitement notification ${doc.id}: $e');
+        }
       }
 
       _unreadCount = _notifications.where((n) => !n.read).length;
+      print('✅ ${_notifications.length} notifications chargées (${_unreadCount} non lues)');
     } catch (e) {
-      print('Erreur chargement notifications: $e');
+      print('❌ Erreur chargement notifications: $e');
       // En cas d'erreur, générer des notifications factices
       generateMockNotifications();
     }
   }
 
   NotificationType _getTypeFromString(String? typeString) {
-    switch (typeString) {
+    switch (typeString?.toLowerCase()) {
       case 'message':
         return NotificationType.message;
       case 'devis':
@@ -407,90 +451,248 @@ class FirebaseNotificationService {
     }
   }
 
+  // ✅ SÉCURITÉ: Mise à jour statut avec vérification utilisateur
   Future<void> _updateReadStatusInFirestore(String notificationId) async {
     try {
-      await _firestore.collection('notifications').doc(notificationId).update({
-        'read': true,
-      });
+      _ensureAuthenticated();
+
+      // Vérifier que la notification appartient à l'utilisateur
+      final doc = await _firestore.collection('notifications').doc(notificationId).get();
+      if (doc.exists && doc.data()?['userId'] == _currentUserId) {
+        await doc.reference.update({'read': true});
+        print('✅ Statut lecture mis à jour: $notificationId');
+      } else {
+        print('❌ Accès refusé à la notification: $notificationId');
+      }
     } catch (e) {
-      print('Erreur mise à jour statut lu: $e');
+      print('❌ Erreur mise à jour statut lu: $e');
     }
   }
 
+  // ✅ SÉCURITÉ: Marquer toutes comme lues avec vérification utilisateur
   Future<void> _markAllAsReadInFirestore() async {
     try {
-      final user = AuthService.instance.currentUser;
-      if (user == null) return;
+      _ensureAuthenticated();
 
       final batch = _firestore.batch();
-      final snapshot =
-          await _firestore
-              .collection('notifications')
-              .where('userId', isEqualTo: user.uid)
-              .where('read', isEqualTo: false)
-              .get();
+      final snapshot = await _firestore
+          .collection('notifications')
+          .where('userId', isEqualTo: _currentUserId)
+          .where('read', isEqualTo: false)
+          .get();
 
       for (final doc in snapshot.docs) {
         batch.update(doc.reference, {'read': true});
       }
 
       await batch.commit();
+      print('✅ Toutes les notifications marquées comme lues');
     } catch (e) {
-      print('Erreur marquage toutes lues: $e');
+      print('❌ Erreur marquage toutes lues: $e');
     }
   }
 
-  // ✅ AJOUTÉ: Méthodes de suppression Firebase
+  // ✅ SÉCURITÉ: Suppression avec vérification utilisateur
   Future<void> _deleteFromFirestore(String notificationId) async {
     try {
-      await _firestore.collection('notifications').doc(notificationId).delete();
+      _ensureAuthenticated();
+
+      // Vérifier que la notification appartient à l'utilisateur
+      final doc = await _firestore.collection('notifications').doc(notificationId).get();
+      if (doc.exists && doc.data()?['userId'] == _currentUserId) {
+        await doc.reference.delete();
+        print('✅ Notification supprimée: $notificationId');
+      } else {
+        print('❌ Accès refusé pour supprimer: $notificationId');
+      }
     } catch (e) {
-      print('Erreur suppression notification: $e');
+      print('❌ Erreur suppression notification: $e');
     }
   }
 
+  // ✅ SÉCURITÉ: Suppression toutes avec vérification utilisateur
   Future<void> _deleteAllFromFirestore() async {
     try {
-      final user = AuthService.instance.currentUser;
-      if (user == null) return;
+      _ensureAuthenticated();
 
       final batch = _firestore.batch();
-      final snapshot =
-          await _firestore
-              .collection('notifications')
-              .where('userId', isEqualTo: user.uid)
-              .get();
+      final snapshot = await _firestore
+          .collection('notifications')
+          .where('userId', isEqualTo: _currentUserId)
+          .get();
 
       for (final doc in snapshot.docs) {
         batch.delete(doc.reference);
       }
 
       await batch.commit();
+      print('✅ Toutes les notifications supprimées');
     } catch (e) {
-      print('Erreur suppression toutes notifications: $e');
+      print('❌ Erreur suppression toutes notifications: $e');
     }
   }
 
-  // Obtenir les statistiques
-  Map<String, int> getNotificationStats() {
-    return {
-      'total': _notifications.length,
-      'unread': getUnreadCountSync(),
-      'read': _notifications.length - getUnreadCountSync(),
-      'messages':
-          _notifications
-              .where((n) => n.type == NotificationType.message)
-              .length,
-      'devis':
-          _notifications.where((n) => n.type == NotificationType.devis).length,
-      'projets':
-          _notifications.where((n) => n.type == NotificationType.projet).length,
-      'tatoueurs':
-          _notifications
-              .where((n) => n.type == NotificationType.tatoueur)
-              .length,
-      'system':
-          _notifications.where((n) => n.type == NotificationType.system).length,
-    };
+  // ✅ NOUVEAU: Envoyer notification à tous les utilisateurs d'un rôle
+  Future<void> sendNotificationToRole({
+    required UserRole targetRole,
+    required String title,
+    required String body,
+    NotificationType type = NotificationType.system,
+    Map<String, dynamic>? additionalData,
+  }) async {
+    try {
+      _ensureAuthenticated();
+
+      // Seuls les admins peuvent envoyer des notifications de masse
+      if (_currentUserRole != UserRole.admin) {
+        throw Exception('Seuls les administrateurs peuvent envoyer des notifications de masse');
+      }
+
+      // Récupérer tous les utilisateurs du rôle cible
+      final usersSnapshot = await _firestore
+          .collection('users')
+          .where('role', isEqualTo: targetRole.name)
+          .get();
+
+      final batch = _firestore.batch();
+      int notificationCount = 0;
+
+      for (final userDoc in usersSnapshot.docs) {
+        final notificationRef = _firestore.collection('notifications').doc();
+        
+        batch.set(notificationRef, {
+          'userId': userDoc.id,
+          'title': title,
+          'body': body,
+          'type': type.name,
+          'sentBy': _currentUserId,
+          'sentByRole': _currentUserRole?.name,
+          'data': additionalData ?? {},
+          'read': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+
+        notificationCount++;
+      }
+
+      await batch.commit();
+      print('✅ $notificationCount notifications envoyées au rôle ${targetRole.name}');
+    } catch (e) {
+      print('❌ Erreur envoi notifications de masse: $e');
+      rethrow;
+    }
+  }
+
+  // ✅ NOUVEAU: Obtenir les statistiques personnalisées
+  Future<Map<String, dynamic>> getNotificationStats() async {
+    try {
+      await _ensureInitialized();
+
+      final Map<String, dynamic> baseStats = {
+        'total': _notifications.length,
+        'unread': _unreadCount,
+        'read': _notifications.length - _unreadCount,
+        'messages': _notifications.where((n) => n.type == NotificationType.message).length,
+        'devis': _notifications.where((n) => n.type == NotificationType.devis).length,
+        'projets': _notifications.where((n) => n.type == NotificationType.projet).length,
+        'tatoueurs': _notifications.where((n) => n.type == NotificationType.tatoueur).length,
+        'system': _notifications.where((n) => n.type == NotificationType.system).length,
+      };
+
+      // Ajouter des stats avancées si connecté
+      if (_currentUserId != null) {
+        final today = DateTime.now();
+        final todayNotifications = _notifications.where((n) => 
+          n.date.day == today.day && 
+          n.date.month == today.month && 
+          n.date.year == today.year
+        ).length;
+
+        final weekNotifications = _notifications.where((n) => 
+          today.difference(n.date).inDays <= 7
+        ).length;
+
+        final Map<String, dynamic> advancedStats = {
+          'today': todayNotifications,
+          'thisWeek': weekNotifications,
+          'userId': _currentUserId!,
+          'userRole': _currentUserRole?.name ?? 'unknown',
+        };
+
+        // Fusionner les maps
+        baseStats.addAll(advancedStats);
+      }
+
+      return baseStats;
+    } catch (e) {
+      print('❌ Erreur stats notifications: $e');
+      return {
+        'total': 0,
+        'unread': 0,
+        'read': 0,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  // ✅ NOUVEAU: Nettoyer les anciennes notifications
+  Future<void> cleanupOldNotifications({int daysOld = 30}) async {
+    try {
+      _ensureAuthenticated();
+
+      final cutoffDate = DateTime.now().subtract(Duration(days: daysOld));
+      final cutoffTimestamp = Timestamp.fromDate(cutoffDate);
+
+      final oldNotifications = await _firestore
+          .collection('notifications')
+          .where('userId', isEqualTo: _currentUserId)
+          .where('createdAt', isLessThan: cutoffTimestamp)
+          .get();
+
+      final batch = _firestore.batch();
+      for (final doc in oldNotifications.docs) {
+        batch.delete(doc.reference);
+      }
+
+      await batch.commit();
+
+      // Nettoyer aussi localement
+      _notifications.removeWhere((n) => 
+        DateTime.now().difference(n.date).inDays > daysOld
+      );
+      _unreadCount = _notifications.where((n) => !n.read).length;
+
+      print('✅ ${oldNotifications.docs.length} anciennes notifications supprimées');
+    } catch (e) {
+      print('❌ Erreur nettoyage notifications: $e');
+    }
+  }
+
+  // ✅ NOUVEAU: Méthode de diagnostic pour debug
+  Future<void> debugNotificationService() async {
+    print('🔍 DIAGNOSTIC FirebaseNotificationService:');
+    
+    try {
+      print('  - User ID: ${_currentUserId ?? 'Non connecté'}');
+      print('  - User Role: ${_currentUserRole?.name ?? 'Aucun'}');
+      print('  - Initialisé: $_isInitialized');
+      print('  - Notifications locales: ${_notifications.length}');
+      print('  - Non lues: $_unreadCount');
+      
+      if (_currentUserId != null) {
+        final stats = await getNotificationStats();
+        print('  - Stats: $stats');
+      }
+    } catch (e) {
+      print('  - Erreur: $e');
+    }
+  }
+
+  // ✅ NOUVEAU: Réinitialiser le service (utile après déconnexion)
+  void reset() {
+    _notifications.clear();
+    _unreadCount = 0;
+    _isInitialized = false;
+    print('🔄 Service de notifications réinitialisé');
   }
 }

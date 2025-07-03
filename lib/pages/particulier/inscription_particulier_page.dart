@@ -1,25 +1,20 @@
 // lib/pages/particulier/inscription_particulier_page.dart
 
 import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
 
-import 'package:kipik_v5/services/auth/auth_service.dart';
-import 'package:kipik_v5/services/auth/auth_service.dart';
+import 'package:kipik_v5/services/auth/secure_auth_service.dart'; // ✅ MIGRATION
+import 'package:kipik_v5/services/auth/captcha_manager.dart'; // ✅ MIGRATION: reCAPTCHA
 import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
 import 'package:kipik_v5/widgets/utils/cgu_cgv_validation_widget.dart';
 import 'package:kipik_v5/pages/particulier/confirmation_inscription_particulier_page.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
 
 class InscriptionParticulierPage extends StatefulWidget {
-  InscriptionParticulierPage({
+  const InscriptionParticulierPage({
     Key? key,
-    AuthService? authService,
-  })  : authService = authService ?? AuthService(),
-        super(key: key);
-
-  final AuthService authService;
+  }) : super(key: key);
 
   @override
   State<InscriptionParticulierPage> createState() =>
@@ -29,6 +24,9 @@ class InscriptionParticulierPage extends StatefulWidget {
 class _InscriptionParticulierPageState
     extends State<InscriptionParticulierPage> {
   final _formKey = GlobalKey<FormState>();
+
+  // ✅ MIGRATION: Service sécurisé centralisé
+  SecureAuthService get _authService => SecureAuthService.instance;
 
   // Controllers
   final nomController = TextEditingController();
@@ -50,11 +48,13 @@ class _InscriptionParticulierPageState
   bool showConfirmPassword = false;
   bool cguLu = false;
   bool cgvLu = false;
+  bool _isLoading = false; // ✅ État de chargement
 
   static const Map<String, List<String>> villesParCodePostal = {
     '54510': ['Tomblaine'],
     '75001': ['Paris 1er'],
     '69001': ['Lyon 1er'],
+    // Ajoutez plus de codes postaux selon vos besoins
   };
 
   String? _requiredValidator(String? v) =>
@@ -82,7 +82,8 @@ class _InscriptionParticulierPageState
       _formKey.currentState?.validate() == true &&
       cguLu &&
       cgvLu &&
-      pieceIdentite != null;
+      pieceIdentite != null &&
+      dateNaissance != null; // ✅ Vérification date de naissance
 
   Future<void> _submitForm() async {
     if (!isFormValid) {
@@ -92,36 +93,73 @@ class _InscriptionParticulierPageState
       return;
     }
 
-    final ok = await widget.authService.registerParticulier(
-      email: emailController.text.trim(),
-      password: passwordController.text.trim(),
-      extraFields: {
-        'nom': nomController.text.trim(),
-        'prenom': prenomController.text.trim(),
-        'telephone': telController.text.trim(),
-        'adresse': {
-          'numero': numeroController.text.trim(),
-          'rue': rueController.text.trim(),
-          'codePostal': codePostalController.text.trim(),
-          'ville': villeController.text.trim(),
-        },
-        'dateNaissance': dateNaissance?.toIso8601String(),
-        'newsletter': newsletterAccepted,
-        'pieceIdentiteNom': pieceIdentite?.name,
-      },
-    );
+    setState(() => _isLoading = true);
 
-    if (ok) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const ConfirmationInscriptionParticulierPage(),
-        ),
+    try {
+      // ✅ MIGRATION: Validation reCAPTCHA pour sécurité
+      final captchaResult = await CaptchaManager.instance.validateInvisibleCaptcha('signup');
+
+      if (!captchaResult.isValid) {
+        throw Exception('Validation de sécurité échouée');
+      }
+
+      // ✅ MIGRATION: Nouvelle méthode SecureAuthService
+      final user = await _authService.createUserWithEmailAndPassword(
+        email: emailController.text.trim(),
+        password: passwordController.text.trim(),
+        displayName: '${prenomController.text.trim()} ${nomController.text.trim()}',
+        userRole: 'client', // ✅ Rôle explicite pour particulier
+        captchaResult: captchaResult,
       );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Erreur lors de l'inscription.")),
-      );
+
+      if (user != null) {
+        // ✅ MIGRATION: Mise à jour du profil avec données additionnelles
+        await _authService.updateUserProfile(
+          additionalData: {
+            'type': 'particulier',
+            'nom': nomController.text.trim(),
+            'prenom': prenomController.text.trim(),
+            'telephone': telController.text.trim(),
+            'adresse': {
+              'numero': numeroController.text.trim(),
+              'rue': rueController.text.trim(),
+              'codePostal': codePostalController.text.trim(),
+              'ville': villeController.text.trim(),
+            },
+            'dateNaissance': dateNaissance?.toIso8601String(),
+            'newsletter': newsletterAccepted,
+            'pieceIdentiteNom': pieceIdentite?.name,
+            'inscriptionCompleted': true,
+            'profileComplete': true,
+            'signupCaptchaScore': captchaResult.score,
+          },
+        );
+
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const ConfirmationInscriptionParticulierPage(),
+            ),
+          );
+        }
+      } else {
+        throw Exception('Erreur lors de la création du compte');
+      }
+    } catch (e) {
+      print('❌ Erreur inscription particulier: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors de l\'inscription: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -166,6 +204,22 @@ class _InscriptionParticulierPageState
       );
 
   @override
+  void dispose() {
+    // ✅ Nettoyage des controllers
+    nomController.dispose();
+    prenomController.dispose();
+    numeroController.dispose();
+    rueController.dispose();
+    codePostalController.dispose();
+    villeController.dispose();
+    telController.dispose();
+    emailController.dispose();
+    passwordController.dispose();
+    confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final backgrounds = [
       'assets/background1.png',
@@ -196,18 +250,45 @@ class _InscriptionParticulierPageState
                 key: _formKey,
                 child: Column(
                   children: [
+                    // ✅ Indicateur de sécurité reCAPTCHA
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.8),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.green),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.security, color: Colors.white, size: 20),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Inscription sécurisée avec reCAPTCHA',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                     // Nom / Prénom
                     TextFormField(
                       controller: nomController,
                       style: const TextStyle(color: Colors.black87),
-                      decoration: _inputDecoration('Nom'),
+                      decoration: _inputDecoration('Nom *'),
                       validator: _requiredValidator,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: prenomController,
                       style: const TextStyle(color: Colors.black87),
-                      decoration: _inputDecoration('Prénom'),
+                      decoration: _inputDecoration('Prénom *'),
                       validator: _requiredValidator,
                     ),
                     const SizedBox(height: 12),
@@ -219,7 +300,7 @@ class _InscriptionParticulierPageState
                           child: TextFormField(
                             controller: numeroController,
                             style: const TextStyle(color: Colors.black87),
-                            decoration: _inputDecoration('N°'),
+                            decoration: _inputDecoration('N° *'),
                             validator: _requiredValidator,
                           ),
                         ),
@@ -229,7 +310,7 @@ class _InscriptionParticulierPageState
                           child: TextFormField(
                             controller: rueController,
                             style: const TextStyle(color: Colors.black87),
-                            decoration: _inputDecoration('Rue'),
+                            decoration: _inputDecoration('Rue *'),
                             validator: _requiredValidator,
                           ),
                         ),
@@ -243,7 +324,7 @@ class _InscriptionParticulierPageState
                             controller: codePostalController,
                             style: const TextStyle(color: Colors.black87),
                             keyboardType: TextInputType.number,
-                            decoration: _inputDecoration('Code postal'),
+                            decoration: _inputDecoration('Code postal *'),
                             validator: _requiredValidator,
                             onChanged: (v) {
                               final liste = villesParCodePostal[v.trim()];
@@ -261,7 +342,7 @@ class _InscriptionParticulierPageState
                           child: TextFormField(
                             controller: villeController,
                             style: const TextStyle(color: Colors.black87),
-                            decoration: _inputDecoration('Ville'),
+                            decoration: _inputDecoration('Ville *'),
                             validator: _requiredValidator,
                           ),
                         ),
@@ -274,7 +355,7 @@ class _InscriptionParticulierPageState
                       controller: telController,
                       style: const TextStyle(color: Colors.black87),
                       keyboardType: TextInputType.phone,
-                      decoration: _inputDecoration('Téléphone'),
+                      decoration: _inputDecoration('Téléphone *'),
                       validator: _requiredValidator,
                     ),
                     const SizedBox(height: 12),
@@ -284,7 +365,7 @@ class _InscriptionParticulierPageState
                       controller: emailController,
                       style: const TextStyle(color: Colors.black87),
                       keyboardType: TextInputType.emailAddress,
-                      decoration: _inputDecoration('Email'),
+                      decoration: _inputDecoration('Email *'),
                       validator: _validateEmail,
                     ),
                     const SizedBox(height: 12),
@@ -294,7 +375,7 @@ class _InscriptionParticulierPageState
                       controller: passwordController,
                       obscureText: !showPassword,
                       style: const TextStyle(color: Colors.black87),
-                      decoration: _inputDecoration('Mot de passe'),
+                      decoration: _inputDecoration('Mot de passe *'),
                       validator: _validatePassword,
                     ),
                     const SizedBox(height: 12),
@@ -304,7 +385,7 @@ class _InscriptionParticulierPageState
                       controller: confirmPasswordController,
                       obscureText: !showConfirmPassword,
                       style: const TextStyle(color: Colors.black87),
-                      decoration: _inputDecoration('Confirmer mot de passe'),
+                      decoration: _inputDecoration('Confirmer mot de passe *'),
                       validator: _validateConfirmPassword,
                     ),
                     const SizedBox(height: 12),
@@ -323,13 +404,13 @@ class _InscriptionParticulierPageState
                         if (pick != null) setState(() => dateNaissance = pick);
                       },
                       child: InputDecorator(
-                        decoration: _inputDecoration('Date de naissance'),
+                        decoration: _inputDecoration('Date de naissance *'),
                         child: Text(
                           dateNaissance == null
                               ? 'Sélectionner votre date'
                               : '${dateNaissance!.day}/${dateNaissance!.month}/${dateNaissance!.year}',
-                          style: const TextStyle(
-                            color: Colors.black87,
+                          style: TextStyle(
+                            color: dateNaissance == null ? Colors.grey : Colors.black87,
                             fontFamily: 'Roboto',
                             fontWeight: FontWeight.w600,
                           ),
@@ -338,7 +419,7 @@ class _InscriptionParticulierPageState
                     ),
                     const SizedBox(height: 12),
 
-                    // Pièce d’identité full-width
+                    // Pièce d'identité full-width
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
@@ -354,7 +435,9 @@ class _InscriptionParticulierPageState
                           if (result != null) setState(() => pieceIdentite = result);
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: KipikTheme.rouge,
+                          backgroundColor: pieceIdentite != null 
+                              ? Colors.green 
+                              : KipikTheme.rouge,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           textStyle: const TextStyle(
@@ -365,10 +448,24 @@ class _InscriptionParticulierPageState
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        child: Text(
-                          pieceIdentite == null
-                              ? "Joindre ma pièce d'identité"
-                              : "Fichier : ${pieceIdentite!.name}",
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              pieceIdentite != null 
+                                  ? Icons.check_circle 
+                                  : Icons.upload_file,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                pieceIdentite == null
+                                    ? "Joindre ma pièce d'identité *"
+                                    : "✓ Fichier : ${pieceIdentite!.name}",
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -405,9 +502,11 @@ class _InscriptionParticulierPageState
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: isFormValid ? _submitForm : null,
+                        onPressed: _isLoading || !isFormValid ? null : _submitForm,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: KipikTheme.rouge,
+                          backgroundColor: isFormValid 
+                              ? KipikTheme.rouge 
+                              : Colors.grey,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 18),
                           shape: RoundedRectangleBorder(
@@ -418,7 +517,49 @@ class _InscriptionParticulierPageState
                             fontSize: 18,
                           ),
                         ),
-                        child: const Text('Valider mon inscription'),
+                        child: _isLoading
+                            ? const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                  SizedBox(width: 12),
+                                  Text('Inscription en cours...'),
+                                ],
+                              )
+                            : const Text('Valider mon inscription'),
+                      ),
+                    ),
+                    
+                    // ✅ Aide visuelle pour les champs obligatoires
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info, color: Colors.blue, size: 20),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Les champs marqués d\'un * sont obligatoires',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],

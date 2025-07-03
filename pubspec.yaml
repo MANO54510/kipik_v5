@@ -9,60 +9,69 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  
-  # Firebase - Versions compatibles entre elles
+
+  # ✅ Firebase - Versions mises à jour pour compatibilité
   firebase_core: ^3.13.1
   firebase_auth: ^5.3.1
   cloud_firestore: ^5.4.3
-  # ✅ AJOUTS MANQUANTS
-  firebase_storage: ^12.3.4      # Pour upload d'images
-  firebase_messaging: ^15.1.4    # Pour notifications
-  firebase_analytics: ^11.3.3    # Analytics
-  
+  cloud_functions: ^5.2.1
+  firebase_storage: ^12.3.4
+  firebase_messaging: ^15.1.4
+  firebase_analytics: ^11.3.3
+
   # État & navigation
   provider: ^6.1.1
-  
+  shared_preferences: ^2.2.2
+  crypto: ^3.0.3
+
+  # 🔐 SÉCURITÉ - reCAPTCHA v3 qui existe vraiment
+  http: 0.13.6
+  g_recaptcha_v3: ^1.0.0           # ✅ Package qui existe sur pub.dev
+  webview_flutter: ^4.8.0
+
   # Fichiers & uploads (pour documents + RIB)
   file_picker: ^8.0.0+1
   file_selector: ^1.0.3
-  
+
   # UI essentiels
   url_launcher: ^6.2.4
-  
+
   # UI avancées
   flutter_staggered_grid_view: ^0.6.2
   flutter_svg: ^2.0.0
-  
+
   # Calendrier
   table_calendar: ^3.0.8
   syncfusion_flutter_calendar: ^28.1.37
   device_calendar: ^4.3.3
-  
+
   # Localisation & cartes - Versions compatibles
   easy_localization: ^3.0.7
   google_maps_flutter: ^2.2.0
   location: ^7.0.0
-  flutter_google_places: ^0.3.0
-  google_place: ^0.4.7
+  google_places_flutter: ^2.0.7 
   geocoding: ^2.1.0
   google_maps_webservice: ^0.0.19
   geolocator: ^14.0.0
-  
+
   # Média & audio
   video_player: ^2.9.5
   just_audio: ^0.10.1
   vibration: ^3.1.3
-  
+
   # Utilitaires
   get_it: ^7.6.0
   flutter_dotenv: ^5.0.2
-  http: ^0.13.6
   uuid: ^4.5.1
-  
+
   # Fichiers & partage
   screenshot: ^3.0.0
   path_provider: ^2.1.2
   share_plus: ^7.2.1
+
+  # 🔥 PAIEMENTS SÉCURISÉS
+  flutter_stripe: ^11.1.0
+  intl: ^0.19.0
 
 dev_dependencies:
   flutter_test:
@@ -77,14 +86,11 @@ flutter_icons:
   ios: true
   image_path: "assets/k.png"
 
-# Overrides pour forcer la compatibilité
+# ✅ Overrides simplifiés pour éviter les conflits
 dependency_overrides:
   web: ^1.1.0
-  firebase_core_platform_interface: ^5.2.1
-  cloud_firestore_platform_interface: ^6.5.0
   collection: ^1.18.0
   meta: ^1.12.0
-  google_api_headers: ^4.2.0
 
 flutter:
   uses-material-design: true
@@ -137,6 +143,7 @@ flutter:
     - assets/images/header_tattoo_wallpaper.png
     - assets/images/header_tattoo_wallpaper2.png
     - assets/images/header_tattoo_wallpaper3.png
+    - .env
 
   fonts:
     - family: PermanentMarker

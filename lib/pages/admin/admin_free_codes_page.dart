@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:kipik_v5/services/promo/promo_code_service.dart';
+import 'package:kipik_v5/services/promo/firebase_promo_code_service.dart';
 import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
 
@@ -35,12 +35,24 @@ class _AdminFreeCodesPageState extends State<AdminFreeCodesPage> {
     setState(() => _isGenerating = true);
     
     try {
-      final codes = await PromoCodeService.generateFreeCodes(
-        _batchCount,
-        freeMonths: _freeMonths,
-        description: 'Code gratuit pour tatoueur partenaire - Lot généré le ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
-        createdBy: 'admin', // Remplacez par votre ID admin
-      );
+      List<String> codes = [];
+      
+      // Générer plusieurs codes manuellement
+      for (int i = 0; i < _batchCount; i++) {
+        final code = 'FREE${DateTime.now().millisecondsSinceEpoch}${i.toString().padLeft(3, '0')}';
+        
+        // Créer chaque code avec votre service Firebase
+        await FirebasePromoCodeService.instance.createPromoCode(
+          code: code,
+          type: 'percentage', // Type de réduction
+          value: 100.0, // 100% de réduction = gratuit
+          description: 'Code gratuit pour tatoueur partenaire - Lot généré le ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
+          expiresAt: DateTime.now().add(Duration(days: _freeMonths * 30)), // Approximation des mois
+          maxUses: 1,
+        );
+        
+        codes.add(code);
+      }
       
       setState(() {
         _lastGeneratedCodes = codes;
@@ -78,25 +90,21 @@ class _AdminFreeCodesPageState extends State<AdminFreeCodesPage> {
     setState(() => _isGenerating = true);
 
     try {
-      final promoCode = PromoCode(
+      // Utiliser votre service Firebase pour créer le code
+      final promoId = await FirebasePromoCodeService.instance.createPromoCode(
         code: code,
-        type: 'free',
-        freeMonths: _freeMonths,
-        isActive: true,
-        maxUses: 1,
-        currentUses: 0,
-        createdAt: DateTime.now(),
-        createdBy: 'admin',
+        type: 'percentage', // Type de réduction
+        value: 100.0, // 100% de réduction = gratuit
         description: _descriptionController.text.isNotEmpty 
             ? _descriptionController.text 
             : 'Code personnalisé pour ${_tatoueurNameController.text.isNotEmpty ? _tatoueurNameController.text : "tatoueur"}',
+        expiresAt: DateTime.now().add(Duration(days: _freeMonths * 30)), // Approximation des mois
+        maxUses: 1,
       );
-
-      final success = await PromoCodeService.createPromoCode(promoCode);
       
       setState(() => _isGenerating = false);
       
-      if (success) {
+      if (promoId.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Code $code créé avec succès !'),
@@ -106,19 +114,19 @@ class _AdminFreeCodesPageState extends State<AdminFreeCodesPage> {
         _customCodeController.clear();
         _descriptionController.clear();
         _tatoueurNameController.clear();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Erreur lors de la création (code déjà existant ?)'),
-            backgroundColor: Colors.red,
-          ),
-        );
       }
     } catch (e) {
       setState(() => _isGenerating = false);
+      
+      // Vérifier si l'erreur est due à un code déjà existant
+      String errorMessage = 'Erreur: $e';
+      if (e.toString().contains('already exists') || e.toString().contains('déjà')) {
+        errorMessage = 'Code déjà existant';
+      }
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Erreur: $e'),
+          content: Text(errorMessage),
           backgroundColor: Colors.red,
         ),
       );

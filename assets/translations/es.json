@@ -1,9 +1,78 @@
 {
-    "appTitle": "Aplicación de Tatuajes Kipik",
-    "welcome": "¡Bienvenido a Kipik!",
-    "loginButton": "Iniciar sesión",
-    "signupButton": "Crear cuenta",
-    "logout": "Cerrar sesión",
-    "profile": "Perfil"
+  "appTitle": "Aplicación de Tatuajes Kipik",
+  "welcome": "¡Bienvenido a Kipik!",
+  "loginButton": "Iniciar sesión",
+  "signupButton": "Crear cuenta",
+  "logout": "Cerrar sesión",
+  "profile": "Perfil",
+
+  "login": {
+    "title": "Iniciar sesión",
+    "subtitle": "Inicia sesión en tu cuenta",
+    "emailLabel": "Correo electrónico",
+    "passwordLabel": "Contraseña",
+    "passwordHelp": "8 caracteres mín • 1 mayúscula • 1 dígito • 1 especial",
+    "submit": "Iniciar sesión",
+    "signupPrompt": "¿Aún no registrado? Crear cuenta",
+    "forgotPassword": "¿Olvidaste la contraseña?",
+    "validation": {
+      "emailRequired": "Correo electrónico requerido",
+      "emailInvalid": "Formato de correo inválido",
+      "passwordRequired": "Contraseña requerida",
+      "passwordMinLength": "Mínimo 8 caracteres requeridos",
+      "passwordTooShort": "8 caracteres mínimo",
+      "passwordUppercase": "Al menos 1 mayúscula requerida",
+      "passwordDigit": "Al menos 1 dígito requerido",
+      "passwordSpecialChar": "Al menos 1 carácter especial requerido (!@#$%^&*)"
+    },
+    "error": {
+      "roleUnrecognized": "Rol de usuario no reconocido.",
+      "signInFailed": "Error de inicio de sesión o correo no verificado.",
+      "captchaRequired": "Por favor valide el CAPTCHA"
+    }
+  },
+
+  "signup": {
+    "choiceTitle": "Elige tu perfil",
+    "particulier": "Particular",
+    "pro": "Tatuador",
+    "title": "Registro",
+    "confirmPassword": "Confirmar contraseña",
+    "validation": {
+      "passwordMismatch": "Las contraseñas no coinciden"
+    }
+  },
+
+  "captcha": {
+    "verification_required": "Verificación Requerida",
+    "verification_success": "Verificación Exitosa ✓",
+    "verification_error": "Error de Verificación",
+    "verifying": "Verificando...",
+    "verified": "Verificado ✓",
+    "verified_high": "Verificación de Alta Seguridad ✓",
+    "verified_medium": "Verificación Segura ⚠️",
+    "verified_low": "Verificación Baja ❌",
+    "pending": "Verificación Pendiente",
+    "verify_human": "Demuestra que eres Humano",
+    "score_high": "Puntuación Alta - Usuario Confiable",
+    "score_medium": "Puntuación Media - Verificación Adicional",
+    "score_low": "Puntuación Baja - Verificación Manual Requerida",
+    "lockout_message": "Demasiados intentos. Inténtalo de nuevo en {minutes} minutos.",
+    "security_check": "Control de Seguridad"
+  },
+
+  "security": {
+    "account_locked": "Cuenta Temporalmente Bloqueada",
+    "suspicious_activity": "Actividad Sospechosa Detectada",
+    "too_many_attempts": "Demasiados Intentos de Inicio de Sesión",
+    "verification_required": "Verificación de Seguridad Requerida",
+    "high_security_mode": "Modo de Alta Seguridad Activado"
+  },
+
+  "common": {
+    "cancel": "Cancelar",
+    "retry": "Reintentar",
+    "continue": "Continuar",
+    "loading": "Cargando..."
   }
-  
+}

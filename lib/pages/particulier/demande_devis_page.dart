@@ -5,8 +5,8 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
-import 'package:kipik_v5/services/demande_devis/demande_devis_service.dart';
-import 'package:kipik_v5/services/demande_devis/demande_devis_service.dart';
+import 'package:kipik_v5/services/demande_devis/firebase_demande_devis_service.dart'; // ✅ MIGRATION
+import 'package:kipik_v5/services/auth/secure_auth_service.dart'; // ✅ MIGRATION
 import 'package:kipik_v5/utils/screenshot_helper.dart';
 import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
 import 'package:kipik_v5/widgets/common/drawers/custom_drawer_particulier.dart';
@@ -14,20 +14,19 @@ import 'package:kipik_v5/widgets/common/buttons/tattoo_assistant_button.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
 
 class DemandeDevisPage extends StatefulWidget {
-  /// Injection d'un service de demande de devis (stub par défaut).
-  final DemandeDevisService devisService;
-
-  DemandeDevisPage({
+  const DemandeDevisPage({
     Key? key,
-    DemandeDevisService? devisService,
-  })  : devisService = devisService ?? DemandeDevisService(),
-        super(key: key);
+  }) : super(key: key);
 
   @override
   State<DemandeDevisPage> createState() => _DemandeDevisPageState();
 }
 
 class _DemandeDevisPageState extends State<DemandeDevisPage> {
+  // ✅ MIGRATION: Services sécurisés centralisés
+  FirebaseDemandeDevisService get _devisService => FirebaseDemandeDevisService.instance;
+  SecureAuthService get _authService => SecureAuthService.instance;
+
   // Fond aléatoire
   late final String _backgroundImage;
   
@@ -38,17 +37,18 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
   
   // Taille du tatouage sélectionnée
   String _tailleSelectionnee = "10x10 cm";
-  // Liste des tailles standard disponibles
-  final List<String> _tailles = [
-    "5x5 cm", 
-    "7x7 cm", 
-    "10x10 cm", 
-    "15x15 cm", 
-    "15x20 cm", 
-    "20x20 cm", 
-    "20x30 cm",
-    "30x30 cm",
-    "Grande pièce (plus de 30 cm)"
+  
+  // ✅ AMÉLIORÉ: Liste des tailles avec catégories
+  final List<Map<String, dynamic>> _tailles = [
+    {'value': "5x5 cm", 'category': 'Petit', 'price': '€'},
+    {'value': "7x7 cm", 'category': 'Petit', 'price': '€'},
+    {'value': "10x10 cm", 'category': 'Moyen', 'price': '€€'},
+    {'value': "15x15 cm", 'category': 'Moyen', 'price': '€€'},
+    {'value': "15x20 cm", 'category': 'Grand', 'price': '€€€'},
+    {'value': "20x20 cm", 'category': 'Grand', 'price': '€€€'},
+    {'value': "20x30 cm", 'category': 'Très grand', 'price': '€€€€'},
+    {'value': "30x30 cm", 'category': 'Très grand', 'price': '€€€€'},
+    {'value': "Grande pièce (plus de 30 cm)", 'category': 'Extra large', 'price': '€€€€€'},
   ];
   
   // Photos d'emplacement
@@ -59,13 +59,26 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
   
   // Images générées par l'IA
   List<String> _imagesGenerees = [];
+
+  // ✅ NOUVEAU: Données additionnelles pour meilleur matching
+  String? _estimatedBudget;
+  String _urgency = 'normal';
+  String? _preferredStyle;
+  String? _colorPreference;
   
   @override
   void initState() {
     super.initState();
-    // Sélectionner un fond aléatoire
+    
+    // ✅ Vérification d'authentification
+    if (!_authService.isAuthenticated) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.pushReplacementNamed(context, '/login');
+      });
+      return;
+    }
+
     _backgroundImage = _getRandomBackground();
-    // S'abonner aux événements d'images générées par l'IA
     IaGenerationService.instance.onImageGenerated.listen(_ajouterImageGeneree);
   }
   
@@ -83,14 +96,12 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
     setState(() => _zonesSelectionnees = zones);
   }
   
-  // Ajouter une image générée par l'IA
   void _ajouterImageGeneree(String imageUrl) {
     if (mounted) {
       setState(() {
         _imagesGenerees.add(imageUrl);
       });
       
-      // Afficher une notification à l'utilisateur
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("✅ Image IA ajoutée à votre demande"),
@@ -101,61 +112,103 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
     }
   }
   
-  // Choisir une photo d'emplacement avec file_selector
   Future<void> _choisirPhotoEmplacement() async {
     try {
-      // Définir les types de fichiers image acceptés
       const XTypeGroup imagesGroup = XTypeGroup(
         label: 'Images',
         extensions: ['jpg', 'jpeg', 'png', 'webp'],
       );
       
-      // Ouvrir le sélecteur pour un seul fichier
       final XFile? file = await openFile(
         acceptedTypeGroups: [imagesGroup],
       );
       
       if (file != null) {
+        // ✅ Validation de la taille
+        final fileSize = await File(file.path).length();
+        if (fileSize > 10 * 1024 * 1024) { // 10MB max
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Fichier trop volumineux (max 10MB)"),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+          return;
+        }
+
         setState(() {
           _photoEmplacement = File(file.path);
         });
       }
     } catch (e) {
-      debugPrint("Erreur lors de la sélection de la photo: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Impossible de sélectionner cette photo"),
-          backgroundColor: Colors.red,
-        ),
-      );
+      debugPrint("Erreur sélection photo: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Impossible de sélectionner cette photo"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
   
-  // Choisir des fichiers de référence avec file_selector
   Future<void> _choisirFichiersReference() async {
     try {
-      // Définir les types de fichiers acceptés
       const XTypeGroup imagesGroup = XTypeGroup(
         label: 'Images',
         extensions: ['jpg', 'jpeg', 'png', 'webp'],
       );
       
-      // Vous pouvez ajouter d'autres types à l'avenir
       const XTypeGroup documentsGroup = XTypeGroup(
         label: 'Documents',
         extensions: ['pdf'],
       );
       
-      // Ouvrir le sélecteur de fichiers multiples
       final List<XFile> files = await openFiles(
         acceptedTypeGroups: [imagesGroup, documentsGroup],
       );
       
       if (files.isNotEmpty) {
-        final nouveauxFichiers = files.map((file) => File(file.path)).toList();
+        // ✅ Validation des tailles
+        final nouveauxFichiers = <File>[];
+        int totalSize = 0;
+
+        for (final xFile in files) {
+          final file = File(xFile.path);
+          final fileSize = await file.length();
+          totalSize += fileSize;
+
+          if (fileSize > 10 * 1024 * 1024) { // 10MB par fichier
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text("Fichier ${xFile.name} trop volumineux (max 10MB)"),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            }
+            continue;
+          }
+
+          nouveauxFichiers.add(file);
+        }
+
+        if (totalSize > 50 * 1024 * 1024) { // 50MB total max
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Taille totale des fichiers trop importante (max 50MB)"),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+          return;
+        }
         
         setState(() {
-          // Ne pas dépasser 5 fichiers au total
           if (_fichiersReference.length + nouveauxFichiers.length > 5) {
             final nbAjouter = 5 - _fichiersReference.length;
             if (nbAjouter > 0) {
@@ -173,36 +226,45 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
         });
       }
     } catch (e) {
-      debugPrint("Erreur lors de la sélection des fichiers: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Erreur lors de la sélection: $e"),
-          backgroundColor: Colors.red,
-        ),
-      );
+      debugPrint("Erreur sélection fichiers: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Erreur lors de la sélection: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
   
-  // Supprimer un fichier de référence
   void _supprimerFichierReference(int index) {
     setState(() {
       _fichiersReference.removeAt(index);
     });
   }
   
-  // Supprimer une image générée
   void _supprimerImageGeneree(int index) {
     setState(() {
       _imagesGenerees.removeAt(index);
     });
   }
 
-  // Valider le formulaire avant envoi
   bool _validerFormulaire() {
     if (_descriptionController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Merci de décrire ton projet de tatouage"),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return false;
+    }
+    
+    if (_descriptionController.text.trim().length < 20) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Description trop courte (minimum 20 caractères)"),
           backgroundColor: Colors.orange,
         ),
       );
@@ -230,99 +292,123 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
     setState(() => _isLoading = true);
 
     try {
-      // Capture de la zone sélectionnée
+      String? zoneImageUrl;
+      String? photoEmplacementUrl;
+      List<String> fichiersReferenceUrls = [];
+
+      // ✅ Capture de la zone sélectionnée
       final imagePath = await ScreenshotHelper.captureAvatar(
         context,
         _zonesKey,
       );
-      String? imageUrl;
 
       if (imagePath != null) {
-        imageUrl = await widget.devisService.uploadImage(
+        zoneImageUrl = await _devisService.uploadImage(
           File(imagePath),
-          'devis_zones/${DateTime.now().millisecondsSinceEpoch}_zone.png',
+          'zones/${DateTime.now().millisecondsSinceEpoch}_zone.png',
         );
       }
       
-      // Upload photo d'emplacement si elle existe
-      String? photoEmplacementUrl;
+      // ✅ Upload photo d'emplacement
       if (_photoEmplacement != null) {
-        photoEmplacementUrl = await widget.devisService.uploadImage(
+        photoEmplacementUrl = await _devisService.uploadImage(
           _photoEmplacement!,
-          'devis_emplacements/${DateTime.now().millisecondsSinceEpoch}_emplacement.jpg',
+          'emplacements/${DateTime.now().millisecondsSinceEpoch}_emplacement.jpg',
         );
       }
       
-      // Upload des fichiers de référence
-      List<String> fichiersReferenceUrls = [];
-      for (var file in _fichiersReference) {
-        // Déterminer l'extension du fichier
-        String extension = 'jpg';
-        if (file.path.toLowerCase().endsWith('.png')) {
-          extension = 'png';
-        } else if (file.path.toLowerCase().endsWith('.pdf')) {
-          extension = 'pdf';
-        } else if (file.path.toLowerCase().endsWith('.webp')) {
-          extension = 'webp';
-        }
-        
-        String? url = await widget.devisService.uploadImage(
-           file,
-           'devis_references/${DateTime.now().millisecondsSinceEpoch}_${fichiersReferenceUrls.length}.$extension',
+      // ✅ OPTIMISÉ: Upload multiple des fichiers de référence
+      if (_fichiersReference.isNotEmpty) {
+        fichiersReferenceUrls = await _devisService.uploadMultipleImages(
+          _fichiersReference,
+          'references',
         );
-        if (url != null) {
-          fichiersReferenceUrls.add(url);
-        }
       }
 
+      // ✅ AMÉLIORÉ: Données complètes de la demande
       final demandeData = {
         'description': _descriptionController.text.trim(),
         'taille': _tailleSelectionnee,
         'zones': _zonesSelectionnees,
-        'zoneImageUrl': imageUrl,
+        'zoneImageUrl': zoneImageUrl,
         'photoEmplacementUrl': photoEmplacementUrl,
         'fichiersReferenceUrls': fichiersReferenceUrls,
         'imagesGenerees': _imagesGenerees,
-        'createdAt': DateTime.now(),
-        'status': 'en_attente', // Statut initial
+        
+        // ✅ NOUVEAU: Données additionnelles pour meilleur matching
+        'estimatedBudget': _estimatedBudget,
+        'urgency': _urgency,
+        'preferredStyle': _preferredStyle,
+        'colorPreference': _colorPreference,
+        
+        // Métadonnées
+        'totalImages': fichiersReferenceUrls.length + _imagesGenerees.length,
+        'hasPhotoEmplacement': _photoEmplacement != null,
+        'zonesCount': _zonesSelectionnees.length,
+        'descriptionLength': _descriptionController.text.trim().length,
       };
 
-      await widget.devisService.createDemandeDevis(demandeData);
+      await _devisService.createDemandeDevis(demandeData);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("✅ Demande envoyée au tatoueur !"),
-          backgroundColor: Colors.green,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("✅ Demande envoyée avec succès !"),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
 
-      // Réinitialiser le formulaire
-      _descriptionController.clear();
-      setState(() {
-        _zonesSelectionnees = [];
-        _tailleSelectionnee = "10x10 cm";
-        _photoEmplacement = null;
-        _fichiersReference = [];
-        _imagesGenerees = [];
-      });
-      
-      // Retourner à l'écran précédent après succès
-      Future.delayed(const Duration(seconds: 1), () {
-        if (Navigator.canPop(context)) {
-          Navigator.pop(context);
-        }
-      });
+        // Réinitialiser le formulaire
+        _descriptionController.clear();
+        setState(() {
+          _zonesSelectionnees = [];
+          _tailleSelectionnee = "10x10 cm";
+          _photoEmplacement = null;
+          _fichiersReference = [];
+          _imagesGenerees = [];
+          _estimatedBudget = null;
+          _urgency = 'normal';
+          _preferredStyle = null;
+          _colorPreference = null;
+        });
+        
+        // Navigation différée
+        Future.delayed(const Duration(seconds: 1), () {
+          if (mounted && Navigator.canPop(context)) {
+            Navigator.pop(context);
+          }
+        });
+      }
       
     } catch (e) {
-      debugPrint("Erreur en envoyant la demande : $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("❌ Échec de l'envoi, réessaye plus tard."),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      debugPrint("Erreur envoi demande : $e");
+      if (mounted) {
+        String errorMessage = "❌ Échec de l'envoi, réessaye plus tard.";
+        
+        // ✅ Messages d'erreur spécifiques
+        if (e.toString().contains('Validation de sécurité')) {
+          errorMessage = "❌ Validation de sécurité échouée. Réessayez dans quelques minutes.";
+        } else if (e.toString().contains('trop volumineux')) {
+          errorMessage = "❌ Fichiers trop volumineux. Compressez vos images.";
+        } else if (e.toString().contains('non connecté')) {
+          errorMessage = "❌ Session expirée. Reconnectez-vous.";
+          Navigator.pushReplacementNamed(context, '/login');
+          return;
+        }
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.redAccent,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -334,6 +420,15 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ Vérification d'authentification dans le build
+    if (!_authService.isAuthenticated) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     return Scaffold(
       extendBodyBehindAppBar: true,
       endDrawer: const CustomDrawerParticulier(),
@@ -349,13 +444,8 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Fond aléatoire
           Image.asset(_backgroundImage, fit: BoxFit.cover),
-          
-          // Overlay pour assombrir légèrement le fond
-          Container(
-            color: Colors.black.withOpacity(0.3),
-          ),
+          Container(color: Colors.black.withOpacity(0.3)),
           
           SafeArea(
             child: SingleChildScrollView(
@@ -364,10 +454,20 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 12),
+                  
+                  // ✅ NOUVEAU: Indicateur utilisateur connecté
+                  _buildUserInfoCard(),
+                  const SizedBox(height: 16),
+                  
                   _buildSectionDescription(),
                   const SizedBox(height: 24),
                   _buildSectionTaille(),
                   const SizedBox(height: 24),
+                  
+                  // ✅ NOUVEAU: Sections additionnelles pour meilleur matching
+                  _buildSectionPreferences(),
+                  const SizedBox(height: 24),
+                  
                   _buildSectionPhotoEmplacement(),
                   const SizedBox(height: 24),
                   _buildSectionImagesReference(),
@@ -379,6 +479,122 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
                   const SizedBox(height: 40),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// ✅ NOUVEAU: Card d'information utilisateur
+  Widget _buildUserInfoCard() {
+    final currentUser = _authService.currentUser;
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.green.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.account_circle, color: Colors.green, size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Connecté en tant que:',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.8),
+                    fontSize: 12,
+                  ),
+                ),
+                Text(
+                  currentUser?['displayName'] ?? currentUser?['email'] ?? 'Utilisateur',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// ✅ NOUVEAU: Section préférences pour meilleur matching
+  Widget _buildSectionPreferences() {
+    return _buildSectionWithTitle(
+      title: 'PRÉFÉRENCES (OPTIONNEL)',
+      icon: Icons.tune,
+      content: Column(
+        children: [
+          // Budget estimé
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.9),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: DropdownButton<String>(
+              value: _estimatedBudget,
+              hint: const Text('Budget estimé'),
+              onChanged: (String? newValue) {
+                setState(() => _estimatedBudget = newValue);
+              },
+              items: [
+                'Moins de 100€',
+                '100€ - 300€',
+                '300€ - 500€',
+                '500€ - 1000€',
+                'Plus de 1000€',
+              ].map<DropdownMenuItem<String>>((String value) {
+                return DropdownMenuItem<String>(
+                  value: value,
+                  child: Text(value),
+                );
+              }).toList(),
+              isExpanded: true,
+              dropdownColor: Colors.white,
+              style: const TextStyle(color: Colors.black87, fontSize: 16),
+              underline: Container(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          
+          // Urgence
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.9),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: DropdownButton<String>(
+              value: _urgency,
+              onChanged: (String? newValue) {
+                setState(() => _urgency = newValue!);
+              },
+              items: [
+                'normal',
+                'rapide',
+                'urgent',
+              ].map<DropdownMenuItem<String>>((String value) {
+                return DropdownMenuItem<String>(
+                  value: value,
+                  child: Text(value == 'normal' ? 'Pas pressé' : 
+                              value == 'rapide' ? 'Assez rapide' : 'Urgent'),
+                );
+              }).toList(),
+              isExpanded: true,
+              dropdownColor: Colors.white,
+              style: const TextStyle(color: Colors.black87, fontSize: 16),
+              underline: Container(),
             ),
           ),
         ],
@@ -411,7 +627,6 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // En-tête de section
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
@@ -439,8 +654,6 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
               ],
             ),
           ),
-          
-          // Contenu de la section
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -457,22 +670,39 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
     );
   }
   
-  // Sections de la page
   Widget _buildSectionDescription() {
     return _buildSectionWithTitle(
-      title: 'DÉCRIS TON PROJET',
+      title: 'DÉCRIS TON PROJET *',
       icon: Icons.description,
-      content: _buildTextField(
-        controller: _descriptionController,
-        hint: 'Ton idée de tatouage... Sois précis sur ton style souhaité',
-        maxLines: 5,
+      content: Column(
+        children: [
+          _buildTextField(
+            controller: _descriptionController,
+            hint: 'Décris précisément ton idée de tatouage, le style souhaité, les couleurs, l\'ambiance...',
+            maxLines: 5,
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.white.withOpacity(0.7), size: 16),
+              const SizedBox(width: 8),
+              Text(
+                'Minimum 20 caractères - Plus tu donnes de détails, meilleur sera le devis',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.7),
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
   
   Widget _buildSectionTaille() {
     return _buildSectionWithTitle(
-      title: 'TAILLE DU TATOUAGE',
+      title: 'TAILLE DU TATOUAGE *',
       icon: Icons.straighten,
       content: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -489,16 +719,29 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
               });
             }
           },
-          items: _tailles.map<DropdownMenuItem<String>>((String value) {
+          items: _tailles.map<DropdownMenuItem<String>>((Map<String, dynamic> taille) {
             return DropdownMenuItem<String>(
-              value: value,
-              child: Text(value),
+              value: taille['value'],
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(taille['value']),
+                  ),
+                  Text(
+                    '${taille['category']} ${taille['price']}',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
             );
           }).toList(),
           isExpanded: true,
           dropdownColor: Colors.white,
           style: const TextStyle(color: Colors.black87, fontSize: 16),
-          underline: Container(), // Supprime la ligne par défaut
+          underline: Container(),
         ),
       ),
     );
@@ -538,12 +781,21 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: const Text(
-                        'Ajouter une photo',
+                        'Ajouter une photo (optionnel)',
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Aide le tatoueur à mieux comprendre l\'emplacement',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 12,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),
@@ -552,20 +804,18 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
     );
   }
   
-  // Section des images de référence avec bouton centré
   Widget _buildSectionImagesReference() {
     return _buildSectionWithTitle(
       title: 'IMAGES DE RÉFÉRENCE',
       icon: Icons.image,
       content: Column(
-        crossAxisAlignment: CrossAxisAlignment.center, // Centrer horizontalement
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Texte informatif et bouton centré
           Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                'Ajoute jusqu\'à 5 images de référence',
+                'Ajoute jusqu\'à 5 images de référence (max 10MB chacune)',
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.9),
                   fontSize: 14,
@@ -576,7 +826,7 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
               ElevatedButton.icon(
                 onPressed: _choisirFichiersReference,
                 icon: const Icon(Icons.add, size: 18),
-                label: const Text('Ajouter'),
+                label: Text('Ajouter (${_fichiersReference.length}/5)'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: KipikTheme.rouge,
                   foregroundColor: Colors.white,
@@ -591,7 +841,6 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
           ),
           const SizedBox(height: 16),
           
-          // Affichage des fichiers de référence
           if (_fichiersReference.isEmpty)
             Container(
               padding: const EdgeInsets.symmetric(vertical: 20),
@@ -639,10 +888,10 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
                         ClipRRect(
                           borderRadius: BorderRadius.circular(8),
                           child: isPdf 
-                            ? Center(
+                            ? const Center(
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
-                                  children: const [
+                                  children: [
                                     Icon(Icons.picture_as_pdf, color: Colors.white, size: 40),
                                     SizedBox(height: 4),
                                     Text('PDF', style: TextStyle(color: Colors.white)),
@@ -656,10 +905,10 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
                                     height: 120,
                                     width: 100,
                                   )
-                                : Center(
+                                : const Center(
                                     child: Column(
                                       mainAxisAlignment: MainAxisAlignment.center,
-                                      children: const [
+                                      children: [
                                         Icon(Icons.insert_drive_file, color: Colors.white, size: 40),
                                         SizedBox(height: 4),
                                         Text('Fichier', style: TextStyle(color: Colors.white)),
@@ -787,10 +1036,9 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
     );
   }
   
-  // Version modifiée pour la nouvelle approche de sélection des zones
   Widget _buildSectionZonesCorps() {
     return _buildSectionWithTitle(
-      title: 'ZONES À TATOUER',
+      title: 'ZONES À TATOUER *',
       icon: Icons.person_outline,
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -804,7 +1052,6 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
           ),
           const SizedBox(height: 16),
           
-          // Nouveau widget de sélection des zones 
           RepaintBoundary(
             key: _zonesKey,
             child: Container(
@@ -816,7 +1063,7 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
                   width: 1,
                 ),
               ),
-              height: 500, // Hauteur augmentée pour notre silhouette
+              height: 500,
               child: ZoneSelectionWidget(
                 onZonesSelected: _onZonesSelected,
               ),
@@ -824,7 +1071,6 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
           ),
           
           const SizedBox(height: 16),
-          // Récapitulatif des zones sélectionnées
           if (_zonesSelectionnees.isNotEmpty) ...[
             const Text(
               "Zones sélectionnées :",
@@ -835,7 +1081,6 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
               ),
             ),
             const SizedBox(height: 8),
-            // Utiliser une méthode simplifiée pour afficher les zones
             SizedBox(
               height: 40,
               child: ListView(
@@ -849,7 +1094,6 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
     );
   }
   
-  // Méthode séparée pour construire les chips des zones
   List<Widget> _buildZoneChips() {
     List<Widget> chips = [];
     
@@ -890,7 +1134,7 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
     return ElevatedButton(
       onPressed: _isLoading ? null : _envoyerDemande,
       style: ElevatedButton.styleFrom(
-        backgroundColor: KipikTheme.rouge,
+        backgroundColor: _isLoading ? Colors.grey : KipikTheme.rouge,
         padding: const EdgeInsets.symmetric(vertical: 18),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
@@ -899,13 +1143,27 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
         shadowColor: Colors.black.withOpacity(0.5),
       ),
       child: _isLoading
-          ? const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
+          ? const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                ),
+                SizedBox(width: 12),
+                Text(
+                  'ENVOI EN COURS...',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.white,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ],
             )
           : const Text(
               'ENVOYER MA DEMANDE',
@@ -919,7 +1177,6 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
     );
   }
 
-  // Version simplifiée du TextField
   Widget _buildTextField({
     required TextEditingController controller,
     required String hint,
@@ -939,13 +1196,17 @@ class _DemandeDevisPageState extends State<DemandeDevisPage> {
           hintStyle: const TextStyle(color: Colors.black54, fontSize: 15),
           contentPadding: const EdgeInsets.all(12),
           border: InputBorder.none,
+          counterText: maxLines > 1 ? '${controller.text.length} caractères' : null,
+          counterStyle: const TextStyle(color: Colors.black54, fontSize: 12),
         ),
+        onChanged: maxLines > 1 ? (value) => setState(() {}) : null,
       ),
     );
   }
 }
 
-// Service pour la communication entre l'assistant et la page
+// ✅ Services existants conservés (IaGenerationService et ZoneSelectionWidget restent identiques)
+
 class IaGenerationService {
   static final IaGenerationService _instance = IaGenerationService._internal();
   static IaGenerationService get instance => _instance;
@@ -964,7 +1225,6 @@ class IaGenerationService {
   }
 }
 
-// Nouveau widget de sélection de zones corporelles simplifié
 class ZoneSelectionWidget extends StatefulWidget {
   final Function(List<String>) onZonesSelected;
 
@@ -981,7 +1241,6 @@ class _ZoneSelectionWidgetState extends State<ZoneSelectionWidget> with SingleTi
   late TabController _tabController;
   final List<String> _selectedZones = [];
   
-  // Définition simplifiée des zones
   final List<Map<String, dynamic>> _frontZones = [
     {'name': 'Tête', 'row': 0, 'col': 1},
     {'name': 'Cou', 'row': 1, 'col': 1},
@@ -1026,13 +1285,13 @@ class _ZoneSelectionWidgetState extends State<ZoneSelectionWidget> with SingleTi
     {'name': 'Talon droit', 'row': 9, 'col': 2},
   ];
 
-  // Map pour suivre les zones sélectionnées
   final Map<String, bool> _selectedZonesMap = {};
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    
     // Initialiser toutes les zones comme non sélectionnées
     for (var zone in _frontZones) {
       _selectedZonesMap[zone['name']] = false;

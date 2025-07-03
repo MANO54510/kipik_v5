@@ -75,21 +75,23 @@ class _NotificationsPageState extends State<NotificationsPage> with SingleTicker
       await _notificationService.markAllAsRead();
       await _loadNotifications(); // Recharger les notifications
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Toutes les notifications ont été marquées comme lues'),
-          backgroundColor: Colors.black87,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Toutes les notifications ont été marquées comme lues'),
+            backgroundColor: Colors.black87,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            action: SnackBarAction(
+              label: 'OK',
+              textColor: KipikTheme.rouge,
+              onPressed: () {},
+            ),
           ),
-          action: SnackBarAction(
-            label: 'OK',
-            textColor: KipikTheme.rouge,
-            onPressed: () {},
-          ),
-        ),
-      );
+        );
+      }
     } catch (e) {
       print('Erreur lors du marquage des notifications: $e');
       setState(() {
@@ -144,16 +146,18 @@ class _NotificationsPageState extends State<NotificationsPage> with SingleTicker
         await _notificationService.deleteAllNotifications();
         await _loadNotifications(); // Recharger les notifications
         
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Toutes les notifications ont été supprimées'),
-            backgroundColor: Colors.black87,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Toutes les notifications ont été supprimées'),
+              backgroundColor: Colors.black87,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-          ),
-        );
+          );
+        }
       } catch (e) {
         print('Erreur lors de la suppression: $e');
         setState(() {
@@ -190,22 +194,26 @@ class _NotificationsPageState extends State<NotificationsPage> with SingleTicker
       }
     }
     
-    // Naviguer vers la page appropriée en fonction du type de notification
+    // ✅ CORRIGÉ: Switch exhaustif avec toutes les valeurs possibles
     switch (notification.type) {
       case NotificationType.message:
-        Navigator.pushNamed(context, '/messages');
+        if (mounted) Navigator.pushNamed(context, '/messages');
         break;
       case NotificationType.devis:
-        Navigator.pushNamed(context, '/suivi_devis');
+        if (mounted) Navigator.pushNamed(context, '/suivi_devis');
         break;
       case NotificationType.projet:
-        Navigator.pushNamed(context, '/mes_projets');
+        if (mounted) Navigator.pushNamed(context, '/mes_projets');
         break;
       case NotificationType.tatoueur:
-        Navigator.pushNamed(context, '/recherche_tatoueur');
+        if (mounted) Navigator.pushNamed(context, '/recherche_tatoueur');
         break;
       case NotificationType.system:
         // Pour les notifications système, afficher plus de détails
+        _showNotificationDetails(notification);
+        break;
+      // ✅ AJOUTÉ: Cas par défaut pour rendre le switch exhaustif
+      default:
         _showNotificationDetails(notification);
         break;
     }
@@ -616,23 +624,25 @@ class _NotificationsPageState extends State<NotificationsPage> with SingleTicker
               _notifications.removeWhere((n) => n.id == notification.id);
             });
             
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text('Notification supprimée'),
-                backgroundColor: Colors.black87,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Notification supprimée'),
+                  backgroundColor: Colors.black87,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  action: SnackBarAction(
+                    label: 'Annuler',
+                    textColor: KipikTheme.rouge,
+                    onPressed: () {
+                      _loadNotifications();
+                    },
+                  ),
                 ),
-                action: SnackBarAction(
-                  label: 'Annuler',
-                  textColor: KipikTheme.rouge,
-                  onPressed: () {
-                    _loadNotifications();
-                  },
-                ),
-              ),
-            );
+              );
+            }
           } catch (e) {
             print('Erreur lors de la suppression: $e');
             _loadNotifications(); // Recharger en cas d'erreur
@@ -738,6 +748,7 @@ class _NotificationsPageState extends State<NotificationsPage> with SingleTicker
     );
   }
 
+  // ✅ CORRIGÉ: Switch exhaustif avec cas par défaut
   Widget _buildActionButton(NotificationItem notification) {
     switch (notification.type) {
       case NotificationType.message:
@@ -805,6 +816,22 @@ class _NotificationsPageState extends State<NotificationsPage> with SingleTicker
           onPressed: () => _handleNotificationAction(notification),
           icon: const Icon(Icons.info_outline, size: 16),
           label: const Text('En savoir plus'),
+          style: TextButton.styleFrom(
+            foregroundColor: KipikTheme.rouge,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            backgroundColor: KipikTheme.rouge.withOpacity(0.1),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+        );
+      
+      // ✅ AJOUTÉ: Cas par défaut pour rendre le switch exhaustif
+      default:
+        return TextButton.icon(
+          onPressed: () => _handleNotificationAction(notification),
+          icon: const Icon(Icons.visibility, size: 16),
+          label: const Text('Voir'),
           style: TextButton.styleFrom(
             foregroundColor: KipikTheme.rouge,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),

@@ -1,57 +1,8 @@
 // Fichier : lib/utils/constants.dart
 // Description : Constantes non visuelles pour l'application Kipik
 
-// AJOUT CRITIQUE : Enum UserRole manquant
-enum UserRole {
-  client,
-  tatoueur,
-  organisateur,
-  admin,
-}
-
-// Extensions pour UserRole
-extension UserRoleExtension on UserRole {
-  String get displayName {
-    switch (this) {
-      case UserRole.client:
-        return 'Client';
-      case UserRole.tatoueur:
-        return 'Tatoueur';
-      case UserRole.organisateur:
-        return 'Organisateur';
-      case UserRole.admin:
-        return 'Administrateur';
-    }
-  }
-
-  String get value {
-    switch (this) {
-      case UserRole.client:
-        return 'client';
-      case UserRole.tatoueur:
-        return 'tatoueur';
-      case UserRole.organisateur:
-        return 'organisateur';
-      case UserRole.admin:
-        return 'admin';
-    }
-  }
-
-  static UserRole fromString(String value) {
-    switch (value.toLowerCase()) {
-      case 'client':
-        return UserRole.client;
-      case 'tatoueur':
-        return UserRole.tatoueur;
-      case 'organisateur':
-        return UserRole.organisateur;
-      case 'admin':
-        return UserRole.admin;
-      default:
-        return UserRole.client; // Valeur par défaut
-    }
-  }
-}
+// ✅ SUPPRIMÉ : enum UserRole et UserRoleExtension (définis dans models/user_role.dart)
+// ❌ ÉVITER LES DOUBLONS : Ces définitions sont maintenant dans models/user_role.dart
 
 class Constants {
   // URL de base de l'API
@@ -143,7 +94,8 @@ const String kPrefUserType = 'userType'; // 'client', 'pro', 'admin'
 const String kPrefSelectedCategories = 'selectedCategories';
 const String kPrefSearchRadius = 'searchRadius';
 
-// Types d'utilisateurs (compatibilité avec les anciennes constantes)
+// ✅ Types d'utilisateurs (compatibilité avec les anciennes constantes)
+// Ces constantes font référence aux valeurs string, pas aux enums
 const String kUserTypeClient = 'client';
 const String kUserTypePro = 'tatoueur'; // CORRECTION : était 'pro'
 const String kUserTypeAdmin = 'admin';
@@ -224,7 +176,9 @@ const int kPasswordMinLength = 8;
 const int kOtpLength = 6;
 const Duration kOtpValidityDuration = Duration(minutes: 5);
 
-// AJOUT : Énumérations pour les statuts et types
+// ✅ ENUMS SÉPARÉS (pas de conflit avec UserRole)
+// Ces enums sont différents de UserRole et peuvent rester ici
+
 enum ProjectStatus {
   pending,
   inProgress,
@@ -257,4 +211,39 @@ enum NotificationType {
   appointment,
   payment,
   message,
+}
+
+// ✅ HELPERS POUR CONVERSION USEROLE (si nécessaire)
+// Fonctions utilitaires pour travailler avec les rôles depuis ce fichier
+
+class UserRoleConstants {
+  // Constantes string pour les rôles (compatibilité)
+  static const String client = 'client';
+  static const String tatoueur = 'tatoueur';
+  static const String organisateur = 'organisateur';
+  static const String admin = 'admin';
+  
+  // Liste de tous les rôles disponibles
+  static const List<String> allRoles = [client, tatoueur, organisateur, admin];
+  
+  // Vérifier si un string est un rôle valide
+  static bool isValidRole(String role) {
+    return allRoles.contains(role.toLowerCase());
+  }
+  
+  // Obtenir le nom d'affichage d'un rôle
+  static String getDisplayName(String role) {
+    switch (role.toLowerCase()) {
+      case client:
+        return 'Client';
+      case tatoueur:
+        return 'Tatoueur';
+      case organisateur:
+        return 'Organisateur';
+      case admin:
+        return 'Administrateur';
+      default:
+        return 'Utilisateur';
+    }
+  }
 }

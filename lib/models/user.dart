@@ -95,7 +95,7 @@ class User {
   bool isParticulier() => role == UserRole.client;
 
   String get displayName => name.isNotEmpty ? name : email ?? 'Utilisateur';
-  
+
   String get initials {
     if (name.isEmpty) return 'U';
     final words = name.split(' ');
@@ -104,6 +104,15 @@ class User {
     }
     return name[0].toUpperCase();
   }
+
+  // AJOUT POUR COMPATIBILITÉ
+  String get id => uid;
+
+  // ✅ Getters de compatibilité pour SecureAuthService
+  bool get isSuperAdmin => additionalData?['isSuperAdmin'] == true;
+  
+  // Getter pour niveau admin
+  String? get adminLevel => additionalData?['adminLevel'];
 
   @override
   String toString() {
@@ -118,4 +127,34 @@ class User {
 
   @override
   int get hashCode => uid.hashCode;
+}
+
+// ✅ Extension pour compatibilité avec SecureAuthService
+extension UserFromDynamic on User {
+  /// Factory pour créer depuis les données de SecureAuthService
+  static User? fromDynamic(dynamic data) {
+    if (data == null) return null;
+    
+    try {
+      return User(
+        uid: data['id'] ?? data['uid'] ?? '',
+        name: data['name'] ?? data['displayName'] ?? 'Utilisateur',
+        email: data['email'],
+        phone: data['phone'],
+        profileImageUrl: data['profileImageUrl'],
+        role: UserRoleExtension.fromString(data['role'] ?? 'client'),
+        createdAt: data['createdAt']?.toDate() ?? DateTime.now(),
+        lastLoginAt: data['updatedAt']?.toDate(),
+        isActive: data['isActive'] ?? true,
+        additionalData: {
+          'isSuperAdmin': data['isSuperAdmin'] ?? false,
+          'adminLevel': data['adminLevel'],
+          'permissions': data['permissions'] ?? ['basic'],
+        },
+      );
+    } catch (e) {
+      print('❌ Erreur conversion User: $e');
+      return null;
+    }
+  }
 }

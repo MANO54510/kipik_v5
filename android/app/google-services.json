@@ -12,7 +12,20 @@
           "package_name": "com.example.kipik_v5"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "541984941340-aut102a79qqgvrnrgdafdnc65e55ues2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.kipik_v5",
+            "certificate_hash": "cba537eb6f12251360a0df7af9170c5984b9d3f4"
+          }
+        },
+        {
+          "client_id": "541984941340-5k94eges5tg1t6pdsca49mjgnrg060vl.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDaIHt8YnWJ1HCC0B8gdRVP7GsbaYYrmAs"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "541984941340-5k94eges5tg1t6pdsca49mjgnrg060vl.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "541984941340-r9jsmih2v0kg62nila5tnduqe5o48e2m.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.kipik-v5"
+              }
+            }
+          ]
         }
       }
     }

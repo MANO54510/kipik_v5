@@ -3,8 +3,10 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
-import 'package:kipik_v5/services/auth/auth_service.dart';
+import 'package:kipik_v5/services/auth/secure_auth_service.dart';
 import 'package:kipik_v5/models/user.dart';
+import 'package:kipik_v5/models/user_role.dart';
+import 'package:kipik_v5/widgets/common/drawers/secure_drawer_components.dart';
 
 // Navigation imports - organisés par catégorie
 // Dashboard principal et espaces spécialisés
@@ -33,20 +35,23 @@ import 'package:kipik_v5/pages/admin/admin_referrals_page.dart';
 import 'package:kipik_v5/pages/support/support_chat_page.dart';
 import 'package:kipik_v5/widgets/chat/ai_chat_bottom_sheet.dart';
 
-class CustomDrawerAdmin extends StatelessWidget {
+class CustomDrawerAdmin extends StatelessWidget with SecureDrawerMixin {
   const CustomDrawerAdmin({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final User? currentUser = AuthService.instance.currentUser;
+    // ✅ Utiliser SecureAuthService avec conversion User
+    final dynamic currentUserData = SecureAuthService.instance.currentUser;
+    final User? currentUser = UserFromDynamic.fromDynamic(currentUserData);
     
-    // Si pas d'utilisateur connecté, ne pas afficher le drawer
-    if (currentUser == null) {
-      return const Drawer(
-        child: Center(
-          child: Text('Utilisateur non connecté'),
-        ),
-      );
+    // Vérifications de sécurité avec SecureAuthService
+    if (currentUser == null || !SecureAuthService.instance.isAuthenticated) {
+      return SecureDrawerFactory.buildFallbackDrawer();
+    }
+    
+    final currentRole = SecureAuthService.instance.currentUserRole;
+    if (currentRole != UserRole.admin) {
+      return SecureDrawerFactory.buildFallbackDrawer();
     }
     
     final headerImages = [
@@ -87,14 +92,14 @@ class CustomDrawerAdmin extends StatelessWidget {
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: Colors.amber, width: 2),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.admin_panel_settings, color: Colors.black, size: 16),
-                        SizedBox(width: 4),
+                        const Icon(Icons.admin_panel_settings, color: Colors.black, size: 16),
+                        const SizedBox(width: 4),
                         Text(
-                          'ADMIN',
-                          style: TextStyle(
+                          SecureAuthService.instance.isSuperAdmin ? 'SUPER ADMIN' : 'ADMIN',
+                          style: const TextStyle(
                             color: Colors.black,
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
@@ -155,11 +160,13 @@ class CustomDrawerAdmin extends StatelessWidget {
                                 color: Colors.black.withOpacity(0.8),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const FittedBox(
+                              child: FittedBox(
                                 fit: BoxFit.scaleDown,
                                 child: Text(
-                                  'ADMINISTRATEUR KIPIK',
-                                  style: TextStyle(
+                                  SecureAuthService.instance.isSuperAdmin 
+                                      ? 'SUPER ADMINISTRATEUR KIPIK'
+                                      : 'ADMINISTRATEUR KIPIK',
+                                  style: const TextStyle(
                                     color: Colors.amber,
                                     fontSize: 12,
                                     fontFamily: 'Roboto',
@@ -178,7 +185,7 @@ class CustomDrawerAdmin extends StatelessWidget {
             ),
           ),
 
-          // Menu administrateur optimisé
+          // Menu administrateur optimisé avec sécurité
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
@@ -187,171 +194,175 @@ class CustomDrawerAdmin extends StatelessWidget {
                 
                 // SECTION TABLEAU DE BORD
                 const _SectionHeader('TABLEAU DE BORD'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.dashboard_outlined,
                   title: 'Dashboard Principal',
                   subtitle: 'Vue d\'ensemble des 3 profils',
-                  onTap: () => _navigateTo(context, const AdminDashboardHome()),
+                  onTap: () => secureNavigate(context, const AdminDashboardHome()),
                 ),
 
                 const _SectionDivider(),
                 
                 // SECTION CHAT & ASSISTANCE
                 const _SectionHeader('SUPPORT & ASSISTANCE'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.smart_toy_outlined,
                   title: 'Assistant IA Admin',
                   subtitle: 'Aide pour la gestion de la plateforme',
                   onTap: () => _openAIAssistant(context),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.support_agent_outlined,
                   title: 'Support Admin',
                   subtitle: 'Questions techniques avancées',
-                  onTap: () => _navigateTo(context, SupportChatPage(userId: currentUser.id)),
+                  onTap: () => secureNavigate(context, SupportChatPage(userId: currentUser.id)),
                 ),
 
                 const _SectionDivider(),
                 
                 // SECTION GESTION DES PROFILS UTILISATEURS
                 const _SectionHeader('GESTION DES PROFILS'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.brush_outlined,
                   title: 'Tatoueurs Professionnels',
                   subtitle: 'Abonnements, SAV, statistiques',
-                  onTap: () => _navigateTo(context, const AdminProsManagementPage()),
+                  onTap: () => secureNavigate(context, const AdminProsManagementPage()),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.person_outlined,
                   title: 'Clients Particuliers',
                   subtitle: 'Projets, comportements, signalements',
-                  onTap: () => _navigateTo(context, const AdminClientsManagementPage()),
+                  onTap: () => secureNavigate(context, const AdminClientsManagementPage()),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.event_outlined,
                   title: 'Organisateurs Événements',
                   subtitle: 'Conventions, revenus, analytics',
-                  onTap: () => _navigateTo(context, const AdminOrganizersManagementPage()),
+                  onTap: () => secureNavigate(context, const AdminOrganizersManagementPage()),
                 ),
 
                 const _SectionDivider(),
                 
                 // SECTION CONVENTIONS & ÉVÉNEMENTS
                 const _SectionHeader('CONVENTIONS & ÉVÉNEMENTS'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.list_outlined,
                   title: 'Liste des conventions',
-                  onTap: () => _navigateTo(context, const AdminConventionsListPage()),
+                  onTap: () => secureNavigate(context, const AdminConventionsListPage()),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.add_circle_outline,
                   title: 'Créer une convention',
-                  onTap: () => _navigateTo(context, const AdminConventionCreatePage()),
+                  onTap: () => secureNavigate(context, const AdminConventionCreatePage()),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.analytics_outlined,
                   title: 'Stats conventions',
-                  onTap: () => _navigateTo(context, const AdminConventionStatsPage()),
+                  onTap: () => secureNavigate(context, const AdminConventionStatsPage()),
                 ),
 
                 const _SectionDivider(),
                 
                 // SECTION CODES PROMO & PARRAINAGE
                 const _SectionHeader('CODES PROMO & PARRAINAGE'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.card_giftcard_outlined,
                   title: 'Codes gratuits',
                   subtitle: 'Générer des codes pour tatoueurs',
-                  onTap: () => _navigateTo(context, const AdminFreeCodesPage()),
+                  onTap: () => secureNavigate(context, const AdminFreeCodesPage()),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.people_outlined,
                   title: 'Gestion parrainages',
                   subtitle: 'Suivi des parrainages',
-                  onTap: () => _navigateTo(context, const AdminReferralsPage()),
+                  onTap: () => secureNavigate(context, const AdminReferralsPage()),
                 ),
 
                 const _SectionDivider(),
                 
                 // SECTION OUTILS ADMIN
                 const _SectionHeader('OUTILS ADMIN'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.flash_on_outlined,
                   title: 'Réservations Flash',
-                  onTap: () => _navigateTo(context, const AdminFlashReservationsPage()),
+                  onTap: () => secureNavigate(context, const AdminFlashReservationsPage()),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.business_outlined,
                   title: 'Gestion sponsors',
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Page en cours de développement')),
-                    );
-                  },
+                  onTap: () => showDevelopmentMessage(context, 'Gestion sponsors'),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.map_outlined,
                   title: 'Éditeur de carte',
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Page en cours de développement')),
-                    );
-                  },
+                  onTap: () => showDevelopmentMessage(context, 'Éditeur de carte'),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.notifications_active_outlined,
                   title: 'Push notifications',
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Page en cours de développement')),
-                    );
-                  },
+                  onTap: () => showDevelopmentMessage(context, 'Push notifications'),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.emoji_events_outlined,
                   title: 'Contest Admin',
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Page en cours de développement')),
-                    );
-                  },
+                  onTap: () => showDevelopmentMessage(context, 'Contest Admin'),
                 ),
+
+                // ✅ SECTION SUPER ADMIN EXCLUSIVE
+                if (SecureAuthService.instance.isSuperAdmin) ...[
+                  const _SectionDivider(),
+                  const _SectionHeader('SUPER ADMIN'),
+                  _buildSecureMenuItem(
+                    context,
+                    icon: Icons.admin_panel_settings_outlined,
+                    title: 'Gestion des admins',
+                    subtitle: 'Promouvoir/Révoquer des administrateurs',
+                    iconColor: Colors.red,
+                    textColor: Colors.red,
+                    onTap: () => showDevelopmentMessage(context, 'Gestion des admins'),
+                  ),
+                  _buildSecureMenuItem(
+                    context,
+                    icon: Icons.security_outlined,
+                    title: 'Logs de sécurité',
+                    subtitle: 'Audit des actions admin',
+                    iconColor: Colors.red,
+                    textColor: Colors.red,
+                    onTap: () => showDevelopmentMessage(context, 'Logs de sécurité'),
+                  ),
+                ],
 
                 const _SectionDivider(),
                 
                 // SECTION STATISTIQUES & RAPPORTS
                 const _SectionHeader('STATISTIQUES & RAPPORTS'),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.bar_chart_outlined,
                   title: 'Statistiques générales',
-                  onTap: () => _navigateTo(context, const AdminConventionStatsPage()),
+                  onTap: () => secureNavigate(context, const AdminConventionStatsPage()),
                 ),
-                _buildMenuItem(
+                _buildSecureMenuItem(
                   context,
                   icon: Icons.timeline_outlined,
                   title: 'Rapports d\'activité',
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Page en cours de développement')),
-                    );
-                  },
+                  onTap: () => showDevelopmentMessage(context, 'Rapports d\'activité'),
                 ),
 
                 const SizedBox(height: 24),
@@ -371,7 +382,7 @@ class CustomDrawerAdmin extends StatelessWidget {
                   child: ElevatedButton.icon(
                     onPressed: () {
                       Navigator.pop(context);
-                      _navigateTo(context, const AdminDashboardHome());
+                      secureNavigate(context, const AdminDashboardHome());
                     },
                     icon: const Icon(Icons.dashboard, size: 16),
                     label: const Text('Dashboard', style: TextStyle(fontSize: 12)),
@@ -402,19 +413,19 @@ class CustomDrawerAdmin extends StatelessWidget {
             ),
           ),
 
-          // Déconnexion
+          // Déconnexion sécurisée
           Container(
             padding: const EdgeInsets.all(24),
             decoration: const BoxDecoration(
               border: Border(top: BorderSide(color: Color(0xFF1F2937), width: 1)),
             ),
-            child: _buildMenuItem(
+            child: _buildSecureMenuItem(
               context,
               icon: Icons.logout_outlined,
               title: 'Se déconnecter',
               iconColor: KipikTheme.rouge,
               textColor: KipikTheme.rouge,
-              onTap: () => _showLogout(context),
+              onTap: () => secureSignOut(context),
             ),
           ),
         ],
@@ -422,7 +433,7 @@ class CustomDrawerAdmin extends StatelessWidget {
     );
   }
 
-  Widget _buildMenuItem(
+  Widget _buildSecureMenuItem(
     BuildContext context, {
     required IconData icon,
     required String title,
@@ -457,13 +468,6 @@ class CustomDrawerAdmin extends StatelessWidget {
     );
   }
 
-  void _navigateTo(BuildContext context, Widget page) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => page),
-    );
-  }
-
   void _openAIAssistant(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -473,37 +477,6 @@ class CustomDrawerAdmin extends StatelessWidget {
       builder: (_) => const AIChatBottomSheet(
         allowImageGeneration: false, // Admin n'a pas besoin de génération d'images
         contextPage: 'admin',
-      ),
-    );
-  }
-
-  void _showLogout(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.admin_panel_settings, color: Colors.amber),
-            const SizedBox(width: 8),
-            const Text('Déconnexion Admin'),
-          ],
-        ),
-        content: const Text('Voulez-vous vraiment vous déconnecter de l\'espace administrateur ?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context), 
-            child: const Text('Annuler'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: KipikTheme.rouge),
-            onPressed: () {
-              Navigator.pop(context);
-              AuthService.instance.signOut();
-              Navigator.pushReplacementNamed(context, '/login');
-            },
-            child: const Text('Déconnecter', style: TextStyle(color: Colors.white)),
-          ),
-        ],
       ),
     );
   }

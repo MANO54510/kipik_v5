@@ -4,7 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../theme/kipik_theme.dart';
 import '../../widgets/common/app_bars/custom_app_bar_particulier.dart';
-import '../../services/notification/notification_service.dart';
+import '../../services/notification/firebase_notification_service.dart';
+import '../../services/auth/secure_auth_service.dart'; // ✅ MIGRATION
+import '../../models/user_role.dart'; // ✅ MIGRATION
 import 'accueil_particulier_page.dart';
 import 'profil_particulier_page.dart';
 import 'aide_support_page.dart';
@@ -21,13 +23,19 @@ class _ParametresPageState extends State<ParametresPage> {
   bool _emailNotificationsEnabled = true;
   bool _darkModeEnabled = false;
   String _selectedLanguage = 'Français';
-  final NotificationService _notificationService = NotificationService();
+  final FirebaseNotificationService _notificationService = FirebaseNotificationService.instance; // ✅ MIGRATION
 
-  // Profil utilisateur
+  // ✅ MIGRATION: Profil utilisateur depuis SecureAuthService
   String _userName = "Votre prénom ici";
   String _userLastName = "Votre nom ici";
   String _userEmail = "exemple@email.com";
   String? _userProfileImage;
+
+  // ✅ MIGRATION: Getters sécurisés
+  SecureAuthService get _authService => SecureAuthService.instance;
+  String? get _currentUserId => _authService.currentUserId;
+  UserRole? get _currentUserRole => _authService.currentUserRole;
+  dynamic get _currentUser => _authService.currentUser;
 
   // Fonds aléatoires
   final List<String> _backgroundImages = [
@@ -44,51 +52,125 @@ class _ParametresPageState extends State<ParametresPage> {
     _loadUserSettings();
     _selectedBackground =
         _backgroundImages[Random().nextInt(_backgroundImages.length)];
+    _loadUserProfile(); // ✅ NOUVEAU: Charger le profil utilisateur
+  }
+
+  // ✅ MIGRATION: Charger le profil utilisateur depuis SecureAuthService
+  void _loadUserProfile() {
+    if (_currentUser != null) {
+      setState(() {
+        final user = _currentUser as Map<String, dynamic>;
+        _userName = user['displayName']?.toString().split(' ').first ?? 
+                   user['name']?.toString().split(' ').first ?? 
+                   _userName;
+        _userLastName = user['displayName']?.toString().split(' ').skip(1).join(' ') ?? 
+                       user['name']?.toString().split(' ').skip(1).join(' ') ?? 
+                       _userLastName;
+        _userEmail = user['email']?.toString() ?? _userEmail;
+        _userProfileImage = user['profileImageUrl']?.toString();
+      });
+    }
   }
 
   Future<void> _loadUserSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _notificationsEnabled =
-          prefs.getBool('notifications_enabled') ?? true;
-      _emailNotificationsEnabled =
-          prefs.getBool('email_notifications_enabled') ?? true;
-      _darkModeEnabled = prefs.getBool('dark_mode_enabled') ?? false;
-      _selectedLanguage =
-          prefs.getString('selected_language') ?? 'Français';
-      _userName =
-          prefs.getString('user_first_name') ?? _userName;
-      _userLastName =
-          prefs.getString('user_last_name') ?? _userLastName;
-      _userEmail =
-          prefs.getString('user_email') ?? _userEmail;
-      _userProfileImage =
-          prefs.getString('user_profile_image');
-    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      setState(() {
+        _notificationsEnabled =
+            prefs.getBool('notifications_enabled') ?? true;
+        _emailNotificationsEnabled =
+            prefs.getBool('email_notifications_enabled') ?? true;
+        _darkModeEnabled = prefs.getBool('dark_mode_enabled') ?? false;
+        _selectedLanguage =
+            prefs.getString('selected_language') ?? 'Français';
+        
+        // ✅ MIGRATION: Utiliser les données de SecureAuthService si disponibles
+        if (_currentUser == null) {
+          _userName = prefs.getString('user_first_name') ?? _userName;
+          _userLastName = prefs.getString('user_last_name') ?? _userLastName;
+          _userEmail = prefs.getString('user_email') ?? _userEmail;
+          _userProfileImage = prefs.getString('user_profile_image');
+        }
+      });
+    } catch (e) {
+      print('❌ Erreur chargement paramètres: $e');
+    }
   }
 
   Future<void> _saveNotificationSetting(bool v) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('notifications_enabled', v);
-    setState(() => _notificationsEnabled = v);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('notifications_enabled', v);
+      setState(() => _notificationsEnabled = v);
+      
+      // ✅ NOUVEAU: Mettre à jour les paramètres Firebase si connecté
+      if (_currentUserId != null) {
+        await _authService.updateUserProfile(
+          additionalData: {'notificationsEnabled': v},
+        );
+      }
+      
+      print('✅ Paramètre notifications sauvegardé: $v');
+    } catch (e) {
+      print('❌ Erreur sauvegarde notifications: $e');
+    }
   }
 
   Future<void> _saveEmailNotificationSetting(bool v) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('email_notifications_enabled', v);
-    setState(() => _emailNotificationsEnabled = v);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('email_notifications_enabled', v);
+      setState(() => _emailNotificationsEnabled = v);
+      
+      // ✅ NOUVEAU: Mettre à jour les paramètres Firebase si connecté
+      if (_currentUserId != null) {
+        await _authService.updateUserProfile(
+          additionalData: {'emailNotificationsEnabled': v},
+        );
+      }
+      
+      print('✅ Paramètre emails sauvegardé: $v');
+    } catch (e) {
+      print('❌ Erreur sauvegarde emails: $e');
+    }
   }
 
   Future<void> _saveThemeSetting(bool v) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('dark_mode_enabled', v);
-    setState(() => _darkModeEnabled = v);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('dark_mode_enabled', v);
+      setState(() => _darkModeEnabled = v);
+      
+      // ✅ NOUVEAU: Mettre à jour les paramètres Firebase si connecté
+      if (_currentUserId != null) {
+        await _authService.updateUserProfile(
+          additionalData: {'darkModeEnabled': v},
+        );
+      }
+      
+      print('✅ Paramètre thème sauvegardé: $v');
+    } catch (e) {
+      print('❌ Erreur sauvegarde thème: $e');
+    }
   }
 
   Future<void> _saveLanguageSetting(String lang) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('selected_language', lang);
-    setState(() => _selectedLanguage = lang);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('selected_language', lang);
+      setState(() => _selectedLanguage = lang);
+      
+      // ✅ NOUVEAU: Mettre à jour les paramètres Firebase si connecté
+      if (_currentUserId != null) {
+        await _authService.updateUserProfile(
+          additionalData: {'preferredLanguage': lang},
+        );
+      }
+      
+      print('✅ Langue sauvegardée: $lang');
+    } catch (e) {
+      print('❌ Erreur sauvegarde langue: $e');
+    }
   }
 
   void _showClearCacheDialog() {
@@ -115,32 +197,44 @@ class _ParametresPageState extends State<ParametresPage> {
           ),
           ElevatedButton(
             onPressed: () async {
-              await Future.delayed(const Duration(seconds: 1));
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Row(
-                    children: [
-                      Icon(Icons.check_circle,
-                          color: Colors.green[300]),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text('Cache vidé avec succès !',
-                            style: TextStyle(color: Colors.white)),
+              // ✅ NOUVEAU: Effacer réellement le cache
+              try {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.clear();
+                await Future.delayed(const Duration(seconds: 1));
+                
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Row(
+                        children: [
+                          Icon(Icons.check_circle, color: Colors.green[300]),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text('Cache vidé avec succès !',
+                                style: TextStyle(color: Colors.white)),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  backgroundColor: Colors.grey[850],
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                  action: SnackBarAction(
-                    label: 'OK',
-                    textColor: KipikTheme.rouge,
-                    onPressed: () {},
-                  ),
-                ),
-              );
+                      backgroundColor: Colors.grey[850],
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                      action: SnackBarAction(
+                        label: 'OK',
+                        textColor: KipikTheme.rouge,
+                        onPressed: () {},
+                      ),
+                    ),
+                  );
+                  
+                  // Recharger les paramètres
+                  _loadUserSettings();
+                }
+              } catch (e) {
+                print('❌ Erreur vidage cache: $e');
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: KipikTheme.rouge,
@@ -200,6 +294,18 @@ class _ParametresPageState extends State<ParametresPage> {
                   TextStyle(color: KipikTheme.blanc.withOpacity(0.7)),
               textAlign: TextAlign.center,
             ),
+            // ✅ NOUVEAU: Afficher l'ID utilisateur si connecté
+            if (_currentUserId != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                'ID: ${_currentUserId!.substring(0, 8)}...',
+                style: TextStyle(
+                  color: KipikTheme.blanc.withOpacity(0.5),
+                  fontSize: 12,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx),
@@ -399,6 +505,46 @@ class _ParametresPageState extends State<ParametresPage> {
               style:
                   TextStyle(color: KipikTheme.blanc.withOpacity(0.6)),
             ),
+            // ✅ NOUVEAU: Informations utilisateur connecté
+            if (_currentUser != null) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: KipikTheme.rouge.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: KipikTheme.rouge.withOpacity(0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Informations de connexion',
+                      style: TextStyle(
+                        color: KipikTheme.rouge,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Utilisateur: $_userEmail',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 10,
+                      ),
+                    ),
+                    Text(
+                      'Rôle: ${_currentUserRole?.name ?? 'client'}',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
         actions: [
@@ -412,6 +558,7 @@ class _ParametresPageState extends State<ParametresPage> {
     );
   }
 
+  // ✅ MIGRATION: Suppression de compte avec SecureAuthService
   void _showDeleteAccountDialog() {
     showDialog(
       context: context,
@@ -470,6 +617,9 @@ class _ParametresPageState extends State<ParametresPage> {
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               ),
+              onChanged: (value) {
+                // TODO: Activer le bouton seulement si "SUPPRIMER" est saisi
+              },
             ),
           ],
         ),
@@ -480,7 +630,22 @@ class _ParametresPageState extends State<ParametresPage> {
                 style: TextStyle(color: Colors.grey[400])),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: () async {
+              // ✅ NOUVEAU: Logique de suppression réelle (à implémenter)
+              try {
+                // TODO: Implémenter la suppression de compte
+                // await _authService.deleteAccount();
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Fonctionnalité en développement'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              } catch (e) {
+                print('❌ Erreur suppression compte: $e');
+              }
+            },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
               shape: RoundedRectangleBorder(
@@ -494,6 +659,7 @@ class _ParametresPageState extends State<ParametresPage> {
     );
   }
 
+  // ✅ MIGRATION: Déconnexion avec SecureAuthService
   void _showLogoutDialog() {
     showDialog(
       context: context,
@@ -506,9 +672,11 @@ class _ParametresPageState extends State<ParametresPage> {
             fontFamily: 'PermanentMarker',
           ),
         ),
-        content: const Text(
-          'Êtes-vous sûr de vouloir vous déconnecter ?',
-          style: TextStyle(color: Colors.white),
+        content: Text(
+          _currentUser != null 
+              ? 'Êtes-vous sûr de vouloir vous déconnecter de $_userEmail ?'
+              : 'Êtes-vous sûr de vouloir vous déconnecter ?',
+          style: const TextStyle(color: Colors.white),
         ),
         actions: [
           TextButton(
@@ -517,12 +685,32 @@ class _ParametresPageState extends State<ParametresPage> {
                 style: TextStyle(color: Colors.grey[400])),
           ),
           ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(
-                    builder: (_) => const AccueilParticulierPage()),
-              );
+            onPressed: () async {
+              try {
+                Navigator.pop(ctx);
+                
+                // ✅ MIGRATION: Déconnexion avec SecureAuthService
+                await _authService.signOut();
+                
+                if (mounted) {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                        builder: (_) => const AccueilParticulierPage()),
+                  );
+                }
+                
+                print('✅ Déconnexion réussie');
+              } catch (e) {
+                print('❌ Erreur déconnexion: $e');
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Erreur lors de la déconnexion: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: KipikTheme.rouge,
@@ -607,9 +795,9 @@ class _ParametresPageState extends State<ParametresPage> {
                         onPressed: _showLogoutDialog,
                         icon: const Icon(Icons.logout,
                             size: 18, color: Colors.white70),
-                        label: const Text(
-                          'Déconnexion',
-                          style: TextStyle(color: Colors.white70),
+                        label: Text(
+                          _currentUser != null ? 'Déconnexion' : 'Non connecté',
+                          style: const TextStyle(color: Colors.white70),
                         ),
                       ),
                     ),
@@ -634,7 +822,87 @@ class _ParametresPageState extends State<ParametresPage> {
     );
   }
 
+  // ✅ MIGRATION: Carte profil utilisateur avec données SecureAuthService
   Widget _buildUserProfileCard(BuildContext context) {
+    // ✅ NOUVEAU: Afficher différent contenu selon l'état de connexion
+    if (_currentUser == null) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.7),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+              color: Colors.orange.withOpacity(0.5), width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 5,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 70,
+              height: 70,
+              decoration: BoxDecoration(
+                color: Colors.grey[800],
+                shape: BoxShape.rectangle,
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: Colors.orange, width: 2),
+              ),
+              child: Icon(Icons.person_off,
+                  size: 40, color: Colors.orange),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Non connecté",
+                    style: TextStyle(
+                      fontFamily: 'PermanentMarker',
+                      fontSize: 18,
+                      color: Colors.orange,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Connectez-vous pour synchroniser vos paramètres',
+                    style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.white.withOpacity(0.8)),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton(
+                    onPressed: () {
+                      Navigator.pushNamed(context, '/login');
+                    },
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.orange),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text(
+                      'Se connecter',
+                      style: TextStyle(
+                          color: Colors.orange, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -678,7 +946,7 @@ class _ParametresPageState extends State<ParametresPage> {
                 ],
                 image: _userProfileImage != null
                     ? DecorationImage(
-                        image: AssetImage(_userProfileImage!),
+                        image: NetworkImage(_userProfileImage!),
                         fit: BoxFit.cover,
                       )
                     : null,
@@ -708,6 +976,25 @@ class _ParametresPageState extends State<ParametresPage> {
                         fontSize: 14,
                         color: KipikTheme.blanc.withOpacity(0.8)),
                   ),
+                  // ✅ NOUVEAU: Afficher le rôle utilisateur
+                  if (_currentUserRole != null) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: KipikTheme.rouge.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        _currentUserRole!.name.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: KipikTheme.rouge,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   OutlinedButton(
                     onPressed: () {
@@ -818,7 +1105,7 @@ class _ParametresPageState extends State<ParametresPage> {
         const SizedBox(height: 10),
         _buildActionTile(
           title: 'Vider le cache',
-          subtitle: '45 MB',
+          subtitle: 'Données temporaires',
           icon: Icons.cleaning_services_outlined,
           onTap: _showClearCacheDialog,
         ),
@@ -868,13 +1155,14 @@ class _ParametresPageState extends State<ParametresPage> {
           onTap: _showPrivacyPolicy,
         ),
         const SizedBox(height: 10),
-        _buildActionTile(
-          title: 'Supprimer mon compte',
-          subtitle: 'Effacer définitivement toutes les données',
-          icon: Icons.delete_outline,
-          onTap: _showDeleteAccountDialog,
-          textColor: KipikTheme.rouge,
-        ),
+        if (_currentUser != null) // ✅ Seulement si connecté
+          _buildActionTile(
+            title: 'Supprimer mon compte',
+            subtitle: 'Effacer définitivement toutes les données',
+            icon: Icons.delete_outline,
+            onTap: _showDeleteAccountDialog,
+            textColor: KipikTheme.rouge,
+          ),
       ],
     );
   }

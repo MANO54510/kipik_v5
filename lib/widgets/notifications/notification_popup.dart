@@ -1,9 +1,9 @@
 // lib/widgets/notifications/notification_popup.dart
 
 import 'package:flutter/material.dart';
-import '../../models/notification_item.dart';
-import '../../services/notification/firebase_notification_service.dart';
-import '../../theme/kipik_theme.dart';
+import 'package:kipik_v5/models/notification_item.dart';
+import 'package:kipik_v5/services/notification/firebase_notification_service.dart';
+import 'package:kipik_v5/theme/kipik_theme.dart';
 
 /// Popup de notification recentrée, avec le bouton « Tout marquer comme lu »  
 /// placé juste en dessous du titre.
@@ -26,11 +26,23 @@ class _NotificationPopupState extends State<NotificationPopup> {
     _loadNotifications();
   }
 
-  void _loadNotifications() {
-    setState(() {
-      notifications = notificationService.getAllNotifications();
-      unreadCount = notificationService.getUnreadCount();
-    });
+  Future<void> _loadNotifications() async {
+    try {
+      final loadedNotifications = await notificationService.getAllNotifications();
+      final count = await notificationService.getUnreadCount();
+      
+      setState(() {
+        notifications = loadedNotifications;
+        unreadCount = count;
+      });
+    } catch (e) {
+      print('Erreur chargement notifications: $e');
+      // En cas d'erreur, utiliser les données synchrones de secours
+      setState(() {
+        notifications = notificationService.getAllNotificationsSync();
+        unreadCount = notificationService.getUnreadCountSync();
+      });
+    }
   }
 
   @override
@@ -119,9 +131,9 @@ class _NotificationPopupState extends State<NotificationPopup> {
                     SizedBox(
                       width: double.infinity,
                       child: TextButton.icon(
-                        onPressed: () {
-                          notificationService.markAllAsRead();
-                          _loadNotifications();
+                        onPressed: () async {
+                          await notificationService.markAllAsRead();
+                          await _loadNotifications();
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('Toutes les notifications ont été marquées comme lues'),
@@ -206,10 +218,10 @@ class _NotificationPopupState extends State<NotificationPopup> {
 
   Widget _buildNotificationItem(BuildContext context, NotificationItem notification, bool isLast) {
     return InkWell(
-      onTap: () {
+      onTap: () async {
         if (!notification.read) {
-          notificationService.markAsRead(notification.id);
-          _loadNotifications();
+          await notificationService.markAsRead(notification.id);
+          await _loadNotifications();
         }
         _handleNotificationTap(notification);
       },
@@ -341,6 +353,12 @@ class _NotificationPopupState extends State<NotificationPopup> {
         return 'FACTURE';
       case NotificationType.info:
         return 'INFO';
+      case NotificationType.projet:
+        return 'PROJET';
+      case NotificationType.tatoueur:
+        return 'TATOUEUR';
+      case NotificationType.system:
+        return 'SYSTÈME';
     }
   }
 
@@ -361,6 +379,15 @@ class _NotificationPopupState extends State<NotificationPopup> {
         break;
       case NotificationType.info:
         _showPlaceholder('Informations', null);
+        break;
+      case NotificationType.projet:
+        _showPlaceholder('Projet', notification.projectId);
+        break;
+      case NotificationType.tatoueur:
+        _showPlaceholder('Tatoueur', notification.projectId);
+        break;
+      case NotificationType.system:
+        _showPlaceholder('Système', notification.projectId);
         break;
     }
     Navigator.of(context).pop(); // Fermer le popup
