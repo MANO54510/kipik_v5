@@ -74,5 +74,26 @@
     "retry": "Réessayer",
     "continue": "Continuer",
     "loading": "Chargement..."
+  },
+
+  "setup": {
+    "title": "Configuration initiale",
+    "subtitle": "Créez votre compte super-administrateur",
+    "email": "Adresse e-mail",
+    "password": "Mot de passe",
+    "confirmPassword": "Confirmer le mot de passe",
+    "button": "Créer l'administrateur",
+    "success": "Super-admin créé avec succès !",
+    "error": "Impossible de créer l'administrateur",
+    "validation": {
+      "emailRequired": "L’e-mail est requis",
+      "emailInvalid": "Format d’e-mail invalide",
+      "passwordRequired": "Le mot de passe est requis",
+      "passwordTooShort": "8 caractères minimum",
+      "passwordUppercase": "1 majuscule au moins",
+      "passwordDigit": "Au moins 1 chiffre",
+      "passwordSpecial": "Au moins 1 caractère spécial",
+      "passwordMismatch": "Les mots de passe ne correspondent pas"
+    }
   }
 }

@@ -6,17 +6,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart'; // ✅ Ajouté pour Firebase.app()
 import 'package:crypto/crypto.dart';
-// ❌ SUPPRIMÉ: import 'package:kipik_v5/theme/kipik_theme.dart'; // Non utilisé dans ce service
-import 'package:kipik_v5/services/auth/captcha_manager.dart'; // ✅ UTILISÉ: CaptchaResult dans les méthodes
-import 'package:kipik_v5/models/user_role.dart'; // ✅ UTILISÉ: UserRole enum partout
-
-// ❌ SUPPRIMÉ: Imports des drawers non utilisés dans ce service d'authentification
-// Ces imports étaient présents mais jamais utilisés dans le code
-// import 'package:kipik_v5/widgets/common/drawers/custom_drawer_admin.dart';
-// import 'package:kipik_v5/widgets/common/drawers/custom_drawer_particulier.dart';
-// import 'package:kipik_v5/widgets/common/drawers/custom_drawer_organizer.dart';
-// import 'package:kipik_v5/widgets/common/drawers/custom_drawer_kipik.dart';
+import 'package:kipik_v5/services/auth/captcha_manager.dart';
+import 'package:kipik_v5/models/user_role.dart';
 
 // ========================================
 // 1. ENUMS NÉCESSAIRES
@@ -40,7 +33,12 @@ class SecureAuthService extends ChangeNotifier {
   SecureAuthService._internal();
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  
+  // ✅ CORRECTION PRINCIPALE: Utilise la base 'kipik' au lieu de 'default'
+  final FirebaseFirestore _firestore = FirebaseFirestore.instanceFor(
+    app: Firebase.app(),
+    databaseId: 'kipik',
+  );
   
   // État mis en cache pour éviter les vérifications répétées
   UserRole? _cachedRole;
@@ -392,12 +390,16 @@ class SecureAuthService extends ChangeNotifier {
           .doc(credential.user!.uid)
           .set(userData);
       
-      // ✅ Marquer que le premier admin est créé
-      await _firestore.collection('admin_config').doc('setup').set({
+      // ✅ CORRECTION: Utilise la collection admin_first_setup au lieu d'admin_config
+      await _firestore.collection('admin_first_setup').doc('configured').set({
         'firstAdminCreated': true,
         'firstAdminEmail': email,
+        'adminId': credential.user!.uid,
+        'configuredBy': email,
         'createdAt': FieldValue.serverTimestamp(),
         'securityScore': captchaResult.score,
+        'timestamp': FieldValue.serverTimestamp(),
+        'setupVersion': '1.0',
       });
       
       _isFirstAdminCreated = true;
@@ -408,6 +410,39 @@ class SecureAuthService extends ChangeNotifier {
     } catch (e) {
       print('❌ Erreur création super admin: $e');
       rethrow;
+    }
+  }
+
+  /// ✅ VÉRIFIER SI PREMIER ADMIN EXISTE
+  Future<bool> checkFirstAdminExists() async {
+    try {
+      print('🔍 Vérification premier admin avec base kipik...');
+      
+      // ✅ CORRECTION: Vérifie dans admin_first_setup/configured
+      final config = await _firestore.collection('admin_first_setup').doc('configured').get();
+      final configExists = config.exists && config.data()?['firstAdminCreated'] == true;
+      
+      if (configExists) {
+        print('✅ Configuration admin trouvée dans admin_first_setup');
+        return true;
+      }
+      
+      // ✅ FALLBACK: Vérifier directement dans la collection users
+      final adminQuery = await _firestore
+          .collection('users')
+          .where('role', isEqualTo: 'admin')
+          .limit(1)
+          .get();
+      
+      final adminExists = adminQuery.docs.isNotEmpty;
+      print('🔍 Admins trouvés: ${adminQuery.docs.length}');
+      
+      return adminExists;
+      
+    } catch (e) {
+      print('❌ Erreur vérification premier admin: $e');
+      // ✅ En cas d'erreur, permettre la configuration
+      return false;
     }
   }
 
@@ -521,17 +556,6 @@ class SecureAuthService extends ChangeNotifier {
     } catch (e) {
       print('❌ Erreur révocation admin: $e');
       rethrow;
-    }
-  }
-
-  /// ✅ VÉRIFIER SI PREMIER ADMIN EXISTE
-  Future<bool> checkFirstAdminExists() async {
-    try {
-      final config = await _firestore.collection('admin_config').doc('setup').get();
-      return config.exists && config.data()?['firstAdminCreated'] == true;
-    } catch (e) {
-      print('❌ Erreur vérification premier admin: $e');
-      return false;
     }
   }
 

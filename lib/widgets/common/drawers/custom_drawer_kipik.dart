@@ -3,9 +3,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
-import 'package:kipik_v5/services/auth/auth_service.dart';
-import 'package:kipik_v5/services/auth/secure_auth_service.dart'; // AJOUTÉ
-import 'package:kipik_v5/models/user.dart';
+import 'package:kipik_v5/services/auth/secure_auth_service.dart'; // ✅ UTILISÉ
 import 'package:kipik_v5/models/user_role.dart';
 import 'package:kipik_v5/widgets/common/drawers/secure_drawer_components.dart';
 
@@ -47,8 +45,8 @@ class CustomDrawerKipik extends StatelessWidget with SecureDrawerMixin {
 
   @override
   Widget build(BuildContext context) {
-    // Utiliser AuthService pour le modèle User (compatibilité)
-    final User? currentUser = AuthService.instance.currentUser;
+    // ✅ CHANGÉ : Utiliser SecureAuthService uniquement
+    final currentUser = SecureAuthService.instance.currentUser;
     
     // Vérifications de sécurité avec SecureAuthService
     if (currentUser == null || !SecureAuthService.instance.isAuthenticated) {
@@ -59,6 +57,12 @@ class CustomDrawerKipik extends StatelessWidget with SecureDrawerMixin {
     if (currentRole != UserRole.tatoueur) {
       return SecureDrawerFactory.buildFallbackDrawer();
     }
+    
+    // ✅ AJOUTÉ : Extraction des données utilisateur depuis SecureAuthService
+    final userName = currentUser['name'] ?? currentUser['displayName'] ?? 'Utilisateur';
+    final userEmail = currentUser['email'] ?? '';
+    final userId = currentUser['uid'] ?? currentUser['id'] ?? '';
+    final profileImageUrl = currentUser['photoURL'] ?? currentUser['profileImageUrl'];
     
     final headerImages = [
       'assets/images/header_tattoo_wallpaper.png',
@@ -134,8 +138,8 @@ class CustomDrawerKipik extends StatelessWidget with SecureDrawerMixin {
                         backgroundColor: KipikTheme.rouge,
                         child: CircleAvatar(
                           radius: 46,
-                          backgroundImage: currentUser.profileImageUrl?.isNotEmpty == true
-                              ? NetworkImage(currentUser.profileImageUrl!)
+                          backgroundImage: profileImageUrl?.isNotEmpty == true
+                              ? NetworkImage(profileImageUrl!)
                               : const AssetImage('assets/avatars/avatar_neutre.png') as ImageProvider,
                         ),
                       ),
@@ -145,7 +149,7 @@ class CustomDrawerKipik extends StatelessWidget with SecureDrawerMixin {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              currentUser.name,
+                              userName, // ✅ CHANGÉ : Variable extraite
                               style: TextStyle(
                                 fontFamily: 'PermanentMarker',
                                 fontSize: 22,
@@ -229,7 +233,7 @@ class CustomDrawerKipik extends StatelessWidget with SecureDrawerMixin {
                   icon: Icons.support_agent_outlined,
                   title: 'Support Client',
                   subtitle: 'Aide, bugs, questions techniques',
-                  onTap: () => _navigateTo(context, SupportChatPage(userId: currentUser.id)),
+                  onTap: () => _navigateTo(context, SupportChatPage(userId: userId)), // ✅ CHANGÉ
                 ),
 
                 const _SectionDivider(),
@@ -368,7 +372,7 @@ class CustomDrawerKipik extends StatelessWidget with SecureDrawerMixin {
                   child: ElevatedButton.icon(
                     onPressed: () {
                       Navigator.pop(context);
-                      _navigateTo(context, SupportChatPage(userId: currentUser.id));
+                      _navigateTo(context, SupportChatPage(userId: userId)); // ✅ CHANGÉ
                     },
                     icon: const Icon(Icons.support_agent, size: 16),
                     label: const Text('Support', style: TextStyle(fontSize: 12)),

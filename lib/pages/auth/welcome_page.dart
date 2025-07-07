@@ -1,66 +1,65 @@
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 import '../../widgets/common/app_bars/custom_app_bar_kipik.dart';
 import '../../widgets/logo_with_text.dart';
 import '../../theme/kipik_theme.dart';
-import 'connexion_page.dart';
-import 'inscription_page.dart';
+import '../../services/auth/secure_auth_service.dart';
 
 class WelcomePage extends StatefulWidget {
-  const WelcomePage({super.key});
+  const WelcomePage({Key? key}) : super(key: key);
 
   @override
   State<WelcomePage> createState() => _WelcomePageState();
 }
 
 class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin {
-  late final String _selectedBackground;
-  late final AnimationController _animController;
-  late final Animation<double> _animFade;
-
-  static const _flagAssets = {
-    'fr': 'assets/flags/fr.png',
-    'en': 'assets/flags/en.png',
-    'de': 'assets/flags/de.png',
-    'es': 'assets/flags/es.png',
-  };
+  late AnimationController _animationController;
+  late Animation<double> _fadeInAnimation;
+  late Animation<Offset> _slideAnimation;
 
   @override
   void initState() {
     super.initState();
-    final backgrounds = [
-      'assets/background1.png',
-      'assets/background2.png',
-      'assets/background3.png',
-      'assets/background4.png',
-    ];
-    _selectedBackground = backgrounds[Random().nextInt(backgrounds.length)];
-
-    _animController = AnimationController(
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
       vsync: this,
-      duration: const Duration(milliseconds: 800),
-    )..forward();
-    _animFade = CurvedAnimation(parent: _animController, curve: Curves.easeIn);
+    );
+
+    _fadeInAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.3),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeOutQuart));
+
+    _animationController.forward();
   }
 
   @override
   void dispose() {
-    _animController.dispose();
+    _animationController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final topOffset = kToolbarHeight + MediaQuery.of(context).padding.top + 8;
-    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    final backgrounds = [
+      'assets/background1.png',
+      'assets/background2.png', 
+      'assets/background3.png',
+      'assets/background4.png',
+    ];
+    final selectedBackground = backgrounds[Random().nextInt(backgrounds.length)];
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: CustomAppBarKipik(
-        title: 'welcome'.tr(),
+      appBar: const CustomAppBarKipik(
+        title: '',
         showBackButton: false,
         showBurger: false,
         showNotificationIcon: false,
@@ -68,144 +67,245 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Image.asset(_selectedBackground, fit: BoxFit.cover),
-
-          Align(
-            alignment: Alignment.topCenter,
+          Image.asset(
+            selectedBackground,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              print('❌ Erreur chargement background: $error');
+              return Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.black87, Colors.black],
+                  ),
+                ),
+              );
+            },
+          ),
+          SafeArea(
             child: Padding(
-              padding: EdgeInsets.only(top: topOffset),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: context.supportedLocales.map((loc) {
-                  final isActive = loc == context.locale;
-                  return GestureDetector(
-                    onTap: () => context.setLocale(loc),
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 12),
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: isActive ? KipikTheme.rouge : Colors.white,
-                          width: isActive ? 3 : 1.5,
-                        ),
-                      ),
-                      child: CircleAvatar(
-                        radius: 12,
-                        backgroundColor: Colors.white,
-                        backgroundImage: AssetImage(_flagAssets[loc.languageCode]!),
-                      ),
-                    ),
-                  );
-                }).toList(),
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: FadeTransition(
+                opacity: _fadeInAnimation,
+                child: SlideTransition(
+                  position: _slideAnimation,
+                  child: OrientationBuilder(
+                    builder: (context, orientation) {
+                      final isLandscape = orientation == Orientation.landscape;
+                      // Variables pour responsive design
+                      final buttonWidth = isLandscape ? 300.0 : 280.0;
+                      
+                      return Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // Logo et titre
+                          const LogoWithText(), // ✅ CORRECTION: Sans paramètre
+                          SizedBox(height: isLandscape ? 20 : 40),
+
+                          // Tagline
+                          Text(
+                            'welcome.tagline'.tr(),
+                            style: TextStyle(
+                              fontSize: isLandscape ? 16 : 20,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w300,
+                              letterSpacing: 1.2,
+                              shadows: const [
+                                Shadow(
+                                  blurRadius: 10.0,
+                                  color: Colors.black87,
+                                  offset: Offset(2.0, 2.0),
+                                ),
+                              ],
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          SizedBox(height: isLandscape ? 30 : 60),
+
+                          // Boutons principaux
+                          SizedBox(
+                            width: buttonWidth,
+                            child: Column(
+                              children: [
+                                // Se connecter
+                                _buildWelcomeButton(
+                                  icon: Icons.login,
+                                  text: 'welcome.login'.tr(),
+                                  onPressed: () => Navigator.pushNamed(context, '/connexion'),
+                                  color: KipikTheme.rouge,
+                                ),
+                                const SizedBox(height: 16),
+
+                                // S'inscrire
+                                _buildWelcomeButton(
+                                  icon: Icons.person_add,
+                                  text: 'welcome.register'.tr(),
+                                  onPressed: () => Navigator.pushNamed(context, '/inscription'),
+                                  color: Colors.white,
+                                  textColor: Colors.black87,
+                                ),
+
+                                // ✅ BOUTON ADMIN - TOUJOURS VISIBLE EN DEBUG
+                                if (kDebugMode) ...[
+                                  const SizedBox(height: 16),
+                                  _buildAdminButton(buttonWidth),
+                                ]
+                                // Mode production - bouton conditionnel (VOTRE DESIGN ORIGINAL)
+                                else ...[
+                                  const SizedBox(height: 16),
+                                  FutureBuilder<bool>(
+                                    future: SecureAuthService.instance.checkFirstAdminExists(),
+                                    builder: (context, snapshot) {
+                                      // En cas d'erreur ou pas de données, montrer le bouton
+                                      if (snapshot.hasError || snapshot.data == false) {
+                                        return _buildAdminButton(buttonWidth);
+                                      }
+                                      // Si admin existe, montrer badge
+                                      if (snapshot.data == true) {
+                                        return _buildConfiguredBadge();
+                                      }
+                                      // Chargement
+                                      return _buildLoadingButton(buttonWidth);
+                                    },
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
               ),
             ),
-          ),
-
-          SafeArea(
-            child: isLandscape
-                ? _buildLandscapeLayout(size)
-                : _buildPortraitLayout(size),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPortraitLayout(Size size) {
-    return Column(
-      children: [
-        const Spacer(flex: 4),
-        const LogoWithText(textColor: Colors.white),
-        const Spacer(flex: 5),
-        _buildButtons(size),
-        const Spacer(flex: 1),
-      ],
+  Widget _buildWelcomeButton({
+    required IconData icon,
+    required String text,
+    required VoidCallback onPressed,
+    required Color color,
+    Color? textColor,
+  }) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 24),
+        label: Text(
+          text,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            fontFamily: 'PermanentMarker',
+            color: textColor,
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          foregroundColor: textColor ?? Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          elevation: 0,
+        ),
+      ),
     );
   }
 
-  Widget _buildLandscapeLayout(Size size) {
-    return Row(
-      children: [
-        Expanded(
-          child: Center(child: const LogoWithText(textColor: Colors.white)),
+  Widget _buildAdminButton(double width) {
+    return Container(
+      width: width,
+      margin: const EdgeInsets.only(bottom: 16),
+      child: ElevatedButton.icon(
+        onPressed: () => Navigator.pushNamed(context, '/first-setup'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.amber,
+          foregroundColor: Colors.black87,
+          elevation: 8,
+          shadowColor: Colors.amber.withOpacity(0.5),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 16),
         ),
-        Expanded(
-          child: Center(child: _buildButtons(size)),
+        icon: const Icon(Icons.admin_panel_settings, size: 24),
+        label: const Text(
+          '🔧 Configuration Admin',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            fontFamily: 'PermanentMarker',
+          ),
         ),
-      ],
+      ),
     );
   }
 
-  Widget _buildButtons(Size size) {
-    final buttonWidth = MediaQuery.of(context).orientation == Orientation.landscape
-        ? size.width * 0.4
-        : size.width * 0.8;
-
-    return FadeTransition(
-      opacity: _animFade,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 30),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // — Bouton “Se connecter”
-            SizedBox(
-              width: buttonWidth,
-              child: ElevatedButton(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => ConnexionPage()),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: KipikTheme.rouge,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: Text(
-                  'loginButton'.tr(),
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // — Bouton “Créer un compte”
-            SizedBox(
-              width: buttonWidth,
-              child: ElevatedButton(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const InscriptionPage()),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: KipikTheme.rouge,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: Text(
-                  'signupButton'.tr(),  // “Créer un compte”
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-
-          ],
+  Widget _buildLoadingButton(double width) {
+    return Container(
+      width: width,
+      height: 56,
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.3)),
+      ),
+      child: const Center(
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            color: Colors.white,
+            strokeWidth: 2,
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildConfiguredBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.green.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.green),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_circle, color: Colors.green, size: 20),
+          SizedBox(width: 8),
+          Text(
+            '✅ Application configurée',
+            style: TextStyle(
+              color: Colors.green,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+        ],
       ),
     );
   }

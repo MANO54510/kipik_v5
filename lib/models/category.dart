@@ -1,4 +1,4 @@
-// Fichier: models/category.dart
+// lib/models/category.dart
 
 import 'package:flutter/material.dart';
 
@@ -64,7 +64,7 @@ class Category {
     };
   }
 
-  // Méthode pour convertir un nom d'icône en IconData
+  // ✅ CORRIGÉ : Méthode statique pour convertir un nom d'icône en IconData
   static IconData? _getIconDataFromName(String iconName) {
     switch (iconName.toLowerCase()) {
       // Catégories de fournisseurs tatouage
@@ -89,6 +89,9 @@ class Category {
       case 'inventory':
       case 'stock':
         return Icons.inventory;
+      case 'all_inclusive':
+      case 'apps':
+        return Icons.all_inclusive;
       
       // Icônes génériques
       case 'category':
@@ -131,7 +134,7 @@ class Category {
     }
   }
 
-  // Méthode pour créer une copie avec des modifications
+  // ✅ CORRIGÉ : Méthode pour créer une copie avec des modifications
   Category copyWith({
     String? id,
     String? name,
@@ -175,7 +178,7 @@ class Category {
   int get hashCode => id.hashCode;
 }
 
-// Classe pour gérer les catégories prédéfinies
+// ✅ CORRIGÉ : Classe pour gérer les catégories prédéfinies
 class CategoryHelper {
   // Catégories par défaut pour les fournisseurs de tatouage
   static List<Category> getDefaultSupplierCategories() {
@@ -186,8 +189,8 @@ class CategoryHelper {
         id: 'all',
         name: 'Tous',
         description: 'Toutes les catégories',
-        iconData: Icons.apps,
-        iconName: 'apps',
+        iconData: Icons.all_inclusive,
+        iconName: 'all_inclusive',
         itemCount: 0, // Sera calculé dynamiquement
         sortOrder: 0,
         createdAt: now,

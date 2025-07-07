@@ -3,8 +3,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
-import 'package:kipik_v5/services/auth/secure_auth_service.dart';
-import 'package:kipik_v5/models/user.dart';
+import 'package:kipik_v5/services/auth/secure_auth_service.dart'; // ✅ SEUL SERVICE UTILISÉ
 import 'package:kipik_v5/models/user_role.dart';
 import 'package:kipik_v5/widgets/common/drawers/secure_drawer_components.dart';
 
@@ -40,9 +39,8 @@ class CustomDrawerAdmin extends StatelessWidget with SecureDrawerMixin {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ Utiliser SecureAuthService avec conversion User
-    final dynamic currentUserData = SecureAuthService.instance.currentUser;
-    final User? currentUser = UserFromDynamic.fromDynamic(currentUserData);
+    // ✅ CHANGÉ : Utiliser SecureAuthService uniquement
+    final currentUser = SecureAuthService.instance.currentUser;
     
     // Vérifications de sécurité avec SecureAuthService
     if (currentUser == null || !SecureAuthService.instance.isAuthenticated) {
@@ -51,8 +49,17 @@ class CustomDrawerAdmin extends StatelessWidget with SecureDrawerMixin {
     
     final currentRole = SecureAuthService.instance.currentUserRole;
     if (currentRole != UserRole.admin) {
-      return SecureDrawerFactory.buildFallbackDrawer();
+      return SecureDrawerFactory.buildInsufficientRoleDrawer(
+        currentRole: currentRole ?? UserRole.client,
+        requiredRole: UserRole.admin,
+      );
     }
+    
+    // ✅ AJOUTÉ : Extraction des données utilisateur depuis SecureAuthService
+    final userName = currentUser['name'] ?? currentUser['displayName'] ?? 'Administrateur';
+    final userEmail = currentUser['email'] ?? '';
+    final userId = currentUser['uid'] ?? currentUser['id'] ?? '';
+    final profileImageUrl = currentUser['photoURL'] ?? currentUser['profileImageUrl'];
     
     final headerImages = [
       'assets/images/header_tattoo_wallpaper.png',
@@ -132,8 +139,8 @@ class CustomDrawerAdmin extends StatelessWidget with SecureDrawerMixin {
                         backgroundColor: Colors.amber,
                         child: CircleAvatar(
                           radius: 46,
-                          backgroundImage: currentUser.profileImageUrl?.isNotEmpty == true
-                              ? NetworkImage(currentUser.profileImageUrl!)
+                          backgroundImage: profileImageUrl?.isNotEmpty == true
+                              ? NetworkImage(profileImageUrl!)
                               : const AssetImage('assets/avatars/avatar_admin.png') as ImageProvider,
                         ),
                       ),
@@ -143,7 +150,7 @@ class CustomDrawerAdmin extends StatelessWidget with SecureDrawerMixin {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              currentUser.name,
+                              userName, // ✅ CHANGÉ : Variable extraite
                               style: const TextStyle(
                                 fontFamily: 'PermanentMarker',
                                 fontSize: 22,
@@ -218,7 +225,7 @@ class CustomDrawerAdmin extends StatelessWidget with SecureDrawerMixin {
                   icon: Icons.support_agent_outlined,
                   title: 'Support Admin',
                   subtitle: 'Questions techniques avancées',
-                  onTap: () => secureNavigate(context, SupportChatPage(userId: currentUser.id)),
+                  onTap: () => secureNavigate(context, SupportChatPage(userId: userId)), // ✅ CHANGÉ
                 ),
 
                 const _SectionDivider(),
@@ -345,6 +352,15 @@ class CustomDrawerAdmin extends StatelessWidget with SecureDrawerMixin {
                     iconColor: Colors.red,
                     textColor: Colors.red,
                     onTap: () => showDevelopmentMessage(context, 'Logs de sécurité'),
+                  ),
+                  _buildSecureMenuItem(
+                    context,
+                    icon: Icons.storage_outlined,
+                    title: 'Mode Base de Données',
+                    subtitle: 'Basculer Production/Démo',
+                    iconColor: Colors.deepPurple,
+                    textColor: Colors.deepPurple,
+                    onTap: () => showDevelopmentMessage(context, 'Mode Base de Données'),
                   ),
                 ],
 

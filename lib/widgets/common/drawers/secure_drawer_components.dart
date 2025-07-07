@@ -1,8 +1,7 @@
 // lib/widgets/common/drawers/secure_drawer_components.dart
 
 import 'package:flutter/material.dart';
-import 'package:kipik_v5/services/auth/auth_service.dart';
-import 'package:kipik_v5/services/auth/secure_auth_service.dart';
+import 'package:kipik_v5/services/auth/secure_auth_service.dart'; // ✅ SEUL SERVICE UTILISÉ
 import 'package:kipik_v5/models/user_role.dart';
 
 // Mixin de sécurité pour les drawers
@@ -52,11 +51,8 @@ mixin SecureDrawerMixin {
           );
         }
 
-        // Déconnexion sécurisée via les deux services
-        await Future.wait([
-          AuthService.instance.signOut(),
-          SecureAuthService.instance.signOut(),
-        ]);
+        // ✅ CHANGÉ : Déconnexion uniquement via SecureAuthService
+        await SecureAuthService.instance.signOut();
 
         // Navigation vers la page de connexion
         if (context.mounted) {
@@ -118,6 +114,22 @@ mixin SecureDrawerMixin {
       ),
     );
   }
+
+  /// ✅ NOUVEAU : Vérifier si l'utilisateur a le bon rôle
+  bool hasRequiredRole(UserRole requiredRole) {
+    final currentRole = SecureAuthService.instance.currentUserRole;
+    return currentRole == requiredRole;
+  }
+
+  /// ✅ NOUVEAU : Obtenir les informations utilisateur de manière sécurisée
+  Map<String, dynamic>? get currentUserData {
+    return SecureAuthService.instance.currentUser;
+  }
+
+  /// ✅ NOUVEAU : Vérifier l'état d'authentification
+  bool get isAuthenticated {
+    return SecureAuthService.instance.isAuthenticated;
+  }
 }
 
 // Factory pour créer des drawers de secours
@@ -170,11 +182,15 @@ class SecureDrawerFactory {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () {
-                  // Force la déconnexion et redirection
-                  AuthService.instance.signOut();
-                  SecureAuthService.instance.signOut();
-                  // Navigation sera gérée par les listeners d'auth
+                onPressed: () async {
+                  // ✅ CHANGÉ : Force la déconnexion uniquement via SecureAuthService
+                  try {
+                    await SecureAuthService.instance.signOut();
+                    // Navigation sera gérée par les listeners d'auth
+                  } catch (e) {
+                    // En cas d'erreur, forcer la navigation
+                    // Cette logique peut être adaptée selon votre architecture
+                  }
                 },
                 icon: const Icon(Icons.logout, color: Colors.white),
                 label: const Text(
@@ -196,7 +212,8 @@ class SecureDrawerFactory {
             const SizedBox(height: 16),
             TextButton.icon(
               onPressed: () {
-                // Option alternative pour fermer l'app
+                // Option alternative pour contacter le support
+                // Vous pouvez intégrer votre système de support ici
               },
               icon: const Icon(Icons.info_outline, color: Colors.grey, size: 16),
               label: const Text(
@@ -250,7 +267,7 @@ class SecureDrawerFactory {
   }
 
   /// Construit un drawer d'erreur de connexion
-  static Widget buildConnectionErrorDrawer() {
+  static Widget buildConnectionErrorDrawer({VoidCallback? onRetry}) {
     return Drawer(
       backgroundColor: const Color(0xFF0A0A0A),
       child: Container(
@@ -287,8 +304,9 @@ class SecureDrawerFactory {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () {
-                  // Retry logic
+                onPressed: onRetry ?? () {
+                  // ✅ AMÉLIORÉ : Callback personnalisable pour retry
+                  // Logique de retry par défaut si aucun callback fourni
                 },
                 icon: const Icon(Icons.refresh, color: Colors.white),
                 label: const Text(
@@ -300,6 +318,151 @@ class SecureDrawerFactory {
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.orange,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// ✅ NOUVEAU : Drawer spécifique pour le mode démo
+  static Widget buildDemoModeDrawer() {
+    return Drawer(
+      backgroundColor: const Color(0xFF0A0A0A),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.amber.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.amber.withOpacity(0.3)),
+              ),
+              child: const Icon(
+                Icons.preview,
+                size: 64,
+                color: Colors.amber,
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Mode Démonstration',
+              style: TextStyle(
+                fontSize: 20,
+                color: Colors.amber,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Vous utilisez actuellement l\'application en mode démonstration avec des données factices.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  // Retour au mode production ou page de connexion
+                  await SecureAuthService.instance.signOut();
+                },
+                icon: const Icon(Icons.exit_to_app, color: Colors.white),
+                label: const Text(
+                  'Quitter la démo',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.amber,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// ✅ NOUVEAU : Drawer pour rôle insuffisant
+  static Widget buildInsufficientRoleDrawer({required UserRole currentRole, required UserRole requiredRole}) {
+    return Drawer(
+      backgroundColor: const Color(0xFF0A0A0A),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.purple.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.purple.withOpacity(0.3)),
+              ),
+              child: const Icon(
+                Icons.admin_panel_settings,
+                size: 64,
+                color: Colors.purple,
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Accès limité',
+              style: TextStyle(
+                fontSize: 20,
+                color: Colors.purple,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Votre rôle actuel ($currentRole) ne permet pas d\'accéder à cet espace. Rôle requis: $requiredRole.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Colors.grey,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  // Navigation vers l'espace approprié selon le rôle
+                },
+                icon: const Icon(Icons.home, color: Colors.white),
+                label: const Text(
+                  'Retour à mon espace',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.purple,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),

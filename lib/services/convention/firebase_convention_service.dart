@@ -1,6 +1,7 @@
 // lib/services/convention/firebase_convention_service.dart
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../core/firestore_helper.dart';
 import '../../models/convention.dart';
 
 class FirebaseConventionService {
@@ -8,7 +9,7 @@ class FirebaseConventionService {
   static FirebaseConventionService get instance => _instance ??= FirebaseConventionService._();
   FirebaseConventionService._();
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FirestoreHelper.instance;
   static const String _collection = 'conventions';
 
   Future<List<Convention>> fetchConventions() async {

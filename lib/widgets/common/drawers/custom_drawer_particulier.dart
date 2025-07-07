@@ -3,8 +3,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
-import 'package:kipik_v5/services/auth/secure_auth_service.dart';
-import 'package:kipik_v5/models/user.dart';
+import 'package:kipik_v5/services/auth/secure_auth_service.dart'; // ✅ SEUL SERVICE UTILISÉ
 import 'package:kipik_v5/models/user_role.dart';
 import 'package:kipik_v5/widgets/common/drawers/secure_drawer_components.dart';
 
@@ -17,9 +16,8 @@ class CustomDrawerParticulier extends StatelessWidget with SecureDrawerMixin {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ Utiliser SecureAuthService avec conversion User
-    final dynamic currentUserData = SecureAuthService.instance.currentUser;
-    final User? currentUser = UserFromDynamic.fromDynamic(currentUserData);
+    // ✅ CHANGÉ : Utiliser SecureAuthService uniquement
+    final currentUser = SecureAuthService.instance.currentUser;
     
     // Vérifications de sécurité avec SecureAuthService
     if (currentUser == null || !SecureAuthService.instance.isAuthenticated) {
@@ -28,8 +26,17 @@ class CustomDrawerParticulier extends StatelessWidget with SecureDrawerMixin {
     
     final currentRole = SecureAuthService.instance.currentUserRole;
     if (currentRole != UserRole.client) {
-      return SecureDrawerFactory.buildFallbackDrawer();
+      return SecureDrawerFactory.buildInsufficientRoleDrawer(
+        currentRole: currentRole ?? UserRole.client,
+        requiredRole: UserRole.client,
+      );
     }
+    
+    // ✅ AJOUTÉ : Extraction des données utilisateur depuis SecureAuthService
+    final userName = currentUser['name'] ?? currentUser['displayName'] ?? 'Client';
+    final userEmail = currentUser['email'] ?? '';
+    final userId = currentUser['uid'] ?? currentUser['id'] ?? '';
+    final profileImageUrl = currentUser['photoURL'] ?? currentUser['profileImageUrl'];
     
     final headerImages = [
       'assets/images/header_tattoo_wallpaper.png',
@@ -109,8 +116,8 @@ class CustomDrawerParticulier extends StatelessWidget with SecureDrawerMixin {
                         backgroundColor: Colors.blue,
                         child: CircleAvatar(
                           radius: 46,
-                          backgroundImage: currentUser.profileImageUrl?.isNotEmpty == true
-                              ? NetworkImage(currentUser.profileImageUrl!)
+                          backgroundImage: profileImageUrl?.isNotEmpty == true
+                              ? NetworkImage(profileImageUrl!)
                               : const AssetImage('assets/avatars/avatar_client.png') as ImageProvider,
                         ),
                       ),
@@ -120,7 +127,7 @@ class CustomDrawerParticulier extends StatelessWidget with SecureDrawerMixin {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              currentUser.name,
+                              userName, // ✅ CHANGÉ : Variable extraite
                               style: const TextStyle(
                                 fontFamily: 'PermanentMarker',
                                 fontSize: 22,
@@ -193,7 +200,7 @@ class CustomDrawerParticulier extends StatelessWidget with SecureDrawerMixin {
                   icon: Icons.support_agent_outlined,
                   title: 'Support Client',
                   subtitle: 'Aide et questions',
-                  onTap: () => secureNavigate(context, SupportChatPage(userId: currentUser.id)),
+                  onTap: () => secureNavigate(context, SupportChatPage(userId: userId)), // ✅ CHANGÉ
                 ),
 
                 const _SectionDivider(),
@@ -266,6 +273,39 @@ class CustomDrawerParticulier extends StatelessWidget with SecureDrawerMixin {
                   subtitle: 'Conseils et informations',
                   onTap: () => showDevelopmentMessage(context, 'Guide'),
                 ),
+                _buildSecureMenuItem(
+                  context,
+                  icon: Icons.palette_outlined,
+                  title: 'Générateur d\'idées IA',
+                  subtitle: 'Inspiration assistée par IA',
+                  onTap: () => _openAIAssistant(context),
+                ),
+
+                const _SectionDivider(),
+                
+                // SECTION SOCIAL & COMMUNAUTÉ
+                const _SectionHeader('COMMUNAUTÉ'),
+                _buildSecureMenuItem(
+                  context,
+                  icon: Icons.favorite_outline,
+                  title: 'Mes tatoueurs favoris',
+                  subtitle: 'Artistes que je suis',
+                  onTap: () => showDevelopmentMessage(context, 'Favoris'),
+                ),
+                _buildSecureMenuItem(
+                  context,
+                  icon: Icons.star_outline,
+                  title: 'Mes avis',
+                  subtitle: 'Évaluations que j\'ai données',
+                  onTap: () => showDevelopmentMessage(context, 'Mes avis'),
+                ),
+                _buildSecureMenuItem(
+                  context,
+                  icon: Icons.share_outlined,
+                  title: 'Partager mes tatouages',
+                  subtitle: 'Montrer mes réalisations',
+                  onTap: () => showDevelopmentMessage(context, 'Partage'),
+                ),
 
                 const _SectionDivider(),
                 
@@ -282,6 +322,13 @@ class CustomDrawerParticulier extends StatelessWidget with SecureDrawerMixin {
                   icon: Icons.notifications_outlined,
                   title: 'Notifications',
                   onTap: () => showDevelopmentMessage(context, 'Notifications'),
+                ),
+                _buildSecureMenuItem(
+                  context,
+                  icon: Icons.privacy_tip_outlined,
+                  title: 'Confidentialité',
+                  subtitle: 'Gérer mes données personnelles',
+                  onTap: () => showDevelopmentMessage(context, 'Confidentialité'),
                 ),
                 _buildSecureMenuItem(
                   context,
@@ -329,6 +376,22 @@ class CustomDrawerParticulier extends StatelessWidget with SecureDrawerMixin {
                     label: const Text('IA', style: TextStyle(fontSize: 12)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      showDevelopmentMessage(context, 'Recherche tatoueurs');
+                    },
+                    icon: const Icon(Icons.search, size: 16),
+                    label: const Text('Chercher', style: TextStyle(fontSize: 12)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.purple,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 8),
                     ),

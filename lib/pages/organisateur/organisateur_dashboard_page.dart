@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
 import 'package:kipik_v5/widgets/common/drawers/drawer_factory.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
-import 'package:kipik_v5/services/auth/auth_service.dart';
+import 'package:kipik_v5/services/auth/secure_auth_service.dart'; // ✅ MIGRÉ
 
 class OrganisateurDashboardPage extends StatefulWidget {
   const OrganisateurDashboardPage({Key? key}) : super(key: key);
@@ -16,7 +16,7 @@ class OrganisateurDashboardPage extends StatefulWidget {
 class _OrganisateurDashboardPageState extends State<OrganisateurDashboardPage> {
   @override
   Widget build(BuildContext context) {
-    final user = AuthService.instance.currentUser;
+    final user = SecureAuthService.instance.currentUser; // ✅ MIGRÉ
     
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -43,9 +43,11 @@ class _OrganisateurDashboardPageState extends State<OrganisateurDashboardPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Titre de bienvenue
+                  // Titre de bienvenue avec nom utilisateur
                   Text(
-                    'Bienvenue dans votre espace organisateur',
+                    user != null 
+                        ? 'Bienvenue ${user['displayName'] ?? user['name'] ?? 'Organisateur'}'
+                        : 'Bienvenue dans votre espace organisateur',
                     style: TextStyle(
                       fontFamily: 'PermanentMarker',
                       fontSize: 24,

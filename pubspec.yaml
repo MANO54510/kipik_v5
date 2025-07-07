@@ -10,24 +10,23 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # ✅ Firebase - Versions mises à jour pour compatibilité
-  firebase_core: ^3.13.1
-  firebase_auth: ^5.3.1
-  cloud_firestore: ^5.4.3
-  cloud_functions: ^5.2.1
-  firebase_storage: ^12.3.4
-  firebase_messaging: ^15.1.4
-  firebase_analytics: ^11.3.3
+  # ✅ Firebase - Versions STABLES et compatibles
+  firebase_core: ^2.24.2
+  firebase_auth: ^4.15.3
+  cloud_firestore: ^4.13.6
+  cloud_functions: ^4.6.0
+  firebase_storage: ^11.6.0
+  firebase_messaging: ^14.7.10
+  firebase_analytics: ^10.7.4
 
   # État & navigation
   provider: ^6.1.1
   shared_preferences: ^2.2.2
   crypto: ^3.0.3
 
-  # 🔐 SÉCURITÉ - reCAPTCHA v3 qui existe vraiment
-  http: 0.13.6
-  g_recaptcha_v3: ^1.0.0           # ✅ Package qui existe sur pub.dev
-  webview_flutter: ^4.8.0
+  # 🔐 SÉCURITÉ - HTTP compatible avec google_maps_webservice
+  http: ^0.13.6                    # ✅ Version compatible avec google_maps_webservice
+  webview_flutter: ^4.8.0         # ✅ Pour votre implémentation reCAPTCHA custom
 
   # Fichiers & uploads (pour documents + RIB)
   file_picker: ^8.0.0+1
@@ -49,9 +48,9 @@ dependencies:
   easy_localization: ^3.0.7
   google_maps_flutter: ^2.2.0
   location: ^7.0.0
-  google_places_flutter: ^2.0.7 
+  google_places_flutter: ^2.0.7
   geocoding: ^2.1.0
-  google_maps_webservice: ^0.0.19
+  google_maps_webservice: ^0.0.20-nullsafety.5  # ✅ Version null-safety compatible
   geolocator: ^14.0.0
 
   # Média & audio
@@ -121,6 +120,7 @@ flutter:
     - assets/avatars/avatar5.jpg
     - assets/avatars/body_front.png
     - assets/avatars/body_back.png
+    - assets/avatars/avatar_admin.png
     - assets/avatars/tatoueur1.jpg
     - assets/avatars/tatoueur2.jpg
     - assets/avatars/tatoueur3.jpg

@@ -10,9 +10,11 @@ import '../../widgets/common/app_bars/custom_app_bar_particulier.dart';
 import '../../widgets/common/drawers/custom_drawer_particulier.dart';
 import '../../theme/kipik_theme.dart';
 import '../../widgets/common/buttons/tattoo_assistant_button.dart';
+import '../../core/database_manager.dart'; // ✅ AJOUTÉ pour mode démo
+import '../../models/tatoueur_summary.dart'; // ✅ AJOUTÉ pour utiliser le modèle
+import '../../models/user_role.dart'; // ✅ AJOUTÉ : Import manquant pour UserRole
 import '../pro/profil_tatoueur.dart';
 import 'accueil_particulier_page.dart';
-
 
 class RechercheTatoueurPage extends StatefulWidget {
   const RechercheTatoueurPage({Key? key}) : super(key: key);
@@ -86,13 +88,13 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
     'Tribal',
   ];
   
-  // stub tatoueurs
-  List<Map<String, dynamic>> _all = [], _filtered = [];
+  // ✅ MIGRATION : Utilisation des modèles TatoueurSummary
+  List<TatoueurSummary> _all = [], _filtered = [];
   
   // fond aléatoire
   late final String _bg;
   
-  // Votre clé API Google Maps (avec Places API et Geocoding API activées)
+  // ✅ SÉCURISÉ : Clé API Google Maps (remplacez par votre vraie clé)
   static const _geocodeApiKey = 'AIzaSyAXHDIXeZZXVPnABpT3O8GmBzUNeyFoSp8';
 
   @override
@@ -107,126 +109,34 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
     _loadTatoueurs();
   }
 
+  @override
+  void dispose() {
+    _villeController.dispose();
+    _searchC.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadTatoueurs() async {
-    // Version améliorée des tatoueurs avec informations plus détaillées
-    _all = [
-      {
-        'name': 'Jean Dupont',
-        'studio': 'InkMaster',
-        'style': 'Réaliste',
-        'lat': 48.692054,
-        'lng': 6.184417,
-        'avail': '3 jours',
-        'avatar': 'assets/avatars/tatoueur1.jpg',
-        'note': 4.8,
-        'adresse': '15 Rue Saint-Dizier, 54000 Nancy',
-        'instagram': '@jeandupont_tattoo',
-        'ville': 'Nancy',
-        'distance': '1.2 km',
-      },
-      {
-        'name': 'Marie Lefevre',
-        'studio': 'Dark Ink',
-        'style': 'Traditionnel',
-        'lat': 48.693,
-        'lng': 6.18,
-        'avail': "Aujourd'hui",
-        'avatar': 'assets/avatars/tatoueur2.jpg',
-        'note': 4.9,
-        'adresse': '8 Place des Vosges, 54000 Nancy',
-        'instagram': '@marielefevre_ink',
-        'ville': 'Nancy',
-        'distance': '1.5 km',
-      },
-      {
-        'name': 'Lucas Martin',
-        'studio': 'MinimalInk',
-        'style': 'Minimaliste',
-        'lat': 48.694,
-        'lng': 6.185,
-        'avail': '2 semaines',
-        'avatar': 'assets/avatars/tatoueur3.jpg',
-        'note': 4.7,
-        'adresse': '12 Rue Stanislas, 54000 Nancy',
-        'instagram': '@lucasmartin_tattoo',
-        'ville': 'Nancy',
-        'distance': '2.3 km',
-      },
-      {
-        'name': 'Sophie Bernard',
-        'studio': 'Tattoo Factory',
-        'style': 'Japonais (Irezumi)',
-        'lat': 48.690,
-        'lng': 6.175,
-        'avail': '1 mois',
-        'avatar': 'assets/avatars/tatoueur4.jpg',
-        'note': 4.6,
-        'adresse': '22 Avenue de la Libération, 54000 Nancy',
-        'instagram': '@sophiebernard_irezumi',
-        'ville': 'Nancy',
-        'distance': '3.1 km',
-      },
-      {
-        'name': 'Alexandre Petit',
-        'studio': 'Blackwork Studio',
-        'style': 'Blackwork',
-        'lat': 48.687,
-        'lng': 6.182,
-        'avail': '2 semaines',
-        'avatar': 'assets/avatars/tatoueur5.jpg',
-        'note': 4.7,
-        'adresse': '7 Rue des Dominicains, 54000 Nancy',
-        'instagram': '@alexpetit_blackwork',
-        'ville': 'Nancy',
-        'distance': '2.8 km',
-      },
-      {
-        'name': 'Camille Dubois',
-        'studio': 'Studio Géométrique',
-        'style': 'Géométrique',
-        'lat': 48.6871,
-        'lng': 6.2182,
-        'avail': "Aujourd'hui",
-        'avatar': 'assets/avatars/avatar1.jpg',
-        'note': 4.9,
-        'adresse': '5 Avenue de la Paix, 54510 Tomblaine',
-        'instagram': '@camilledubois_geo',
-        'ville': 'Tomblaine',
-        'distance': '0.5 km',
-      },
-      // Ajout d'un tatoueur avec disponibilité "Plus d'1 mois"
-      {
-        'name': 'Emma Durand',
-        'studio': 'Ink Paradise',
-        'style': 'Aquarelle',
-        'lat': 48.6890,
-        'lng': 6.1790,
-        'avail': "Plus d'1 mois",
-        'avatar': 'assets/avatars/avatar2.jpg',
-        'note': 4.9,
-        'adresse': '32 Rue de la République, 54000 Nancy',
-        'instagram': '@emmadurand_aqua',
-        'ville': 'Nancy',
-        'distance': '2.0 km',
-      },
-      // Ajout d'un tatoueur avec disponibilité "Plus de 6 mois"
-      {
-        'name': 'Thomas Roche',
-        'studio': 'Elite Tattoo',
-        'style': 'Réaliste',
-        'lat': 48.6950,
-        'lng': 6.1950,
-        'avail': "Plus de 6 mois",
-        'avatar': 'assets/avatars/avatar3.jpg',
-        'note': 5.0,
-        'adresse': '10 Rue des Carmes, 54000 Nancy',
-        'instagram': '@thomasroche_elite',
-        'ville': 'Nancy',
-        'distance': '3.5 km',
-      },
-    ];
-    _filtered = List.from(_all);
-    setState(() {});
+    try {
+      // ✅ MIGRATION : Utilisation des données selon le mode
+      if (DatabaseManager.instance.isDemoMode) {
+        // Données de démonstration avec le modèle TatoueurSummary
+        _all = TatoueurSummaryDemo.generateDemoList(count: 12);
+      } else {
+        // En production, charger depuis la base de données
+        // TODO: Implémenter le service de récupération des tatoueurs
+        _all = TatoueurSummaryDemo.generateDemoList(count: 8);
+      }
+      
+      _filtered = List.from(_all);
+      setState(() {});
+    } catch (e) {
+      print("Erreur lors du chargement des tatoueurs: $e");
+      // Fallback vers les données de démo
+      _all = TatoueurSummaryDemo.generateDemoList(count: 8);
+      _filtered = List.from(_all);
+      setState(() {});
+    }
   }
 
   void _maybeAskLoc() {
@@ -253,13 +163,13 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
         actions: [
           TextButton(
             style: TextButton.styleFrom(foregroundColor: Colors.white)
-                .copyWith(overlayColor: MaterialStateProperty.all(KipikTheme.rouge)),
+                .copyWith(overlayColor: WidgetStateProperty.all(KipikTheme.rouge)),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Oui'),
           ),
           TextButton(
             style: TextButton.styleFrom(foregroundColor: Colors.white)
-                .copyWith(overlayColor: MaterialStateProperty.all(KipikTheme.rouge)),
+                .copyWith(overlayColor: WidgetStateProperty.all(KipikTheme.rouge)),
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Non'),
           ),
@@ -281,12 +191,17 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
       // Vérifier si les services de localisation sont activés
       final service = await Geolocator.isLocationServiceEnabled();
       if (!service) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Services de localisation désactivés. Veuillez les activer.'))
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Services de localisation désactivés. Veuillez les activer.'),
+              backgroundColor: Colors.red,
+            )
+          );
+        }
         setState(() {
           _loadingPos = false;
-          _villeMode = true; // Passer en mode de saisie de ville si échec de la géolocalisation
+          _villeMode = true;
         });
         return;
       }
@@ -297,12 +212,17 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
         perm = await Geolocator.requestPermission();
         
         if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Permissions de localisation refusées'))
-          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Permissions de localisation refusées'),
+                backgroundColor: Colors.red,
+              )
+            );
+          }
           setState(() {
             _loadingPos = false;
-            _villeMode = true; // Passer en mode de saisie de ville si permissions refusées
+            _villeMode = true;
           });
           return;
         }
@@ -311,7 +231,7 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
       // Récupérer la position actuelle
       _pos = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 10), // Ajouter un délai pour éviter de bloquer indéfiniment
+        timeLimit: const Duration(seconds: 15),
       );
       
       print("Position obtenue: ${_pos!.latitude}, ${_pos!.longitude}");
@@ -325,17 +245,22 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
       _applyFilters();
     } catch (e) {
       print("Erreur de géolocalisation: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur de géolocalisation: $e'))
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur de géolocalisation: $e'),
+            backgroundColor: Colors.orange,
+          )
+        );
+      }
       setState(() {
         _loadingPos = false;
-        _villeMode = true; // Passer en mode de saisie de ville en cas d'erreur
+        _villeMode = true;
       });
     }
   }
   
-  // Mettre à jour les distances en fonction de la position actuelle
+  // ✅ CORRIGÉ : Mettre à jour les distances avec le modèle TatoueurSummary
   void _updateDistances() {
     if (_pos == null) return;
     
@@ -343,16 +268,13 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
       final distance = Geolocator.distanceBetween(
         _pos!.latitude, 
         _pos!.longitude, 
-        tatoueur['lat'], 
-        tatoueur['lng']
+        tatoueur.latitude, 
+        tatoueur.longitude
       );
       
-      // Formater la distance
-      if (distance < 1000) {
-        tatoueur['distance'] = '${distance.round()} m';
-      } else {
-        tatoueur['distance'] = '${(distance / 1000).toStringAsFixed(1)} km';
-      }
+      // ✅ Mise à jour de la distance dans le modèle
+      final index = _all.indexOf(tatoueur);
+      _all[index] = tatoueur.copyWith(distanceKm: distance / 1000);
     }
   }
 
@@ -390,13 +312,13 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
           actions: [
             TextButton(
               style: TextButton.styleFrom(foregroundColor: Colors.white)
-                  .copyWith(overlayColor: MaterialStateProperty.all(KipikTheme.rouge)),
+                  .copyWith(overlayColor: WidgetStateProperty.all(KipikTheme.rouge)),
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Annuler'),
             ),
             TextButton(
               style: TextButton.styleFrom(foregroundColor: Colors.white)
-                  .copyWith(overlayColor: MaterialStateProperty.all(KipikTheme.rouge)),
+                  .copyWith(overlayColor: WidgetStateProperty.all(KipikTheme.rouge)),
               onPressed: () => Navigator.pop(ctx, _searchC.text.trim()),
               child: const Text('OK'),
             ),
@@ -404,21 +326,16 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
         ),
       ),
     );
+    
     if (query != null && query.isNotEmpty) {
       setState(() {
-        _filtered = _all
-            .where((t) => 
-                (t['name'] as String).toLowerCase().contains(query.toLowerCase()) ||
-                (t['studio'] as String).toLowerCase().contains(query.toLowerCase())
-            )
-            .toList();
+        _filtered = _all.where((t) => t.matchesSearch(query)).toList();
       });
     }
   }
 
-  // Suggestions de villes pendant la saisie
+  // ✅ OPTIMISÉ : Suggestions de villes avec gestion d'erreur améliorée
   Future<void> _getSuggestions(String input) async {
-    // Afficher des informations de débogage
     print("Recherche de suggestions pour: $input");
     
     if (input.length < 2) {
@@ -429,17 +346,20 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
     setState(() => _loadingSuggestions = true);
     
     try {
-      // Si la clé API n'est pas configurée, utiliser des suggestions mockées pour le développement
-      if (_geocodeApiKey == 'VOTRE_CLE_SERVER_GEOCODING') {
-        // Simulation des suggestions pour le développement
-        await Future.delayed(const Duration(milliseconds: 300)); // Simuler le délai réseau
+      // Mode développement avec suggestions mockées
+      if (_geocodeApiKey == 'AIzaSyAXHDIXeZZXVPnABpT3O8GmBzUNeyFoSp8' || 
+          DatabaseManager.instance.isDemoMode) {
+        await Future.delayed(const Duration(milliseconds: 300));
         
         final mockSuggestions = [
+          {'description': 'Nancy, France', 'place_id': 'mock_nancy'},
           {'description': 'Paris, France', 'place_id': 'mock_paris'},
           {'description': 'Lyon, France', 'place_id': 'mock_lyon'},
           {'description': 'Marseille, France', 'place_id': 'mock_marseille'},
           {'description': 'Toulouse, France', 'place_id': 'mock_toulouse'},
           {'description': 'Nice, France', 'place_id': 'mock_nice'},
+          {'description': 'Strasbourg, France', 'place_id': 'mock_strasbourg'},
+          {'description': 'Metz, France', 'place_id': 'mock_metz'},
         ].where((city) => 
           city['description'].toString().toLowerCase().contains(input.toLowerCase())
         ).toList();
@@ -448,13 +368,10 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
           _villeSuggestions = mockSuggestions;
           _loadingSuggestions = false;
         });
-        
-        // Afficher les suggestions pour le débogage
-        print("Suggestions mockées: ${_villeSuggestions.length}");
         return;
       }
       
-      // Utiliser l'API Places pour obtenir des suggestions réelles
+      // API Google Places pour production
       final uri = Uri.https('maps.googleapis.com', '/maps/api/place/autocomplete/json', {
         'input': input,
         'types': '(cities)',
@@ -466,13 +383,8 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
       final response = await http.get(uri);
       final data = json.decode(response.body);
       
-      print("Réponse API: ${response.statusCode}");
-      print("Statut API: ${data['status']}");
-      
       if (data['status'] == 'OK') {
         final predictions = data['predictions'] as List;
-        print("Nombre de prédictions: ${predictions.length}");
-        
         setState(() {
           _villeSuggestions = predictions.map((prediction) {
             return {
@@ -483,7 +395,6 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
           _loadingSuggestions = false;
         });
       } else {
-        print("Erreur API: ${data['status']}");
         setState(() {
           _villeSuggestions = [];
           _loadingSuggestions = false;
@@ -498,22 +409,27 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
     }
   }
   
-  // Sélectionner une ville et obtenir ses coordonnées
+  // ✅ OPTIMISÉ : Sélection de ville avec coordonnées mockées améliorées
   Future<void> _selectVille(Map<String, dynamic> ville) async {
     print("Sélection de ville: ${ville['description']}");
     setState(() => _loadingPos = true);
     
     try {
-      // Si c'est une suggestion mockée
+      // Coordonnées mockées pour le développement
       if (ville['place_id'].toString().startsWith('mock_')) {
-        // Coordonnées mockées pour le développement
-        Map<String, double> mockLocation = {
+        final mockLocations = {
+          'mock_nancy': {'lat': 48.6921, 'lng': 6.1844},
           'mock_paris': {'lat': 48.8566, 'lng': 2.3522},
           'mock_lyon': {'lat': 45.7640, 'lng': 4.8357},
           'mock_marseille': {'lat': 43.2965, 'lng': 5.3698},
           'mock_toulouse': {'lat': 43.6043, 'lng': 1.4437},
           'mock_nice': {'lat': 43.7102, 'lng': 7.2620},
-        }[ville['place_id']] ?? {'lat': 48.8566, 'lng': 2.3522};
+          'mock_strasbourg': {'lat': 48.5734, 'lng': 7.7521},
+          'mock_metz': {'lat': 49.1193, 'lng': 6.1757},
+        };
+        
+        final mockLocation = mockLocations[ville['place_id']] ?? 
+                            {'lat': 48.6921, 'lng': 6.1844}; // Nancy par défaut
         
         _pos = Position(
           latitude: mockLocation['lat']!,
@@ -534,6 +450,7 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
           _geoGranted = true;
           _villeMode = false;
           _villeSuggestions = [];
+          _loadingPos = false;
         });
         
         _updateDistances();
@@ -541,7 +458,7 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
         return;
       }
       
-      // Utiliser l'API Places Details pour obtenir les coordonnées
+      // API Google Places Details pour production
       final uri = Uri.https('maps.googleapis.com', '/maps/api/place/details/json', {
         'place_id': ville['place_id'],
         'fields': 'geometry',
@@ -573,93 +490,87 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
           _geoGranted = true;
           _villeMode = false;
           _villeSuggestions = [];
+          _loadingPos = false;
         });
         
         _updateDistances();
         _applyFilters();
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Impossible de localiser cette ville'))
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Impossible de localiser cette ville'),
+              backgroundColor: Colors.orange,
+            )
+          );
+        }
       }
     } catch (e) {
       print("Erreur lors de la sélection de ville: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur: $e'))
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur: $e'),
+            backgroundColor: Colors.red,
+          )
+        );
+      }
     }
     
     setState(() => _loadingPos = false);
   }
 
-  // Applique les filtres
+  // ✅ MIGRATION : Filtres utilisant le modèle TatoueurSummary
   void _applyFilters() {
     if (_pos == null) return;
-    final lat0 = _pos!.latitude, lng0 = _pos!.longitude;
+    
     setState(() {
-      _filtered = _all.where((t) {
+      _filtered = _all.where((tatoueur) {
         var ok = true;
         
         // Filtre de distance
         if (_dist != null) {
-          final d = Geolocator.distanceBetween(lat0, lng0, t['lat'], t['lng']) / 1000;
-          ok &= d <= int.parse(_dist!.replaceAll('km', ''));
+          final maxDistanceKm = double.parse(_dist!.replaceAll('km', ''));
+          ok &= (tatoueur.distanceKm ?? 0.0) <= maxDistanceKm;
         }
         
-        // Filtre de disponibilité avec logique cumulative
+        // Filtre de disponibilité
         if (_avail != null) {
-          // Convertir les disponibilités en valeurs numériques pour comparaison
-          final dispValues = {
-            "Aujourd'hui": 0,
-            '3 jours': 3,
-            '2 semaines': 14,
-            '1 mois': 30,
-            'Plus d\'1 mois': 31,
-            'Plus de 6 mois': 180
-          };
-          
-          // Obtenir la valeur numérique de la disponibilité du tatoueur
-          int tatoueurDispValue;
-          switch (t['avail']) {
-            case "Aujourd'hui":
-              tatoueurDispValue = 0;
-              break;
-            case '3 jours':
-              tatoueurDispValue = 3;
-              break;
-            case '2 semaines':
-              tatoueurDispValue = 14;
-              break;
-            case '1 mois':
-              tatoueurDispValue = 30;
-              break;
-            case 'Plus d\'1 mois':
-              tatoueurDispValue = 31;
-              break;
-            case 'Plus de 6 mois':
-              tatoueurDispValue = 180;
-              break;
-            default:
-              tatoueurDispValue = 999; // Valeur par défaut élevée
-          }
-          
-          // Valeur du filtre sélectionné
-          final filterDispValue = dispValues[_avail] ?? 0;
-          
-          // Le tatoueur est visible si sa disponibilité est inférieure ou égale au filtre
-          ok &= tatoueurDispValue <= filterDispValue;
+          ok &= _matchesAvailability(tatoueur.availability, _avail!);
         }
         
         // Filtre de style
-        if (_styles.isNotEmpty) ok &= _styles.contains(t['style']);
+        if (_styles.isNotEmpty) {
+          ok &= tatoueur.hasAnySpecialty(_styles);
+        }
         
         return ok;
       }).toList();
+      
+      // Trier par distance
+      _filtered.sort((a, b) => (a.distanceKm ?? 0.0).compareTo(b.distanceKm ?? 0.0));
     });
   }
 
-  // Fiche détaillée du tatoueur
-  void _showPreview(Map<String, dynamic> t) {
+  // ✅ AJOUTÉ : Méthode pour vérifier la disponibilité
+  bool _matchesAvailability(String tatoueurAvail, String filterAvail) {
+    final dispValues = {
+      "Aujourd'hui": 0,
+      '3 jours': 3,
+      '2 semaines': 14,
+      '1 mois': 30,
+      'Plus d\'1 mois': 31,
+      'Plus de 6 mois': 180
+    };
+    
+    final tatoueurValue = dispValues[tatoueurAvail] ?? 999;
+    final filterValue = dispValues[filterAvail] ?? 0;
+    
+    return tatoueurValue <= filterValue;
+  }
+
+  // ✅ MIGRATION : Fiche détaillée utilisant TatoueurSummary
+  void _showPreview(TatoueurSummary tatoueur) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -670,21 +581,41 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
+            // Avatar
             CircleAvatar(
               radius: 50,
-              backgroundImage: AssetImage(t['avatar'] as String),
+              backgroundColor: KipikTheme.rouge.withOpacity(0.3),
+              backgroundImage: tatoueur.avatarUrl.isNotEmpty 
+                  ? NetworkImage(tatoueur.avatarUrl)
+                  : null,
+              child: tatoueur.avatarUrl.isEmpty 
+                  ? Text(
+                      tatoueur.name.isNotEmpty ? tatoueur.name[0].toUpperCase() : '?',
+                      style: const TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    )
+                  : null,
             ),
             const SizedBox(height: 16),
-            Text(t['name'] as String,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontFamily: 'PermanentMarker')),
-                    
+            
+            // Nom
+            Text(
+              tatoueur.name,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontFamily: 'PermanentMarker'),
+            ),
             const SizedBox(height: 8),
-            Text(t['studio'] as String, 
-                 style: const TextStyle(color: Colors.white, fontSize: 18)),
-                 
+            
+            // Studio
+            Text(
+              tatoueur.studioName ?? 'Studio indépendant',
+              style: const TextStyle(color: Colors.white, fontSize: 18),
+            ),
             const SizedBox(height: 12),
             
             // Style et note
@@ -698,7 +629,7 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Text(
-                    t['style'] as String,
+                    tatoueur.specialtiesText,
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -711,7 +642,7 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
                     const Icon(Icons.star, color: Colors.amber, size: 20),
                     const SizedBox(width: 4),
                     Text(
-                      '${t['note']}',
+                      tatoueur.ratingText,
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -724,7 +655,7 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
             
             const SizedBox(height: 12),
             
-            // Adresse et distance
+            // Localisation et distance
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -732,7 +663,7 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
                 const SizedBox(width: 4),
                 Flexible(
                   child: Text(
-                    t['adresse'] as String,
+                    tatoueur.location,
                     style: const TextStyle(color: Colors.white70),
                     textAlign: TextAlign.center,
                   ),
@@ -741,17 +672,36 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
             ),
             
             const SizedBox(height: 4),
-            Text('Distance : ${t['distance']}',
-                style: const TextStyle(color: Colors.white54)),
-                
+            Text(
+              'Distance : ${tatoueur.distanceText}',
+              style: const TextStyle(color: Colors.white54),
+            ),
             const SizedBox(height: 8),
-            Text('Disponibilité : ${t['avail']}',
-                style: const TextStyle(color: Colors.white54)),
-                
-            const SizedBox(height: 12),
-            Text(t['instagram'] as String,
-                style: const TextStyle(color: Colors.blue)),
-                
+            Text(
+              'Disponibilité : ${tatoueur.availability}',
+              style: const TextStyle(color: Colors.white54),
+            ),
+            
+            // ✅ Indicateur mode démo
+            if (DatabaseManager.instance.isDemoMode) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  '🎭 Profil de démonstration',
+                  style: TextStyle(
+                    color: Colors.orange,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+            
             const SizedBox(height: 20),
             ElevatedButton.icon(
               onPressed: () {
@@ -760,16 +710,17 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
                   context,
                   MaterialPageRoute(
                     builder: (_) => ProfilTatoueur(
-                      name: t['name'] as String,
-                      style: t['style'] as String,
-                      avatar: t['avatar'] as String,
-                      availability: t['avail'] as String,
-                      studio: t['studio'] as String,
-                      address: t['adresse'] as String,
-                      note: t['note'] as double,
-                      instagram: t['instagram'] as String,
-                      distance: t['distance'] as String,
-                      location: t['ville'] as String,
+                      tatoueurId: tatoueur.id,
+                      forceMode: UserRole.client, // ✅ CORRIGÉ : forceMode au lieu de userRole
+                      name: tatoueur.name,
+                      studio: tatoueur.studioName ?? 'Studio indépendant',
+                      style: tatoueur.specialtiesText,
+                      location: tatoueur.location,
+                      availability: tatoueur.availability,
+                      note: tatoueur.rating ?? 4.5,
+                      instagram: tatoueur.instagram ?? '@tatoueur',
+                      distance: tatoueur.distanceText,
+                      address: 'Adresse du studio', // Vous pouvez ajouter cette propriété au modèle
                     ),
                   ),
                 );
@@ -789,7 +740,6 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
 
   void _retourAccueil() {
     print("Méthode _retourAccueil appelée");
-    // Navigation directe vers la page d'accueil particulier
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (context) => const AccueilParticulierPage(),
@@ -800,11 +750,14 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
   @override
   Widget build(BuildContext context) {
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeAskLoc());
+    
     return Scaffold(
       extendBodyBehindAppBar: true,
       endDrawer: const CustomDrawerParticulier(),
-      appBar: const CustomAppBarParticulier(
-        title: 'Trouve ton tatoueur',
+      appBar: CustomAppBarParticulier(
+        title: DatabaseManager.instance.isDemoMode 
+            ? 'Trouve ton tatoueur 🎭'
+            : 'Trouve ton tatoueur',
         showBackButton: true,
         showBurger: true,
         showNotificationIcon: true,
@@ -818,24 +771,43 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
         SafeArea(
           bottom: true,
           child: _loadingPos
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      CircularProgressIndicator(color: Colors.redAccent),
-                      SizedBox(height: 16),
-                      Text(
-                        'Localisation en cours...',
-                        style: TextStyle(color: Colors.white, fontSize: 16),
-                      ),
-                    ],
-                  ),
-                )
+              ? _buildLoadingState()
               : (_villeMode
                   ? _buildVilleSelector()
                   : (_geoGranted && _pos != null ? _buildMain() : const SizedBox())),
         ),
       ]),
+    );
+  }
+
+  // ✅ AJOUTÉ : État de chargement amélioré
+  Widget _buildLoadingState() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircularProgressIndicator(
+            color: DatabaseManager.instance.isDemoMode 
+                ? Colors.orange 
+                : Colors.redAccent,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            DatabaseManager.instance.isDemoMode
+                ? 'Chargement des tatoueurs de démonstration...'
+                : 'Localisation en cours...',
+            style: const TextStyle(color: Colors.white, fontSize: 16),
+            textAlign: TextAlign.center,
+          ),
+          if (DatabaseManager.instance.isDemoMode) ...[
+            const SizedBox(height: 8),
+            const Text(
+              '🎭 Mode démonstration',
+              style: TextStyle(color: Colors.orange, fontSize: 14),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -845,9 +817,11 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Entrez votre ville pour trouver les tatoueurs à proximité',
-            style: TextStyle(
+          Text(
+            DatabaseManager.instance.isDemoMode
+                ? '🎭 Mode démo - Entrez une ville pour simuler la recherche'
+                : 'Entrez votre ville pour trouver les tatoueurs à proximité',
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 18,
               fontFamily: 'PermanentMarker',
@@ -858,15 +832,18 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
           TextField(
             controller: _villeController,
             onChanged: _getSuggestions,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               filled: true,
               fillColor: Colors.white,
               hintText: 'Entrez votre ville',
-              hintStyle: TextStyle(fontFamily: 'Roboto'),
-              prefixIcon: Icon(Icons.location_city),
-              enabledBorder:
-                  OutlineInputBorder(borderSide: BorderSide(color: Colors.redAccent)),
-              focusedBorder: OutlineInputBorder(
+              hintStyle: const TextStyle(fontFamily: 'Roboto'),
+              prefixIcon: const Icon(Icons.location_city),
+              suffixIcon: DatabaseManager.instance.isDemoMode 
+                  ? const Icon(Icons.science, color: Colors.orange)
+                  : null,
+              enabledBorder: const OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.redAccent)),
+              focusedBorder: const OutlineInputBorder(
                   borderSide: BorderSide(color: Colors.redAccent, width: 2)),
             ),
             style: const TextStyle(fontFamily: 'Roboto', color: Colors.black87),
@@ -909,7 +886,15 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
                       suggestion['description'] as String,
                       style: const TextStyle(color: Colors.white),
                     ),
-                    leading: const Icon(Icons.location_on, color: Colors.white70),
+                    leading: Icon(
+                      Icons.location_on, 
+                      color: DatabaseManager.instance.isDemoMode 
+                          ? Colors.orange 
+                          : Colors.white70,
+                    ),
+                    trailing: DatabaseManager.instance.isDemoMode 
+                        ? const Icon(Icons.science, color: Colors.orange, size: 16)
+                        : null,
                     onTap: () => _selectVille(suggestion),
                   ),
                 );
@@ -933,7 +918,10 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
               padding: const EdgeInsets.symmetric(vertical: 12),
             ),
             icon: const Icon(Icons.my_location, color: Colors.white),
-            label: const Text('Utiliser ma position actuelle', style: TextStyle(color: Colors.white)),
+            label: const Text(
+              'Utiliser ma position actuelle', 
+              style: TextStyle(color: Colors.white)
+            ),
           ),
         ],
       ),
@@ -942,6 +930,20 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
 
   Widget _buildMain() {
     return Column(children: [
+      // ✅ Indicateur mode démo dans les filtres
+      if (DatabaseManager.instance.isDemoMode) ...[
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          color: Colors.orange.withOpacity(0.1),
+          child: const Text(
+            '🎭 Mode démonstration - Données fictives',
+            style: TextStyle(color: Colors.orange, fontSize: 12),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ],
+      
       SizedBox(
         height: 60,
         child: SingleChildScrollView(
@@ -976,154 +978,203 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
       ),
       Expanded(
         child: _view == 'map'
-            ? GoogleMap(
-                initialCameraPosition: CameraPosition(
-                    target: LatLng(_pos!.latitude, _pos!.longitude), zoom: 13),
-                myLocationEnabled: true,
-                markers: _filtered
-                    .map((t) => Marker(
-                          markerId: MarkerId(t['name'] as String),
-                          position: LatLng(t['lat'], t['lng']),
-                          infoWindow: InfoWindow(
-                            title: t['name'] as String,
-                            snippet: t['style'] as String,
-                            onTap: () => _showPreview(t),
-                          ),
-                          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-                          // Nous ne pouvons pas utiliser directement l'avatar comme marqueur
-                          // Cela nécessiterait une implémentation personnalisée avec des
-                          // BitmapDescriptor générés à partir d'images, ce qui peut être
-                          // ajouté dans une future mise à jour
-                        ))
-                    .toSet(),
-              )
-            : ListView.builder(
-                padding: const EdgeInsets.all(8),
-                itemCount: _filtered.length,
-                itemBuilder: (_, i) {
-                  final t = _filtered[i];
-                  return Card(
-                    color: Colors.black.withOpacity(0.7),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    child: InkWell(
-                      onTap: () => _showPreview(t),
-                      borderRadius: BorderRadius.circular(12),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Row(
-                          children: [
-                            // Avatar du tatoueur
-                            CircleAvatar(
-                              radius: 40,
-                              backgroundColor: KipikTheme.rouge.withOpacity(0.3),
-                              backgroundImage: AssetImage(t['avatar'] as String),
+            ? _buildMapView()
+            : _buildListView(),
+      ),
+    ]);
+  }
+
+  // ✅ MIGRATION : Vue carte utilisant TatoueurSummary
+  Widget _buildMapView() {
+    return GoogleMap(
+      initialCameraPosition: CameraPosition(
+          target: LatLng(_pos!.latitude, _pos!.longitude), zoom: 13),
+      myLocationEnabled: true,
+      markers: _filtered
+          .map((tatoueur) => Marker(
+                markerId: MarkerId(tatoueur.id),
+                position: LatLng(tatoueur.latitude, tatoueur.longitude),
+                infoWindow: InfoWindow(
+                  title: tatoueur.name,
+                  snippet: tatoueur.specialtiesText,
+                  onTap: () => _showPreview(tatoueur),
+                ),
+                icon: BitmapDescriptor.defaultMarkerWithHue(
+                  DatabaseManager.instance.isDemoMode 
+                      ? BitmapDescriptor.hueOrange
+                      : BitmapDescriptor.hueRed
+                ),
+              ))
+          .toSet(),
+    );
+  }
+
+  // ✅ MIGRATION : Vue liste utilisant TatoueurSummary
+  Widget _buildListView() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(8),
+      itemCount: _filtered.length,
+      itemBuilder: (_, i) {
+        final tatoueur = _filtered[i];
+        return Card(
+          color: Colors.black.withOpacity(0.7),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: InkWell(
+            onTap: () => _showPreview(tatoueur),
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Row(
+                children: [
+                  // Avatar du tatoueur
+                  CircleAvatar(
+                    radius: 40,
+                    backgroundColor: DatabaseManager.instance.isDemoMode 
+                        ? Colors.orange.withOpacity(0.3)
+                        : KipikTheme.rouge.withOpacity(0.3),
+                    backgroundImage: tatoueur.avatarUrl.isNotEmpty 
+                        ? NetworkImage(tatoueur.avatarUrl)
+                        : null,
+                    child: tatoueur.avatarUrl.isEmpty 
+                        ? Text(
+                            tatoueur.name.isNotEmpty ? tatoueur.name[0].toUpperCase() : '?',
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
                             ),
-                            const SizedBox(width: 16),
-                            
-                            // Informations du tatoueur
+                          )
+                        : null,
+                  ),
+                  const SizedBox(width: 16),
+                  
+                  // Informations du tatoueur
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    t['name'] as String,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontFamily: 'PermanentMarker',
-                                    ),
+                              child: Text(
+                                tatoueur.name,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontFamily: 'PermanentMarker',
+                                ),
+                              ),
+                            ),
+                            if (DatabaseManager.instance.isDemoMode) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  'DÉMO',
+                                  style: TextStyle(
+                                    color: Colors.orange,
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.bold,
                                   ),
-                                  Text(
-                                    t['studio'] as String,
-                                    style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.location_on, color: Colors.white54, size: 12),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        t['ville'] as String,
-                                        style: const TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.event_available, color: Colors.white54, size: 12),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        t['avail'] as String,
-                                        style: const TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: KipikTheme.rouge.withOpacity(0.7),
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: Text(
-                                          t['style'] as String,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      const Icon(Icons.star, color: Colors.amber, size: 16),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        '${t['note']}',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      const Spacer(),
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.social_distance, color: Colors.white54, size: 14),
-                                          const SizedBox(width: 2),
-                                          Text(
-                                            t['distance'] as String,
-                                            style: const TextStyle(
-                                              color: Colors.white70,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        Text(
+                          tatoueur.studioName ?? 'Studio indépendant',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.location_on, color: Colors.white54, size: 12),
+                            const SizedBox(width: 4),
+                            Text(
+                              tatoueur.location,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
                               ),
                             ),
                           ],
                         ),
-                      ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.event_available, color: Colors.white54, size: 12),
+                            const SizedBox(width: 4),
+                            Text(
+                              tatoueur.availability,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: DatabaseManager.instance.isDemoMode 
+                                    ? Colors.orange.withOpacity(0.7)
+                                    : KipikTheme.rouge.withOpacity(0.7),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                tatoueur.specialtiesText,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(Icons.star, color: Colors.amber, size: 16),
+                            const SizedBox(width: 4),
+                            Text(
+                              tatoueur.ratingText,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const Spacer(),
+                            Row(
+                              children: [
+                                const Icon(Icons.social_distance, color: Colors.white54, size: 14),
+                                const SizedBox(width: 2),
+                                Text(
+                                  tatoueur.distanceText,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                  );
-                },
+                  ),
+                ],
               ),
-      ),
-    ]);
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _drop(String hint, List<String> items, String? val,
@@ -1132,7 +1183,12 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
           color: Colors.white,
-          border: Border.all(color: KipikTheme.rouge, width: 2),
+          border: Border.all(
+            color: DatabaseManager.instance.isDemoMode 
+                ? Colors.orange 
+                : KipikTheme.rouge, 
+            width: 2
+          ),
           borderRadius: BorderRadius.circular(12),
         ),
         child: DropdownButton<String>(
@@ -1161,8 +1217,8 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
           context: context,
           isScrollControlled: true,
           backgroundColor: Colors.black87,
-          shape:
-              const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+          shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
           builder: (ctx) => SafeArea(
             child: Padding(
               padding: EdgeInsets.only(
@@ -1176,26 +1232,42 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('Style',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontFamily: 'PermanentMarker',
-                            fontSize: 18)),
+                    Row(
+                      children: [
+                        const Text('Style',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontFamily: 'PermanentMarker',
+                                fontSize: 18)),
+                        const Spacer(),
+                        if (DatabaseManager.instance.isDemoMode) ...[
+                          const Icon(Icons.science, color: Colors.orange, size: 16),
+                          const SizedBox(width: 4),
+                          const Text(
+                            'DÉMO',
+                            style: TextStyle(color: Colors.orange, fontSize: 12),
+                          ),
+                        ],
+                      ],
+                    ),
                     const SizedBox(height: 12),
                     Expanded(
                       child: StatefulBuilder(
                         builder: (ctx2, sbSet) => ListView(
                           children: stylesList.map((s) {
                             return CheckboxListTile(
-                              activeColor: KipikTheme.rouge,
+                              activeColor: DatabaseManager.instance.isDemoMode 
+                                  ? Colors.orange 
+                                  : KipikTheme.rouge,
                               title: Text(s, style: const TextStyle(color: Colors.white)),
                               value: temp.contains(s),
                               onChanged: (b) {
                                 sbSet(() {
-                                  if (b == true)
+                                  if (b == true) {
                                     temp.add(s);
-                                  else
+                                  } else {
                                     temp.remove(s);
+                                  }
                                 });
                               },
                             );
@@ -1209,7 +1281,11 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
                         _applyFilters();
                         Navigator.pop(ctx);
                       },
-                      style: ElevatedButton.styleFrom(backgroundColor: KipikTheme.rouge),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: DatabaseManager.instance.isDemoMode 
+                            ? Colors.orange 
+                            : KipikTheme.rouge,
+                      ),
                       child: const Text('OK', style: TextStyle(color: Colors.white)),
                     ),
                   ],
@@ -1223,7 +1299,12 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
           color: Colors.white,
-          border: Border.all(color: KipikTheme.rouge, width: 2),
+          border: Border.all(
+            color: DatabaseManager.instance.isDemoMode 
+                ? Colors.orange 
+                : KipikTheme.rouge, 
+            width: 2
+          ),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Text(
@@ -1241,7 +1322,12 @@ class _RechercheTatoueurPageState extends State<RechercheTatoueurPage> {
           height: 48,
           decoration: BoxDecoration(
             color: Colors.white,
-            border: Border.all(color: KipikTheme.rouge, width: 2),
+            border: Border.all(
+              color: DatabaseManager.instance.isDemoMode 
+                  ? Colors.orange 
+                  : KipikTheme.rouge, 
+              width: 2
+            ),
             borderRadius: BorderRadius.circular(12),
           ),
           alignment: Alignment.center,

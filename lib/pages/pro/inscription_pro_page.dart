@@ -1,23 +1,25 @@
+// lib/pages/pro/inscription_pro_page.dart
+
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:kipik_v5/models/user_role.dart'; // ✅ MIGRATION: Import correct
 
 import '../../widgets/common/app_bars/custom_app_bar_kipik.dart';
 import '../../widgets/utils/cgu_cgv_validation_widget.dart';
 import 'confirmation_inscription_pro_page.dart';
-import 'package:kipik_v5/services/auth/secure_auth_service.dart'; // ✅ MIGRATION
-import 'package:kipik_v5/services/promo/firebase_promo_code_service.dart'; // ✅ MIGRATION
+import 'package:kipik_v5/services/auth/secure_auth_service.dart';
+import 'package:kipik_v5/services/promo/firebase_promo_code_service.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
-import '../pro/home_page_pro.dart';
 
 class InscriptionProPage extends StatefulWidget {
-  InscriptionProPage({Key? key, SecureAuthService? authService})
-      : authService = authService ?? SecureAuthService.instance, // ✅ MIGRATION
-        super(key: key);
+  InscriptionProPage({
+    Key? key, 
+    SecureAuthService? authService
+  }) : authService = authService ?? SecureAuthService.instance,
+       super(key: key);
 
-  final SecureAuthService authService; // ✅ MIGRATION
+  final SecureAuthService authService;
 
   @override
   State<InscriptionProPage> createState() => _InscriptionProPageState();
@@ -32,7 +34,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
   final _tatoueurPrenom = TextEditingController();
   final _tatoueurNom    = TextEditingController();
   DateTime? _birthDate;
-  String? _societeForme; // Auto‑entreprise ou Société
+  String? _societeForme;
   final _siren          = TextEditingController();
 
   // ─── Coordonnées pro ───
@@ -46,14 +48,14 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
 
   // ─── Code promo ───
   final _promoCode      = TextEditingController();
-  Map<String, dynamic>? _validatedPromoCode; // ✅ MIGRATION: Map au lieu de PromoCode
+  Map<String, dynamic>? _validatedPromoCode;
   bool _isValidatingPromo = false;
 
   // ─── Pièces à transmettre ───
   XFile? _idDocument;
   XFile? _hygieneCert;
   XFile? _kbis;
-  XFile? _rib; // Nouveau : RIB obligatoire
+  XFile? _rib;
 
   // ─── Newsletter & CGU/CGV ───
   bool _newsletter     = false;
@@ -62,13 +64,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
   bool _showPassword   = false;
   bool _showConfirm    = false;
 
-  // ─── Abonnement & paiement ───
-  String _selectedPlan   = 'essai';
-  bool   _paymentDone    = false;
-  final String _stripeTrialUrl  = 'https://buy.stripe.com/test_trial_link';
-  final String _stripeAnnualUrl = 'https://buy.stripe.com/test_annual_link';
-
-  // Nombre d'inscrits actuel (à récupérer depuis Firebase)
+  // Nombre d'inscrits actuel
   final int _currentSignupCount = 45;
   static const int _promoLimit = 100;
 
@@ -87,14 +83,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
     _promoCode.dispose();
     super.dispose();
   }
-
-  // ✅ MIGRATION: Logique adaptée aux nouveaux types de codes
-  bool get _needsPayment {
-    if (_validatedPromoCode == null) return true;
-    final type = _validatedPromoCode!['type'] as String?;
-    return type != 'referral'; // Les codes de parrainage permettent l'inscription gratuite
-  }
-
+  
   bool get _canSubmit =>
       _formKey.currentState?.validate() == true &&
       _shopName.text.isNotEmpty &&
@@ -112,13 +101,10 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
       _idDocument    != null &&
       _hygieneCert   != null &&
       _kbis          != null &&
-      _rib           != null && // RIB obligatoire
+      _rib           != null &&
       _cguAccepted   &&
-      _cgvAccepted   &&
-      // ✅ Logique de validation du paiement corrigée
-      (_paymentDone || !_needsPayment); // Pas besoin de paiement si code gratuit OU de parrainage
+      _cgvAccepted;
 
-  // ✅ MIGRATION: Utilise FirebasePromoCodeService
   Future<void> _validatePromoCode() async {
     final code = _promoCode.text.trim();
     if (code.isEmpty) return;
@@ -128,7 +114,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
     try {
       final promoData = await FirebasePromoCodeService.instance.validatePromoCode(code);
       
-      if (!mounted) return; // Vérification avant setState
+      if (!mounted) return;
       
       setState(() {
         _validatedPromoCode = promoData;
@@ -141,13 +127,11 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
         final value = promoData['value'] as num?;
         
         if (type == 'referral') {
-          message += '\nCode de parrainage validé ! Vous pouvez vous inscrire gratuitement.';
-          // Reset payment status since it's not needed for referral codes
-          _paymentDone = false;
+          message += '\nCode de parrainage validé ! Réduction appliquée sur votre futur abonnement.';
         } else if (type == 'percentage' && value != null) {
-          message += '\n${value.toInt()}% de réduction appliquée !';
+          message += '\n${value.toInt()}% de réduction appliquée sur votre futur abonnement !';
         } else if (type == 'fixed' && value != null) {
-          message += '\n${value.toInt()}€ de réduction appliquée !';
+          message += '\n${value.toInt()}€ de réduction appliquée sur votre futur abonnement !';
         }
         
         if (mounted) {
@@ -170,7 +154,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
         }
       }
     } catch (e) {
-      if (!mounted) return; // Vérification avant setState
+      if (!mounted) return;
       
       setState(() => _isValidatingPromo = false);
       
@@ -185,17 +169,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
     }
   }
 
-  Future<void> _launchStripe(String url) async {
-    if (!await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Impossible d\'ouvrir Stripe')),
-      );
-    } else {
-      setState(() => _paymentDone = true);
-    }
-  }
-
-  // ✅ MIGRATION: Utilise SecureAuthService
+  // ✅ CORRECTION : Méthode sans recordReferral
   Future<void> _submitForm() async {
     try {
       // Créer l'utilisateur avec Firebase Auth
@@ -213,7 +187,11 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
         return;
       }
 
-      // ✅ MIGRATION: Mettre à jour le profil avec les données supplémentaires
+      // Calcul des dates d'essai
+      final now = DateTime.now();
+      final trialEndDate = now.add(const Duration(days: 30));
+
+      // Mettre à jour le profil avec essai 30 jours
       await widget.authService.updateUserProfile(
         additionalData: {
           'shopName': _shopName.text.trim(),
@@ -223,36 +201,63 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
           'siren': _siren.text.trim(),
           'phonePro': _phonePro.text.trim(),
           'emailPro': _emailPro.text.trim(),
-          'selectedPlan': _selectedPlan,
           'newsletter': _newsletter,
-          'role': 'tatoueur', // Confirmer le rôle
+          'role': 'tatoueur',
+          
+          // Données d'essai 30 jours
+          'subscriptionType': 'trial',
+          'trialStartDate': now.toIso8601String(),
+          'trialEndDate': trialEndDate.toIso8601String(),
+          'trialDaysRemaining': 30,
+          'subscriptionStatus': 'trial_active',
+          'mustChooseSubscription': false,
+          
+          // Documents uploadés
+          'documents': {
+            'idDocument': _idDocument?.name,
+            'hygieneCert': _hygieneCert?.name,
+            'kbis': _kbis?.name,
+            'rib': _rib?.name,
+          },
         },
       );
 
-      // ✅ MIGRATION: Si un code promo valide est utilisé, l'enregistrer
+      // ✅ CORRECTION : Gestion simplifiée du code promo
       if (_validatedPromoCode != null) {
         final code = _validatedPromoCode!['code'] as String;
-        await FirebasePromoCodeService.instance.usePromoCode(code);
-
-        // Si c'est un code de parrainage, enregistrer le parrainage
-        final type = _validatedPromoCode!['type'] as String?;
-        if (type == 'referral') {
-          final createdBy = _validatedPromoCode!['createdBy'] as String?;
-          if (createdBy != null) {
-            await FirebasePromoCodeService.instance.recordReferral(
-              referrerId: createdBy,
-              referredUserId: widget.authService.currentUserId!,
-              referralCode: code,
-            );
-          }
+        
+        try {
+          // Marquer le code comme utilisé
+          await FirebasePromoCodeService.instance.usePromoCode(code);
+          
+          // Sauvegarder le code promo pour application future
+          await widget.authService.updateUserProfile(
+            additionalData: {
+              'pendingPromoCode': {
+                'code': code,
+                'type': _validatedPromoCode!['type'],
+                'value': _validatedPromoCode!['value'],
+                'description': _validatedPromoCode!['description'],
+                'appliedAt': DateTime.now().toIso8601String(),
+                'createdBy': _validatedPromoCode!['createdBy'], // Pour les parrainages
+              }
+            },
+          );
+          
+          print('✅ Code promo sauvegardé pour application future');
+        } catch (e) {
+          print('⚠️ Erreur lors de la sauvegarde du code promo: $e');
+          // Ne pas bloquer l'inscription pour une erreur de code promo
         }
       }
 
-      // Redirection vers la page d'accueil pro
+      // Redirection vers la page de confirmation
       if (mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const HomePagePro()),
+          MaterialPageRoute(
+            builder: (_) => const ConfirmationInscriptionProPage(),
+          ),
         );
       }
     } catch (e) {
@@ -320,7 +325,6 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
             : null),
       );
 
-  // ✅ MIGRATION: Méthodes utilitaires pour l'affichage des codes promo
   bool get _isReferralCode {
     return _validatedPromoCode?['type'] == 'referral';
   }
@@ -328,8 +332,6 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
   String? get _referrerEmail {
     if (!_isReferralCode) return null;
     final createdBy = _validatedPromoCode?['createdBy'] as String?;
-    // Dans un vrai cas, il faudrait récupérer l'email depuis l'ID
-    // Pour l'instant on peut utiliser la description ou un autre champ
     return _validatedPromoCode?['description']?.toString().split(' pour ').last ?? 'Utilisateur';
   }
 
@@ -365,7 +367,50 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // 1) Code promo (en premier)
+                    // Bandeau essai gratuit 30 jours
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.green.shade400, Colors.green.shade600],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.green, width: 2),
+                      ),
+                      child: const Column(
+                        children: [
+                          Icon(
+                            Icons.celebration,
+                            color: Colors.white,
+                            size: 32,
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            '🎉 ESSAI GRATUIT 30 JOURS',
+                            style: TextStyle(
+                              fontFamily: 'PermanentMarker',
+                              fontSize: 18,
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Profitez de toutes les fonctionnalités pendant 30 jours.\nVous choisirez votre abonnement à la fin de la période.',
+                            style: TextStyle(
+                              fontFamily: 'Roboto',
+                              fontSize: 14,
+                              color: Colors.white,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // 1) Code promo
                     Container(
                       padding: const EdgeInsets.all(16),
                       margin: const EdgeInsets.only(bottom: 20),
@@ -383,6 +428,17 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                               fontFamily: 'PermanentMarker',
                               fontSize: 16,
                               color: Colors.black87,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Bénéficiez d\'une réduction sur votre futur abonnement',
+                            style: TextStyle(
+                              fontFamily: 'Roboto',
+                              fontSize: 12,
+                              color: Colors.grey,
+                              fontStyle: FontStyle.italic,
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -425,7 +481,6 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                               ),
                             ],
                           ),
-                          // ✅ MIGRATION: Affichage adapté aux nouveaux types
                           if (_validatedPromoCode != null) ...[
                             const SizedBox(height: 8),
                             Container(
@@ -441,8 +496,8 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                                     _isReferralCode
                                         ? '✅ Code de parrainage validé !'
                                         : _validatedPromoCode!['type'] == 'percentage'
-                                        ? '✅ ${(_validatedPromoCode!['value'] as num).toInt()}% de réduction appliquée !'
-                                        : '✅ ${(_validatedPromoCode!['value'] as num).toInt()}€ de réduction appliquée !',
+                                        ? '✅ ${(_validatedPromoCode!['value'] as num).toInt()}% de réduction sur votre futur abonnement !'
+                                        : '✅ ${(_validatedPromoCode!['value'] as num).toInt()}€ de réduction sur votre futur abonnement !',
                                     style: const TextStyle(
                                       color: Colors.green,
                                       fontWeight: FontWeight.bold,
@@ -456,16 +511,6 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                                       style: const TextStyle(
                                         color: Colors.green,
                                         fontSize: 12,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    const Text(
-                                      'En souscrivant un abonnement annuel, votre parrain recevra 1 mois gratuit !',
-                                      style: TextStyle(
-                                        color: Colors.green,
-                                        fontSize: 11,
-                                        fontStyle: FontStyle.italic,
                                       ),
                                       textAlign: TextAlign.center,
                                     ),
@@ -602,7 +647,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                     ),
 
                     const SizedBox(height: 20),
-                    // 5) Pièces obligatoires (avec RIB ajouté)
+                    // 5) Pièces obligatoires
                     const Text(
                       '📄 Documents obligatoires',
                       style: TextStyle(
@@ -679,7 +724,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                         border: Border.all(color: Colors.blue),
                       ),
                       child: const Text(
-                        '💡 Le RIB est nécessaire pour mettre en place les prélèvements automatiques SEPA après le premier paiement Stripe, afin de réduire les frais de transaction.',
+                        '💡 Le RIB est nécessaire pour mettre en place les prélèvements automatiques SEPA après votre période d\'essai, afin de réduire les frais de transaction.',
                         style: TextStyle(
                           fontFamily: 'Roboto',
                           color: Colors.blue,
@@ -689,148 +734,8 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                       ),
                     ),
 
-                    // 6) Bandeau promo (si pas de code gratuit)
-                    if (remaining > 0 && !_isReferralCode) ...[
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        margin: const EdgeInsets.symmetric(vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.white70,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          'Offre promo : plus que $remaining places à 79 €/mois',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontFamily: 'PermanentMarker',
-                            color: Colors.black87,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                    ],
-
-                    // 7) Choix de l'abonnement (si paiement nécessaire)
-                    if (_needsPayment) ...[
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Choix de l\'abonnement',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontFamily: 'PermanentMarker',
-                          fontSize: 18,
-                          color: Colors.white,
-                        ),
-                      ),
-                      // Bonus de parrainage pour l'abonnement annuel
-                      if (_isReferralCode) ...[
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.amber.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.amber),
-                          ),
-                          child: const Text(
-                            '🎁 Bonus : En choisissant l\'abonnement annuel, votre parrain recevra 1 mois gratuit !',
-                            style: TextStyle(
-                              color: Colors.amber,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _PlanCard(
-                              label: 'Essai de 3 mois\n79 € TTC mensuel',
-                              selected: _selectedPlan == 'essai',
-                              onTap: () {
-                                setState(() {
-                                  _selectedPlan = 'essai';
-                                  _paymentDone = false;
-                                });
-                                _launchStripe(_stripeTrialUrl);
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _PlanCard(
-                              label: _isReferralCode
-                                  ? 'Engagement 12 mois\n79 € TTC mensuel\ndont 1 mois offert\n+ 1 mois pour votre parrain 🎁'
-                                  : 'Engagement 12 mois\n79 € TTC mensuel\ndont 1 mois offert',
-                              selected: _selectedPlan == 'annuel',
-                              onTap: () {
-                                setState(() {
-                                  _selectedPlan = 'annuel';
-                                  _paymentDone = false;
-                                });
-                                _launchStripe(_stripeAnnualUrl);
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ] else if (_isReferralCode) ...[
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        margin: const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.blue, width: 2),
-                        ),
-                        child: Column(
-                          children: [
-                            const Icon(
-                              Icons.people,
-                              color: Colors.blue,
-                              size: 40,
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Code de parrainage validé ! 🤝',
-                              style: TextStyle(
-                                fontFamily: 'PermanentMarker',
-                                fontSize: 20,
-                                color: Colors.blue,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Parrainé par: ${_referrerEmail ?? 'Utilisateur'}',
-                              style: const TextStyle(
-                                fontFamily: 'Roboto',
-                                fontSize: 14,
-                                color: Colors.blue,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Vous pouvez vous inscrire gratuitement !\nSi vous choisissez un abonnement payant plus tard, votre parrain recevra une récompense.',
-                              style: TextStyle(
-                                fontFamily: 'Roboto',
-                                fontSize: 12,
-                                color: Colors.blue,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-
                     const SizedBox(height: 20),
-                    // 8) Identifiants
+                    // 6) Identifiants
                     TextFormField(
                       controller: _email,
                       decoration: _decoration('Email'),
@@ -859,7 +764,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                     ),
 
                     const SizedBox(height: 20),
-                    // 9) CGU / CGV
+                    // 7) CGU / CGV
                     CGUCGVValidationWidget(
                       cguAccepted: _cguAccepted,
                       cgvAccepted: _cgvAccepted,
@@ -876,7 +781,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                     ),
 
                     const SizedBox(height: 12),
-                    // 10) Newsletter
+                    // 8) Newsletter
                     CheckboxListTile(
                       value: _newsletter,
                       onChanged: (v) => setState(() => _newsletter = v!),
@@ -889,7 +794,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                     ),
 
                     const SizedBox(height: 24),
-                    // 11) Validation finale
+                    // 9) Validation finale
                     if (_canSubmit)
                       ElevatedButton(
                         onPressed: _submitForm,
@@ -901,7 +806,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                           ),
                         ),
                         child: const Text(
-                          'Valider mon inscription',
+                          '🚀 Commencer mon essai gratuit',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 18,
@@ -917,13 +822,13 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: Colors.orange),
                         ),
-                        child: Column(
+                        child: const Column(
                           children: [
-                            const Icon(Icons.info, color: Colors.orange),
-                            const SizedBox(height: 8),
+                            Icon(Icons.info, color: Colors.orange),
+                            SizedBox(height: 8),
                             Text(
-                              'Veuillez compléter tous les champs obligatoires${_needsPayment ? ' et effectuer le paiement' : ''}',
-                              style: const TextStyle(
+                              'Veuillez compléter tous les champs obligatoires pour commencer votre essai gratuit',
+                              style: TextStyle(
                                 color: Colors.orange,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -938,44 +843,6 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// Carte de sélection de formule
-class _PlanCard extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  const _PlanCard({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-    Key? key,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 100,
-        decoration: BoxDecoration(
-          color: selected ? KipikTheme.rouge : Colors.white,
-          border: Border.all(color: KipikTheme.rouge, width: 3),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontFamily: 'PermanentMarker',
-            fontSize: 16,
-            color: selected ? Colors.white : Colors.black87,
-          ),
-        ),
       ),
     );
   }

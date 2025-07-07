@@ -8,14 +8,15 @@ import '../photo/firebase_photo_service.dart';
 import '../auth/secure_auth_service.dart'; // ✅ MIGRATION
 import '../auth/captcha_manager.dart'; // ✅ SÉCURITÉ
 import '../../models/user_role.dart'; // ✅ MIGRATION
-import 'demande_devis_service.dart';
+import '../../core/firestore_helper.dart'; // ✅ AJOUT après la ligne 2
 
-class FirebaseDemandeDevisService extends DemandeDevisService {
+class FirebaseDemandeDevisService {
   static FirebaseDemandeDevisService? _instance;
-  static FirebaseDemandeDevisService get instance => _instance ??= FirebaseDemandeDevisService._();
+  static FirebaseDemandeDevisService get instance =>
+      _instance ??= FirebaseDemandeDevisService._();
   FirebaseDemandeDevisService._();
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FirestoreHelper.instance;
   final FirebasePhotoService _photoService = FirebasePhotoService.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
@@ -34,7 +35,6 @@ class FirebaseDemandeDevisService extends DemandeDevisService {
     }
   }
 
-  @override
   Future<String?> uploadImage(File file, String storagePath) async {
     try {
       _ensureAuthenticated();
@@ -45,7 +45,8 @@ class FirebaseDemandeDevisService extends DemandeDevisService {
       }
 
       final fileSize = await file.length();
-      if (fileSize > 10 * 1024 * 1024) { // 10MB max
+      if (fileSize > 10 * 1024 * 1024) {
+        // 10MB max
         throw Exception('Fichier trop volumineux (max 10MB)');
       }
 
@@ -58,8 +59,10 @@ class FirebaseDemandeDevisService extends DemandeDevisService {
 
       // ✅ Chemin sécurisé avec userId
       final securePath = 'demandes_devis/$_currentUserId/$storagePath';
-      
-      print('📤 Upload devis - Fichier: ${file.path}, Taille: ${(fileSize / 1024).round()}KB');
+
+      print(
+        '📤 Upload devis - Fichier: ${file.path}, Taille: ${(fileSize / 1024).round()}KB',
+      );
 
       // Upload vers Firebase Storage
       final ref = _storage.ref().child(securePath);
@@ -79,7 +82,6 @@ class FirebaseDemandeDevisService extends DemandeDevisService {
 
       print('✅ Upload devis réussi - URL: ${downloadUrl.substring(0, 50)}...');
       return downloadUrl;
-
     } catch (e) {
       print('❌ Erreur upload image devis: $e');
       rethrow;
@@ -87,7 +89,10 @@ class FirebaseDemandeDevisService extends DemandeDevisService {
   }
 
   /// ✅ NOUVEAU: Upload multiple optimisé
-  Future<List<String>> uploadMultipleImages(List<File> files, String basePath) async {
+  Future<List<String>> uploadMultipleImages(
+    List<File> files,
+    String basePath,
+  ) async {
     try {
       _ensureAuthenticated();
 
@@ -99,7 +104,8 @@ class FirebaseDemandeDevisService extends DemandeDevisService {
       for (int i = 0; i < files.length; i++) {
         final file = files[i];
         final extension = path.extension(file.path);
-        final fileName = '${DateTime.now().millisecondsSinceEpoch}_$i$extension';
+        final fileName =
+            '${DateTime.now().millisecondsSinceEpoch}_$i$extension';
         final url = await uploadImage(file, '$basePath/$fileName');
         if (url != null) {
           urls.add(url);
@@ -113,7 +119,6 @@ class FirebaseDemandeDevisService extends DemandeDevisService {
     }
   }
 
-  @override
   Future<void> createDemandeDevis(Map<String, dynamic> data) async {
     try {
       _ensureAuthenticated();
@@ -124,11 +129,14 @@ class FirebaseDemandeDevisService extends DemandeDevisService {
       );
 
       if (!captchaResult.isValid) {
-        throw Exception('Validation de sécurité échouée - Score: ${captchaResult.score.toStringAsFixed(2)}');
+        throw Exception(
+          'Validation de sécurité échouée - Score: ${captchaResult.score.toStringAsFixed(2)}',
+        );
       }
 
       // ✅ Validation des données obligatoires
-      if (data['description'] == null || data['description'].toString().trim().isEmpty) {
+      if (data['description'] == null ||
+          data['description'].toString().trim().isEmpty) {
         throw Exception('Description du projet requise');
       }
 
@@ -141,32 +149,33 @@ class FirebaseDemandeDevisService extends DemandeDevisService {
         // Données utilisateur (sécurisées)
         'clientId': _currentUserId!,
         'clientEmail': _currentUser?['email'] ?? '',
-        'clientName': _currentUser?['displayName'] ?? _currentUser?['name'] ?? 'Client',
-        
+        'clientName':
+            _currentUser?['displayName'] ?? _currentUser?['name'] ?? 'Client',
+
         // Données du projet (validées)
         'description': data['description'].toString().trim(),
         'taille': data['taille'] ?? '10x10 cm',
         'zones': data['zones'] as List<String>,
-        
+
         // URLs des fichiers (sécurisées)
         'zoneImageUrl': data['zoneImageUrl'],
         'photoEmplacementUrl': data['photoEmplacementUrl'],
         'fichiersReferenceUrls': data['fichiersReferenceUrls'] ?? [],
         'imagesGenerees': data['imagesGenerees'] ?? [],
-        
+
         // Métadonnées système
         'status': 'pending',
         'priority': 'normal',
         'source': 'mobile_app',
         'version': '2.0',
-        
+
         // Sécurité et traçabilité
         'captchaScore': captchaResult.score,
         'captchaAction': captchaResult.action,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
         'createdBy': _currentUserId,
-        
+
         // Données additionnelles pour matching
         'estimatedBudget': data['estimatedBudget'],
         'urgency': data['urgency'] ?? 'normal',
@@ -175,8 +184,10 @@ class FirebaseDemandeDevisService extends DemandeDevisService {
       };
 
       // ✅ Création de la demande avec ID généré
-      final docRef = await _firestore.collection('demandes_devis').add(demandeData);
-      
+      final docRef = await _firestore
+          .collection('demandes_devis')
+          .add(demandeData);
+
       // ✅ Log de traçabilité
       await _firestore.collection('devis_logs').add({
         'action': 'demande_created',
@@ -188,8 +199,9 @@ class FirebaseDemandeDevisService extends DemandeDevisService {
         'hasImages': (data['fichiersReferenceUrls'] as List? ?? []).isNotEmpty,
       });
 
-      print('✅ Demande de devis créée - ID: ${docRef.id}, Score: ${captchaResult.score.toStringAsFixed(2)}');
-
+      print(
+        '✅ Demande de devis créée - ID: ${docRef.id}, Score: ${captchaResult.score.toStringAsFixed(2)}',
+      );
     } catch (e) {
       print('❌ Erreur création demande devis: $e');
       rethrow;
@@ -201,18 +213,18 @@ class FirebaseDemandeDevisService extends DemandeDevisService {
     try {
       _ensureAuthenticated();
 
-      final snapshot = await _firestore
-          .collection('demandes_devis')
-          .where('clientId', isEqualTo: _currentUserId)
-          .orderBy('createdAt', descending: true)
-          .get();
+      final snapshot =
+          await _firestore
+              .collection('demandes_devis')
+              .where('clientId', isEqualTo: _currentUserId)
+              .orderBy('createdAt', descending: true)
+              .get();
 
       return snapshot.docs.map((doc) {
         final data = doc.data();
         data['id'] = doc.id;
         return data;
       }).toList();
-
     } catch (e) {
       print('❌ Erreur récupération demandes: $e');
       return [];
@@ -230,11 +242,14 @@ class FirebaseDemandeDevisService extends DemandeDevisService {
         .where('clientId', isEqualTo: _currentUserId)
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) {
-              final data = doc.data();
-              data['id'] = doc.id;
-              return data;
-            }).toList());
+        .map(
+          (snapshot) =>
+              snapshot.docs.map((doc) {
+                final data = doc.data();
+                data['id'] = doc.id;
+                return data;
+              }).toList(),
+        );
   }
 
   /// ✅ NOUVEAU: Mettre à jour le statut d'une demande
@@ -243,8 +258,9 @@ class FirebaseDemandeDevisService extends DemandeDevisService {
       _ensureAuthenticated();
 
       // ✅ Vérifier que la demande appartient à l'utilisateur ou est admin
-      final demandeDoc = await _firestore.collection('demandes_devis').doc(demandeId).get();
-      
+      final demandeDoc =
+          await _firestore.collection('demandes_devis').doc(demandeId).get();
+
       if (!demandeDoc.exists) {
         throw Exception('Demande introuvable');
       }
@@ -272,7 +288,6 @@ class FirebaseDemandeDevisService extends DemandeDevisService {
         'updatedBy': _currentUserId,
         'timestamp': FieldValue.serverTimestamp(),
       });
-
     } catch (e) {
       print('❌ Erreur mise à jour statut: $e');
       rethrow;
@@ -284,16 +299,18 @@ class FirebaseDemandeDevisService extends DemandeDevisService {
     try {
       _ensureAuthenticated();
 
-      final demandeDoc = await _firestore.collection('demandes_devis').doc(demandeId).get();
-      
+      final demandeDoc =
+          await _firestore.collection('demandes_devis').doc(demandeId).get();
+
       if (!demandeDoc.exists) {
         throw Exception('Demande introuvable');
       }
 
       final demandeData = demandeDoc.data()!;
-      
+
       // ✅ Vérifications de sécurité
-      if (demandeData['clientId'] != _currentUserId && _currentUserRole != UserRole.admin) {
+      if (demandeData['clientId'] != _currentUserId &&
+          _currentUserRole != UserRole.admin) {
         throw Exception('Permission refusée');
       }
 
@@ -302,11 +319,12 @@ class FirebaseDemandeDevisService extends DemandeDevisService {
       }
 
       // ✅ Supprimer les fichiers associés
-      final urls = [
-        demandeData['zoneImageUrl'],
-        demandeData['photoEmplacementUrl'],
-        ...(demandeData['fichiersReferenceUrls'] as List? ?? []),
-      ].where((url) => url != null).cast<String>();
+      final urls =
+          [
+            demandeData['zoneImageUrl'],
+            demandeData['photoEmplacementUrl'],
+            ...(demandeData['fichiersReferenceUrls'] as List? ?? []),
+          ].where((url) => url != null).cast<String>();
 
       for (final url in urls) {
         try {
@@ -327,7 +345,6 @@ class FirebaseDemandeDevisService extends DemandeDevisService {
         'deletedBy': _currentUserId,
         'timestamp': FieldValue.serverTimestamp(),
       });
-
     } catch (e) {
       print('❌ Erreur suppression demande: $e');
       rethrow;
@@ -339,10 +356,11 @@ class FirebaseDemandeDevisService extends DemandeDevisService {
     try {
       _ensureAuthenticated();
 
-      final snapshot = await _firestore
-          .collection('demandes_devis')
-          .where('clientId', isEqualTo: _currentUserId)
-          .get();
+      final snapshot =
+          await _firestore
+              .collection('demandes_devis')
+              .where('clientId', isEqualTo: _currentUserId)
+              .get();
 
       final total = snapshot.docs.length;
       int pending = 0, accepted = 0, rejected = 0, completed = 0;
@@ -372,7 +390,6 @@ class FirebaseDemandeDevisService extends DemandeDevisService {
         'rejected': rejected,
         'completed': completed,
       };
-
     } catch (e) {
       print('❌ Erreur stats demandes: $e');
       return {
@@ -409,7 +426,7 @@ class FirebaseDemandeDevisService extends DemandeDevisService {
       print('  - Utilisateur connecté: ${_currentUserId != null}');
       print('  - User ID: $_currentUserId');
       print('  - User Role: $_currentUserRole');
-      
+
       if (_currentUserId != null) {
         final stats = await getDemandesStats();
         print('  - Demandes totales: ${stats['total']}');

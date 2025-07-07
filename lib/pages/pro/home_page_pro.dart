@@ -6,8 +6,9 @@ import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
 import 'package:kipik_v5/widgets/common/drawers/custom_drawer_kipik.dart';
 import 'package:kipik_v5/widgets/common/buttons/tattoo_assistant_button.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
-import 'package:kipik_v5/services/auth/auth_service.dart';
+import 'package:kipik_v5/services/auth/secure_auth_service.dart'; // ✅ MIGRATION
 import 'package:kipik_v5/models/user.dart';
+import 'package:kipik_v5/core/database_manager.dart'; // ✅ AJOUTÉ pour mode démo
 
 // Imports pour la navigation
 import 'package:kipik_v5/pages/pro/agenda/pro_agenda_home_page.dart';
@@ -47,65 +48,172 @@ class HomePagePro extends StatefulWidget {
 class _HomePageProState extends State<HomePagePro> {
   User? _user;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  bool _isLoading = true;
 
-  // Données du profil/stats
-  final double _monthlyRevenue = 3850.00;
-  final int _monthlyAppointments = 15;
-  final int _newClientsThisMonth = 7;
-  final int _notifications = 3;
+  // Données du profil/stats (adaptées selon le mode)
+  double _monthlyRevenue = 3850.00;
+  int _monthlyAppointments = 15;
+  int _newClientsThisMonth = 7;
+  int _notifications = 3;
 
-  // Rendez-vous du jour (exemple)
-  late final List<TodayAppointment> _todayAppointments;
+  // Rendez-vous du jour
+  late List<TodayAppointment> _todayAppointments;
 
   @override
   void initState() {
     super.initState();
     _initializeUser();
-    _initializeTodayAppointments();
   }
 
-  void _initializeUser() {
-    final currentUser = AuthService.instance.currentUser;
-    if (currentUser == null) {
-      // Rediriger vers la page de connexion si pas d'utilisateur
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Navigator.of(context).pushReplacementNamed('/login');
+  // ✅ MIGRATION: Utilise SecureAuthService
+  Future<void> _initializeUser() async {
+    try {
+      final currentUser = SecureAuthService.instance.currentUser;
+      if (currentUser == null) {
+        // Rediriger vers la page de connexion si pas d'utilisateur
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/login');
+        }
+        return;
+      }
+
+      setState(() {
+        _user = currentUser;
       });
-      return;
+
+      // ✅ NOUVEAU : Adapter les données selon le mode (démo/prod)
+      await _loadUserData();
+      _initializeTodayAppointments();
+
+    } catch (e) {
+      print('❌ Erreur initialisation utilisateur: $e');
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed('/login');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
-    _user = currentUser;
+  }
+
+  // ✅ NOUVEAU : Charger les données utilisateur selon le mode
+  Future<void> _loadUserData() async {
+    final isDemoMode = DatabaseManager.instance.isDemoMode;
+    
+    if (isDemoMode) {
+      // ✅ Données de démonstration plus variées
+      final demoProfiles = [
+        {
+          'monthlyRevenue': 4250.00,
+          'monthlyAppointments': 18,
+          'newClientsThisMonth': 9,
+          'notifications': 5,
+        },
+        {
+          'monthlyRevenue': 3850.00,
+          'monthlyAppointments': 15,
+          'newClientsThisMonth': 7,
+          'notifications': 3,
+        },
+        {
+          'monthlyRevenue': 5100.00,
+          'monthlyAppointments': 22,
+          'newClientsThisMonth': 12,
+          'notifications': 8,
+        },
+      ];
+
+      final randomData = demoProfiles[Random().nextInt(demoProfiles.length)];
+      
+      setState(() {
+        _monthlyRevenue = randomData['monthlyRevenue'] as double;
+        _monthlyAppointments = randomData['monthlyAppointments'] as int;
+        _newClientsThisMonth = randomData['newClientsThisMonth'] as int;
+        _notifications = randomData['notifications'] as int;
+      });
+
+      print('🎭 Données démo chargées: ${_monthlyRevenue}€, ${_monthlyAppointments} RDV');
+    } else {
+      // TODO: Charger les vraies données depuis Firebase
+      // Pour l'instant, garder les valeurs par défaut
+      print('🏭 Mode production: données par défaut utilisées');
+    }
   }
 
   void _initializeTodayAppointments() {
     final now = DateTime.now();
-    _todayAppointments = [
-      TodayAppointment(
-        id: '1',
-        time: DateTime(now.year, now.month, now.day, 10, 0),
-        clientName: 'Marie Dubois',
-        projectName: 'Rose géométrique',
-        type: AppointmentType.consultation,
-        estimatedDuration: const Duration(hours: 1),
-        notes: 'Première consultation',
-      ),
-      TodayAppointment(
-        id: '2',
-        time: DateTime(now.year, now.month, now.day, 14, 30),
-        clientName: 'Jean Martin',
-        projectName: 'Tribal bras',
-        type: AppointmentType.session,
-        estimatedDuration: const Duration(hours: 3),
-        notes: 'Session 2/3',
-      ),
-      TodayAppointment(
-        id: '3',
-        time: DateTime(now.year, now.month, now.day, 18, 0),
-        clientName: 'Sophie Laurent',
-        type: AppointmentType.suivi,
-        estimatedDuration: const Duration(minutes: 30),
-        notes: 'Contrôle cicatrisation',
-      ),
-    ];
+    final isDemoMode = DatabaseManager.instance.isDemoMode;
+
+    if (isDemoMode) {
+      // ✅ Données de démonstration variées avec typage explicite
+      final List<List<TodayAppointment>> demoAppointments = [
+        [
+          TodayAppointment(
+            id: '1',
+            time: DateTime(now.year, now.month, now.day, 9, 30),
+            clientName: 'Emma Dubois',
+            projectName: 'Rose minimaliste',
+            type: AppointmentType.consultation,
+            estimatedDuration: const Duration(hours: 1),
+            notes: 'Première consultation',
+          ),
+          TodayAppointment(
+            id: '2',
+            time: DateTime(now.year, now.month, now.day, 14, 0),
+            clientName: 'Lucas Martin',
+            projectName: 'Dragon japonais',
+            type: AppointmentType.session,
+            estimatedDuration: const Duration(hours: 4),
+            notes: 'Session complète',
+          ),
+          TodayAppointment(
+            id: '3',
+            time: DateTime(now.year, now.month, now.day, 19, 0),
+            clientName: 'Sophie Petit',
+            type: AppointmentType.suivi,
+            estimatedDuration: const Duration(minutes: 30),
+            notes: 'Contrôle cicatrisation',
+          ),
+        ],
+        [
+          TodayAppointment(
+            id: '1',
+            time: DateTime(now.year, now.month, now.day, 10, 0),
+            clientName: 'Marie Dubois',
+            projectName: 'Rose géométrique',
+            type: AppointmentType.consultation,
+            estimatedDuration: const Duration(hours: 1),
+            notes: 'Première consultation',
+          ),
+          TodayAppointment(
+            id: '2',
+            time: DateTime(now.year, now.month, now.day, 14, 30),
+            clientName: 'Jean Martin',
+            projectName: 'Tribal bras',
+            type: AppointmentType.session,
+            estimatedDuration: const Duration(hours: 3),
+            notes: 'Session 2/3',
+          ),
+        ],
+        <TodayAppointment>[], // Journée libre pour varier (avec typage explicite)
+      ];
+
+      _todayAppointments = demoAppointments[Random().nextInt(demoAppointments.length)];
+    } else {
+      // TODO: Charger les vrais rendez-vous depuis Firebase
+      _todayAppointments = [
+        TodayAppointment(
+          id: '1',
+          time: DateTime(now.year, now.month, now.day, 10, 0),
+          clientName: 'Marie Dubois',
+          projectName: 'Rose géométrique',
+          type: AppointmentType.consultation,
+          estimatedDuration: const Duration(hours: 1),
+          notes: 'Première consultation',
+        ),
+      ];
+    }
   }
 
   String _getGreeting() {
@@ -131,10 +239,46 @@ class _HomePageProState extends State<HomePagePro> {
   @override
   Widget build(BuildContext context) {
     // Protection si l'utilisateur n'est pas initialisé
-    if (_user == null) {
-      return const Scaffold(
+    if (_isLoading || _user == null) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF0A0A0A),
         body: Center(
-          child: CircularProgressIndicator(),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(
+                color: Colors.white,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Chargement de votre espace...',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.7),
+                  fontFamily: 'Roboto',
+                ),
+              ),
+              // ✅ Indicateur du mode si en cours de chargement
+              if (DatabaseManager.instance.isDemoMode) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.orange),
+                  ),
+                  child: Text(
+                    '🎭 ${DatabaseManager.instance.activeDatabaseConfig.name}',
+                    style: const TextStyle(
+                      color: Colors.orange,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       );
     }
@@ -143,21 +287,46 @@ class _HomePageProState extends State<HomePagePro> {
       onWillPop: () async => false,
       child: Scaffold(
         key: _scaffoldKey,
-        backgroundColor: const Color(0xFF0A0A0A), // Noir profond
+        backgroundColor: const Color(0xFF0A0A0A),
         extendBodyBehindAppBar: true,
         endDrawer: const CustomDrawerKipik(),
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
           automaticallyImplyLeading: false,
-          title: const Text(
-            'Espace Pro',
-            style: TextStyle(
-              fontFamily: 'PermanentMarker',
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w400,
-            ),
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Espace Pro',
+                style: TextStyle(
+                  fontFamily: 'PermanentMarker',
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+              // ✅ Indicateur mode démo dans l'AppBar
+              if (DatabaseManager.instance.isDemoMode) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange),
+                  ),
+                  child: Text(
+                    '🎭 ${DatabaseManager.instance.activeDatabaseConfig.name.split(' ').first}',
+                    style: const TextStyle(
+                      color: Colors.orange,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
           centerTitle: true,
           actions: [
@@ -350,7 +519,7 @@ class _HomePageProState extends State<HomePagePro> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _user!.name,
+                      _user!.displayName, // ✅ MIGRATION: Utilise displayName
                       style: const TextStyle(
                         fontFamily: 'PermanentMarker',
                         fontSize: 24,
@@ -365,9 +534,9 @@ class _HomePageProState extends State<HomePagePro> {
                         color: const Color(0xFF0A0A0A),
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: const Text(
-                        'Tatoueur Professionnel',
-                        style: TextStyle(
+                      child: Text(
+                        _user!.role.name, // ✅ MIGRATION: Utilise le rôle du modèle User
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 12,
                           fontFamily: 'Roboto',
@@ -401,12 +570,31 @@ class _HomePageProState extends State<HomePagePro> {
                   fontWeight: FontWeight.w600,
                 ),
               ),
+              // ✅ Indicateur si données de démo
+              if (DatabaseManager.instance.isDemoMode) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text(
+                    'Démo',
+                    style: TextStyle(
+                      color: Colors.orange,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
           
           const SizedBox(height: 16),
           
-          // Stats du mois en mini-cartes avec taille fixe
+          // Stats du mois en mini-cartes
           Row(
             children: [
               Expanded(
@@ -444,7 +632,7 @@ class _HomePageProState extends State<HomePagePro> {
 
   Widget _buildStatMiniCard(String label, String value, IconData icon, Color color) {
     return Container(
-      height: 120, // Hauteur augmentée pour éviter la coupure
+      height: 120,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: color.withOpacity(0.06),
@@ -455,7 +643,7 @@ class _HomePageProState extends State<HomePagePro> {
         ),
       ),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly, // Répartit l'espace uniformément
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           Container(
             padding: const EdgeInsets.all(8),
@@ -582,10 +770,12 @@ class _HomePageProState extends State<HomePagePro> {
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Profitez de cette journée libre pour vous reposer !',
+            Text(
+              DatabaseManager.instance.isDemoMode 
+                  ? 'Journée libre en mode démo !'
+                  : 'Profitez de cette journée libre pour vous reposer !',
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 14,
                 color: Color(0xFF6B7280),
                 fontFamily: 'Roboto',
@@ -806,6 +996,7 @@ class _HomePageProState extends State<HomePagePro> {
     );
   }
 
+  // ✅ MIGRATION: Mise à jour vers SecureAuthService
   Future<void> _pickProfileImage() async {
     final XTypeGroup typeGroup = XTypeGroup(
       label: 'images',
@@ -815,24 +1006,39 @@ class _HomePageProState extends State<HomePagePro> {
     final XFile? image = await openFile(acceptedTypeGroups: [typeGroup]);
 
     if (image != null) {
-      // TODO: Upload vers Firebase Storage et mettre à jour le profil utilisateur
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Photo de profil mise à jour !',
-              style: TextStyle(
-                fontFamily: 'Roboto',
-                fontWeight: FontWeight.w500,
+      try {
+        // TODO: Upload vers Firebase Storage et mettre à jour le profil utilisateur
+        // await SecureAuthService.instance.updateUserProfile(
+        //   profileImageUrl: uploadedImageUrl,
+        // );
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                'Photo de profil mise à jour !',
+                style: TextStyle(
+                  fontFamily: 'Roboto',
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              backgroundColor: const Color(0xFF10B981),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
-            backgroundColor: const Color(0xFF10B981),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erreur lors de la mise à jour: $e'),
+              backgroundColor: Colors.red,
             ),
-          ),
-        );
+          );
+        }
       }
     }
   }

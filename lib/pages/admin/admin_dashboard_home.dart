@@ -10,6 +10,8 @@ import 'package:kipik_v5/pages/admin/pros/admin_pros_management_page.dart';
 import 'package:kipik_v5/pages/admin/clients/admin_clients_management_page.dart';
 import 'package:kipik_v5/pages/admin/organizers/admin_organizers_management_page.dart';
 import 'package:kipik_v5/pages/admin/admin_free_codes_page.dart';
+import 'package:kipik_v5/pages/admin/test_accounts_page.dart';
+import 'package:kipik_v5/pages/admin/database_admin_page.dart'; // ✅ AJOUTÉ
 
 class AdminDashboardHome extends StatefulWidget {
   const AdminDashboardHome({Key? key}) : super(key: key);
@@ -265,7 +267,7 @@ class _AdminDashboardHomeState extends State<AdminDashboardHome> {
               color: Colors.white,
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              fontFamily: 'Roboto', // CHANGÉ: Roboto pour les chiffres
+              fontFamily: 'Roboto',
             ),
           ),
           Text(
@@ -273,7 +275,7 @@ class _AdminDashboardHomeState extends State<AdminDashboardHome> {
             style: const TextStyle(
               color: Colors.white,
               fontSize: 10,
-              fontFamily: 'Roboto', // CHANGÉ: Roboto pour les labels
+              fontFamily: 'Roboto',
             ),
             textAlign: TextAlign.center,
           ),
@@ -327,7 +329,7 @@ class _AdminDashboardHomeState extends State<AdminDashboardHome> {
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                             color: color,
-                            fontFamily: 'PermanentMarker', // GARDÉ: PermanentMarker pour les titres
+                            fontFamily: 'PermanentMarker',
                           ),
                         ),
                         Text(
@@ -335,7 +337,7 @@ class _AdminDashboardHomeState extends State<AdminDashboardHome> {
                           style: const TextStyle(
                             color: Colors.grey,
                             fontSize: 12,
-                            fontFamily: 'Roboto', // CHANGÉ: Roboto pour les sous-titres descriptifs
+                            fontFamily: 'Roboto',
                           ),
                         ),
                       ],
@@ -383,7 +385,7 @@ class _AdminDashboardHomeState extends State<AdminDashboardHome> {
                             'Temps réponse moyen\n${stats['avgResponseTime']}',
                             style: const TextStyle(
                               fontSize: 12,
-                              fontFamily: 'Roboto', // CHANGÉ: Roboto pour les métriques
+                              fontFamily: 'Roboto',
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -395,7 +397,7 @@ class _AdminDashboardHomeState extends State<AdminDashboardHome> {
                             'Satisfaction\n${stats['satisfactionRate']}',
                             style: const TextStyle(
                               fontSize: 12,
-                              fontFamily: 'Roboto', // CHANGÉ: Roboto pour les métriques
+                              fontFamily: 'Roboto',
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -407,7 +409,7 @@ class _AdminDashboardHomeState extends State<AdminDashboardHome> {
                             'Taux acceptation\n${stats['avgQuoteAcceptance']}',
                             style: const TextStyle(
                               fontSize: 12,
-                              fontFamily: 'Roboto', // CHANGÉ: Roboto pour les métriques
+                              fontFamily: 'Roboto',
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -419,7 +421,7 @@ class _AdminDashboardHomeState extends State<AdminDashboardHome> {
                             'Taux réservation\n${stats['bookingRate']}',
                             style: const TextStyle(
                               fontSize: 12,
-                              fontFamily: 'Roboto', // CHANGÉ: Roboto pour les métriques
+                              fontFamily: 'Roboto',
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -449,7 +451,7 @@ class _AdminDashboardHomeState extends State<AdminDashboardHome> {
           color: color,
           fontSize: 11,
           fontWeight: FontWeight.bold,
-          fontFamily: 'Roboto', // CHANGÉ: Roboto pour les chips
+          fontFamily: 'Roboto',
         ),
       ),
     );
@@ -464,10 +466,39 @@ class _AdminDashboardHomeState extends State<AdminDashboardHome> {
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
-            fontFamily: 'PermanentMarker', // GARDÉ: PermanentMarker pour les titres
+            fontFamily: 'PermanentMarker',
           ),
         ),
         const SizedBox(height: 16),
+        
+        // PREMIÈRE LIGNE - Comptes de test et Mode Base de Données
+        Row(
+          children: [
+            Expanded(
+              child: _buildQuickActionCard(
+                'Comptes de test',
+                'Créer et gérer les comptes',
+                Icons.science,
+                Colors.indigo,
+                () => _navigateToTestAccounts(),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildQuickActionCard(
+                'Mode Base de Données', // ✅ MODIFIÉ
+                'Basculer Production/Démo', // ✅ MODIFIÉ
+                Icons.storage, // ✅ MODIFIÉ
+                Colors.deepPurple, // ✅ MODIFIÉ
+                () => _navigateToDatabaseAdmin(), // ✅ MODIFIÉ
+              ),
+            ),
+          ],
+        ),
+        
+        const SizedBox(height: 12),
+        
+        // DEUXIÈME LIGNE
         Row(
           children: [
             Expanded(
@@ -500,7 +531,10 @@ class _AdminDashboardHomeState extends State<AdminDashboardHome> {
             ),
           ],
         ),
+        
         const SizedBox(height: 12),
+        
+        // TROISIÈME LIGNE
         Row(
           children: [
             Expanded(
@@ -522,7 +556,7 @@ class _AdminDashboardHomeState extends State<AdminDashboardHome> {
                 'Rapports',
                 'Exporter les données',
                 Icons.assessment,
-                Colors.purple,
+                Colors.blueGrey,
                 () {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Page en cours de développement')),
@@ -558,7 +592,7 @@ class _AdminDashboardHomeState extends State<AdminDashboardHome> {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: color,
-                  fontFamily: 'Roboto', // CHANGÉ: Roboto pour les actions
+                  fontFamily: 'Roboto',
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -567,7 +601,7 @@ class _AdminDashboardHomeState extends State<AdminDashboardHome> {
                 style: const TextStyle(
                   color: Colors.grey,
                   fontSize: 11,
-                  fontFamily: 'Roboto', // CHANGÉ: Roboto pour les descriptions
+                  fontFamily: 'Roboto',
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -587,7 +621,7 @@ class _AdminDashboardHomeState extends State<AdminDashboardHome> {
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
-            fontFamily: 'PermanentMarker', // GARDÉ: PermanentMarker pour les titres
+            fontFamily: 'PermanentMarker',
           ),
         ),
         const SizedBox(height: 16),
@@ -613,14 +647,14 @@ class _AdminDashboardHomeState extends State<AdminDashboardHome> {
                         'Signalements à traiter',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontFamily: 'Roboto', // CHANGÉ: Roboto pour le texte
+                          fontFamily: 'Roboto',
                         ),
                       ),
                       Text(
                         '${_globalStats['reportsThisMonth']} nouveaux signalements ce mois nécessitent votre attention',
                         style: const TextStyle(
                           fontSize: 12,
-                          fontFamily: 'Roboto', // CHANGÉ: Roboto pour le texte
+                          fontFamily: 'Roboto',
                         ),
                       ),
                     ],
@@ -637,7 +671,7 @@ class _AdminDashboardHomeState extends State<AdminDashboardHome> {
                     'Traiter', 
                     style: TextStyle(
                       color: Colors.white,
-                      fontFamily: 'Roboto', // CHANGÉ: Roboto pour les boutons
+                      fontFamily: 'Roboto',
                     ),
                   ),
                 ),
@@ -648,6 +682,7 @@ class _AdminDashboardHomeState extends State<AdminDashboardHome> {
     );
   }
 
+  // NAVIGATION METHODS
   void _navigateToProManagement() {
     Navigator.push(
       context,
@@ -666,6 +701,21 @@ class _AdminDashboardHomeState extends State<AdminDashboardHome> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const AdminOrganizersManagementPage()),
+    );
+  }
+
+  void _navigateToTestAccounts() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const TestAccountsPage()),
+    );
+  }
+
+  // ✅ AJOUTÉ: Navigation vers la gestion des bases de données
+  void _navigateToDatabaseAdmin() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const DatabaseAdminPage()),
     );
   }
 }

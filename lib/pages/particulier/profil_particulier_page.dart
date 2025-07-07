@@ -1,9 +1,15 @@
+// lib/pages/particulier/profil_particulier_page.dart
+
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_particulier.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
+import 'package:kipik_v5/services/auth/secure_auth_service.dart'; // ✅ AJOUTÉ
+import 'package:kipik_v5/core/database_manager.dart'; // ✅ AJOUTÉ
+import 'package:kipik_v5/models/user.dart'; // ✅ AJOUTÉ
+import 'package:kipik_v5/models/user_role.dart'; // ✅ AJOUTÉ
 
 class ProfilParticulierPage extends StatefulWidget {
   const ProfilParticulierPage({super.key});
@@ -13,41 +19,209 @@ class ProfilParticulierPage extends StatefulWidget {
 }
 
 class _ProfilParticulierPageState extends State<ProfilParticulierPage> {
-  final TextEditingController nomController = TextEditingController(text: 'Votre nom ici');
-  final TextEditingController prenomController = TextEditingController(text: 'Votre prénom ici');
-  final TextEditingController emailController = TextEditingController(text: 'exemple@email.com');
-  final TextEditingController telephoneController = TextEditingController(text: '+33 6 12 34 56 78');
-  final TextEditingController adresseController = TextEditingController(text: 'Votre adresse complète ici');
-  
-  // Champs supplémentaires pour plus de professionnalisme
-  final TextEditingController anniversaireController = TextEditingController(text: '01/01/1990');
-  final TextEditingController urgenceController = TextEditingController(text: '+33 6 00 00 00 00');
+  // ✅ Controllers avec valeurs par défaut vides
+  final TextEditingController nomController = TextEditingController();
+  final TextEditingController prenomController = TextEditingController();
+  final TextEditingController emailController = TextEditingController();
+  final TextEditingController telephoneController = TextEditingController();
+  final TextEditingController adresseController = TextEditingController();
+  final TextEditingController anniversaireController = TextEditingController();
+  final TextEditingController urgenceController = TextEditingController();
   
   String _selectedSexe = 'Non précisé';
-  
   File? _avatarImage;
+  bool _isLoading = true; // ✅ AJOUTÉ
   bool _isSaving = false;
   bool _notificationsEnabled = true;
   bool _emailNotificationsEnabled = true;
   bool _hasAllergies = false;
   bool _takesMedication = false;
   
-  // Liste des images de fond disponibles
+  // ✅ Données utilisateur
+  User? _currentUser;
+  Map<String, dynamic>? _userProfile;
+  
   final List<String> _backgroundImages = [
     'assets/background_charbon.png',
-    'assets/background_tatoo1.png',
     'assets/background_tatoo2.png',
-    'assets/background_tatoo3.png',
+    'assets/background1.png',
+    'assets/background2.png',
   ];
   
-  // Variable pour stocker l'image de fond sélectionnée aléatoirement
   late String _selectedBackground;
   
   @override
   void initState() {
     super.initState();
-    // Sélection aléatoire de l'image de fond
     _selectedBackground = _backgroundImages[Random().nextInt(_backgroundImages.length)];
+    _loadUserProfile();
+  }
+
+  @override
+  void dispose() {
+    nomController.dispose();
+    prenomController.dispose();
+    emailController.dispose();
+    telephoneController.dispose();
+    adresseController.dispose();
+    anniversaireController.dispose();
+    urgenceController.dispose();
+    super.dispose();
+  }
+
+  /// ✅ CHARGER LE PROFIL UTILISATEUR
+  Future<void> _loadUserProfile() async {
+    setState(() => _isLoading = true);
+    
+    try {
+      _currentUser = SecureAuthService.instance.currentUser;
+      
+      if (_currentUser != null) {
+        await _fetchUserProfileData();
+        _populateFields();
+      } else {
+        _setDemoData();
+      }
+      
+    } catch (e) {
+      print('❌ Erreur chargement profil: $e');
+      _setDemoData();
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  /// ✅ RÉCUPÉRER LES DONNÉES DEPUIS LA BASE
+  Future<void> _fetchUserProfileData() async {
+    try {
+      final firestore = DatabaseManager.instance.firestore;
+      final doc = await firestore.collection('users').doc(_currentUser!.uid).get();
+      
+      if (doc.exists) {
+        _userProfile = doc.data()!;
+        print('✅ Profil chargé depuis ${DatabaseManager.instance.activeDatabaseConfig.name}');
+      } else {
+        // Créer un profil vide
+        _userProfile = _createEmptyProfile();
+        await _saveProfileToDatabase();
+      }
+    } catch (e) {
+      print('❌ Erreur récupération profil: $e');
+      _userProfile = _createEmptyProfile();
+    }
+  }
+
+  /// ✅ CRÉER UN PROFIL VIDE
+  Map<String, dynamic> _createEmptyProfile() {
+    return {
+      'personalInfo': {
+        'firstName': '',
+        'lastName': '',
+        'email': _currentUser?.email ?? '',
+        'phone': '',
+        'address': '',
+        'birthDate': '',
+        'gender': 'Non précisé',
+        'emergencyContact': '',
+      },
+      'medicalInfo': {
+        'hasAllergies': false,
+        'allergiesDetails': '',
+        'takesMedication': false,
+        'medicationDetails': '',
+      },
+      'preferences': {
+        'pushNotifications': true,
+        'emailNotifications': true,
+      },
+      'profileImageUrl': '',
+      'createdAt': DateTime.now().toIso8601String(),
+      'updatedAt': DateTime.now().toIso8601String(),
+    };
+  }
+
+  /// ✅ REMPLIR LES CHAMPS AVEC LES DONNÉES
+  void _populateFields() {
+    if (_userProfile == null) return;
+    
+    final personalInfo = _userProfile!['personalInfo'] as Map<String, dynamic>? ?? {};
+    final medicalInfo = _userProfile!['medicalInfo'] as Map<String, dynamic>? ?? {};
+    final preferences = _userProfile!['preferences'] as Map<String, dynamic>? ?? {};
+    
+    // Informations personnelles
+    nomController.text = personalInfo['lastName'] ?? '';
+    prenomController.text = personalInfo['firstName'] ?? '';
+    emailController.text = personalInfo['email'] ?? _currentUser?.email ?? '';
+    telephoneController.text = personalInfo['phone'] ?? '';
+    adresseController.text = personalInfo['address'] ?? '';
+    anniversaireController.text = personalInfo['birthDate'] ?? '';
+    urgenceController.text = personalInfo['emergencyContact'] ?? '';
+    _selectedSexe = personalInfo['gender'] ?? 'Non précisé';
+    
+    // Informations médicales
+    _hasAllergies = medicalInfo['hasAllergies'] ?? false;
+    _takesMedication = medicalInfo['takesMedication'] ?? false;
+    
+    // Préférences
+    _notificationsEnabled = preferences['pushNotifications'] ?? true;
+    _emailNotificationsEnabled = preferences['emailNotifications'] ?? true;
+  }
+
+  /// ✅ DONNÉES DE DÉMONSTRATION
+  void _setDemoData() {
+    if (DatabaseManager.instance.isDemoMode) {
+      final demoProfiles = [
+        {
+          'firstName': 'Alex',
+          'lastName': 'Martin',
+          'email': 'alex.martin@demo.kipik.ink',
+          'phone': '+33 6 12 34 56 78',
+          'address': '15 Rue de la République, 54000 Nancy',
+          'birthDate': '15/03/1995',
+          'gender': 'Non précisé',
+        },
+        {
+          'firstName': 'Sophie',
+          'lastName': 'Dubois',
+          'email': 'sophie.dubois@demo.kipik.ink',
+          'phone': '+33 6 87 65 43 21',
+          'address': '8 Avenue des Vosges, 54000 Nancy',
+          'birthDate': '22/11/1988',
+          'gender': 'Féminin',
+        },
+        {
+          'firstName': 'Thomas',
+          'lastName': 'Leroy',
+          'email': 'thomas.leroy@demo.kipik.ink',
+          'phone': '+33 6 45 67 89 01',
+          'address': '32 Rue Stanislas, 54000 Nancy',
+          'birthDate': '08/07/1992',
+          'gender': 'Masculin',
+        },
+      ];
+      
+      final randomProfile = demoProfiles[Random().nextInt(demoProfiles.length)];
+      
+      nomController.text = randomProfile['lastName']!;
+      prenomController.text = randomProfile['firstName']!;
+      emailController.text = randomProfile['email']!;
+      telephoneController.text = randomProfile['phone']!;
+      adresseController.text = randomProfile['address']!;
+      anniversaireController.text = randomProfile['birthDate']!;
+      urgenceController.text = '+33 6 00 00 00 00';
+      _selectedSexe = randomProfile['gender']!;
+      
+      print('🎭 Données démo générées pour ${randomProfile['firstName']} ${randomProfile['lastName']}');
+    } else {
+      // Données par défaut vides pour production
+      nomController.text = 'Votre nom';
+      prenomController.text = 'Votre prénom';
+      emailController.text = _currentUser?.email ?? 'exemple@email.com';
+      telephoneController.text = '+33 6 12 34 56 78';
+      adresseController.text = 'Votre adresse complète';
+      anniversaireController.text = '01/01/1990';
+      urgenceController.text = '+33 6 00 00 00 00';
+    }
   }
 
   Future<void> _pickAvatar() async {
@@ -63,49 +237,126 @@ class _ProfilParticulierPageState extends State<ProfilParticulierPage> {
       });
 
       // TODO : Upload vers Firebase Storage plus tard
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green[300]),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Photo de profil mise à jour !',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.grey[850],
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 
+  /// ✅ SAUVEGARDER LE PROFIL
   Future<void> _saveProfile() async {
-    setState(() {
-      _isSaving = true;
-    });
-
-    await Future.delayed(const Duration(seconds: 2)); // Simulation réseau
-
-    setState(() {
-      _isSaving = false;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.green[300]),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text(
-                'Profil mis à jour avec succès !',
-                style: TextStyle(color: Colors.white),
+    setState(() => _isSaving = true);
+    
+    try {
+      if (_currentUser != null) {
+        await _saveProfileToDatabase();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green[300]),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Profil mis à jour avec succès !',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.grey[850],
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              duration: const Duration(seconds: 3),
+              action: SnackBarAction(
+                label: 'OK',
+                textColor: KipikTheme.rouge,
+                onPressed: () {},
               ),
             ),
-          ],
-        ),
-        backgroundColor: Colors.grey[850],
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-        duration: const Duration(seconds: 3),
-        action: SnackBarAction(
-          label: 'OK',
-          textColor: KipikTheme.rouge,
-          onPressed: () {},
-        ),
-      ),
-    );
+          );
+        }
+      } else {
+        // Mode démo
+        await Future.delayed(const Duration(seconds: 1));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('🎭 Profil démo mis à jour (simulation)'),
+              backgroundColor: Colors.orange,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          );
+        }
+      }
+      
+    } catch (e) {
+      print('❌ Erreur sauvegarde: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors de la sauvegarde: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      setState(() => _isSaving = false);
+    }
+  }
 
-    // TODO: Enregistrement sur Firebase Firestore plus tard
+  /// ✅ SAUVEGARDER DANS LA BASE DE DONNÉES
+  Future<void> _saveProfileToDatabase() async {
+    final profileData = {
+      'personalInfo': {
+        'firstName': prenomController.text,
+        'lastName': nomController.text,
+        'email': emailController.text,
+        'phone': telephoneController.text,
+        'address': adresseController.text,
+        'birthDate': anniversaireController.text,
+        'gender': _selectedSexe,
+        'emergencyContact': urgenceController.text,
+      },
+      'medicalInfo': {
+        'hasAllergies': _hasAllergies,
+        'takesMedication': _takesMedication,
+      },
+      'preferences': {
+        'pushNotifications': _notificationsEnabled,
+        'emailNotifications': _emailNotificationsEnabled,
+      },
+      'updatedAt': DateTime.now().toIso8601String(),
+      'updatedBy': _currentUser!.uid,
+    };
+
+    final firestore = DatabaseManager.instance.firestore;
+    await firestore.collection('users').doc(_currentUser!.uid).update(profileData);
+    
+    print('✅ Profil sauvegardé dans ${DatabaseManager.instance.activeDatabaseConfig.name}');
   }
 
   void _showDatePicker() async {
@@ -171,7 +422,7 @@ class _ProfilParticulierPageState extends State<ProfilParticulierPage> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Informez toujours votre tatoueur de vos allergies avant une session',
+              'Informez toujours votre tatoueur de vos allergies avant une séance',
               style: TextStyle(
                 fontSize: 12,
                 color: Colors.amber[200],
@@ -285,8 +536,8 @@ class _ProfilParticulierPageState extends State<ProfilParticulierPage> {
     );
   }
 
+  /// ✅ DÉCONNEXION AVEC SECUREAU AuthService
   void _logout() {
-    // Montrer un dialogue de confirmation
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -311,14 +562,29 @@ class _ProfilParticulierPageState extends State<ProfilParticulierPage> {
             ),
           ),
           ElevatedButton(
-            onPressed: () {
-              // Fermer la boîte de dialogue
+            onPressed: () async {
               Navigator.pop(context);
               
-              // Rediriger vers la page de connexion
-              Navigator.of(context).pushReplacementNamed('/connexion');
-              
-              // TODO: Implémenter la logique de déconnexion réelle
+              try {
+                await SecureAuthService.instance.signOut();
+                
+                if (mounted) {
+                  Navigator.of(context).pushNamedAndRemoveUntil(
+                    '/connexion',
+                    (route) => false,
+                  );
+                }
+              } catch (e) {
+                print('❌ Erreur déconnexion: $e');
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Erreur lors de la déconnexion: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: KipikTheme.rouge,
@@ -338,9 +604,28 @@ class _ProfilParticulierPageState extends State<ProfilParticulierPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF0A0A0A),
+        appBar: CustomAppBarParticulier(
+          title: DatabaseManager.instance.isDemoMode 
+              ? 'Mon Profil 🎭'
+              : 'Mon Profil',
+          showBackButton: true,
+          redirectToHome: true,
+          showNotificationIcon: true,
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(color: KipikTheme.rouge),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: CustomAppBarParticulier(
-        title: 'Mon Profil',
+        title: DatabaseManager.instance.isDemoMode 
+            ? 'Mon Profil 🎭'
+            : 'Mon Profil',
         showBackButton: true,
         redirectToHome: true,
         showNotificationIcon: true,
@@ -377,23 +662,50 @@ class _ProfilParticulierPageState extends State<ProfilParticulierPage> {
                 children: [
                   const SizedBox(height: 20),
                   
+                  // ✅ Indicateur mode démo
+                  if (DatabaseManager.instance.isDemoMode) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                      ),
+                      child: Text(
+                        '🎭 Mode ${DatabaseManager.instance.activeDatabaseConfig.name}',
+                        style: const TextStyle(
+                          color: Colors.orange,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  
                   // Conteneur d'avatar amélioré avec animation
                   GestureDetector(
                     onTap: _pickAvatar,
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
-                        // Avatar carré avec effet de brillance
                         Container(
                           width: 130,
                           height: 130,
                           decoration: BoxDecoration(
                             color: Colors.grey[800],
                             borderRadius: BorderRadius.circular(15),
-                            border: Border.all(color: KipikTheme.rouge, width: 2),
+                            border: Border.all(
+                              color: DatabaseManager.instance.isDemoMode 
+                                  ? Colors.orange 
+                                  : KipikTheme.rouge, 
+                              width: 2
+                            ),
                             boxShadow: [
                               BoxShadow(
-                                color: KipikTheme.rouge.withOpacity(0.2),
+                                color: (DatabaseManager.instance.isDemoMode 
+                                    ? Colors.orange 
+                                    : KipikTheme.rouge).withOpacity(0.2),
                                 blurRadius: 15,
                                 offset: const Offset(0, 5),
                               ),
@@ -405,7 +717,7 @@ class _ProfilParticulierPageState extends State<ProfilParticulierPage> {
                             ],
                             image: _avatarImage == null
                                 ? const DecorationImage(
-                                    image: AssetImage('assets/avatar_user.png'),
+                                    image: AssetImage('assets/avatars/avatar_user_neutre.png'),
                                     fit: BoxFit.cover,
                                   )
                                 : DecorationImage(
@@ -415,7 +727,6 @@ class _ProfilParticulierPageState extends State<ProfilParticulierPage> {
                           ),
                         ),
                         
-                        // Icône pour indiquer qu'on peut modifier
                         Container(
                           width: 130,
                           height: 130,
@@ -642,8 +953,12 @@ class _ProfilParticulierPageState extends State<ProfilParticulierPage> {
                             color: Colors.white.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(30),
                           ),
-                          child: const CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(KipikTheme.rouge),
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              DatabaseManager.instance.isDemoMode 
+                                  ? Colors.orange 
+                                  : KipikTheme.rouge
+                            ),
                           ),
                         )
                       : Container(
@@ -652,16 +967,23 @@ class _ProfilParticulierPageState extends State<ProfilParticulierPage> {
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(30),
                             gradient: LinearGradient(
-                              colors: [
-                                KipikTheme.rouge.withOpacity(0.8),
-                                KipikTheme.rouge,
-                              ],
+                              colors: DatabaseManager.instance.isDemoMode 
+                                  ? [
+                                      Colors.orange.withOpacity(0.8),
+                                      Colors.orange,
+                                    ]
+                                  : [
+                                      KipikTheme.rouge.withOpacity(0.8),
+                                      KipikTheme.rouge,
+                                    ],
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: KipikTheme.rouge.withOpacity(0.3),
+                                color: (DatabaseManager.instance.isDemoMode 
+                                    ? Colors.orange 
+                                    : KipikTheme.rouge).withOpacity(0.3),
                                 blurRadius: 15,
                                 offset: const Offset(0, 5),
                               ),
@@ -726,21 +1048,30 @@ class _ProfilParticulierPageState extends State<ProfilParticulierPage> {
   }
 
   Widget _buildAnimatedSectionHeader(String title, IconData icon) {
+    final isDemo = DatabaseManager.instance.isDemoMode;
+    
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            KipikTheme.rouge.withOpacity(0.3),
-            KipikTheme.rouge.withOpacity(0.1),
-          ],
+          colors: isDemo 
+              ? [
+                  Colors.orange.withOpacity(0.3),
+                  Colors.orange.withOpacity(0.1),
+                ]
+              : [
+                  KipikTheme.rouge.withOpacity(0.3),
+                  KipikTheme.rouge.withOpacity(0.1),
+                ],
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
         ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: KipikTheme.rouge.withOpacity(0.5),
+          color: isDemo 
+              ? Colors.orange.withOpacity(0.5)
+              : KipikTheme.rouge.withOpacity(0.5),
           width: 1,
         ),
       ),
@@ -748,7 +1079,7 @@ class _ProfilParticulierPageState extends State<ProfilParticulierPage> {
         children: [
           Icon(
             icon,
-            color: KipikTheme.rouge,
+            color: isDemo ? Colors.orange : KipikTheme.rouge,
             size: 24,
           ),
           const SizedBox(width: 10),
@@ -771,6 +1102,8 @@ class _ProfilParticulierPageState extends State<ProfilParticulierPage> {
     IconData? prefixIcon,
     IconData? suffixIcon,
   }) {
+    final isDemo = DatabaseManager.instance.isDemoMode;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -809,7 +1142,10 @@ class _ProfilParticulierPageState extends State<ProfilParticulierPage> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: KipikTheme.rouge, width: 1),
+                borderSide: BorderSide(
+                  color: isDemo ? Colors.orange : KipikTheme.rouge, 
+                  width: 1
+                ),
               ),
               prefixIcon: prefixIcon != null 
                   ? Icon(prefixIcon, color: Colors.white70, size: 20)
@@ -872,12 +1208,16 @@ class _ProfilParticulierPageState extends State<ProfilParticulierPage> {
     bool value,
     Function(bool) onChanged,
   ) {
+    final isDemo = DatabaseManager.instance.isDemoMode;
+    
     return Container(
       decoration: BoxDecoration(
         color: Colors.black45,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: value ? KipikTheme.rouge.withOpacity(0.5) : Colors.white10,
+          color: value 
+              ? (isDemo ? Colors.orange.withOpacity(0.5) : KipikTheme.rouge.withOpacity(0.5))
+              : Colors.white10,
           width: 1,
         ),
         boxShadow: [
@@ -892,13 +1232,18 @@ class _ProfilParticulierPageState extends State<ProfilParticulierPage> {
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
-          onTap: () => onChanged(!value), // Permet de cliquer sur toute la tuile
+          onTap: () => onChanged(!value),
           borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
             child: Row(
               children: [
-                Icon(icon, color: value ? KipikTheme.rouge : Colors.white70),
+                Icon(
+                  icon, 
+                  color: value 
+                      ? (isDemo ? Colors.orange : KipikTheme.rouge)
+                      : Colors.white70
+                ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
@@ -926,8 +1271,8 @@ class _ProfilParticulierPageState extends State<ProfilParticulierPage> {
                 Switch(
                   value: value,
                   onChanged: onChanged,
-                  activeColor: KipikTheme.rouge,
-                  activeTrackColor: KipikTheme.rouge.withOpacity(0.3),
+                  activeColor: isDemo ? Colors.orange : KipikTheme.rouge,
+                  activeTrackColor: (isDemo ? Colors.orange : KipikTheme.rouge).withOpacity(0.3),
                   inactiveThumbColor: Colors.white.withOpacity(0.7),
                   inactiveTrackColor: Colors.white.withOpacity(0.1),
                 ),
