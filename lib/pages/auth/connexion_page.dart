@@ -1,14 +1,16 @@
-// lib/pages/auth/connexion_page.dart - Version sécurisée avec reCAPTCHA
+// lib/pages/auth/connexion_page.dart
 
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:kipik_v5/pages/admin/admin_dashboard_home.dart';
 import '../../widgets/common/app_bars/custom_app_bar_kipik.dart';
-import '../../widgets/auth/recaptcha_widget.dart';
+import '../../widgets/auth/recaptcha_widget.dart'; // ✅ AJOUTÉ
 import '../../theme/kipik_theme.dart';
-import '../../services/auth/secure_auth_service.dart'; // ✅ CORRECTION
-import '../../services/auth/captcha_manager.dart'; // ✅ CORRECTION
+import '../../services/auth/secure_auth_service.dart'; // ✅ CORRECTION: Utilise SecureAuthService
+import '../../services/auth/captcha_manager.dart'; // ✅ AJOUTÉ
+import '../../services/init/firebase_init_service.dart'; // ✅ NOUVEAU: Pour init Firebase après connexion
+import '../../core/database_manager.dart'; // ✅ AJOUTÉ
 import '../particulier/accueil_particulier_page.dart';
 import '../pro/home_page_pro.dart'; 
 import '../organisateur/organisateur_dashboard_page.dart';
@@ -30,7 +32,7 @@ class _ConnexionPageState extends State<ConnexionPage> {
   bool _showPassword = false;
   bool _isLoading = false;
   
-  // ✅ CORRECTION: Variables reCAPTCHA avec import correct
+  // ✅ NOUVEAU: Variables reCAPTCHA et sécurité
   bool _captchaValidated = false;
   CaptchaResult? _captchaResult;
   Duration? _lockoutTime;
@@ -38,11 +40,12 @@ class _ConnexionPageState extends State<ConnexionPage> {
   // ✅ CORRECTION: Services sécurisés
   SecureAuthService get _authService => SecureAuthService.instance;
   CaptchaManager get _captchaManager => CaptchaManager.instance;
+  DatabaseManager get _databaseManager => DatabaseManager.instance;
 
   @override
   void initState() {
     super.initState();
-    _checkLockoutStatus();
+    _initializeServices();
   }
 
   @override
@@ -52,7 +55,22 @@ class _ConnexionPageState extends State<ConnexionPage> {
     super.dispose();
   }
 
-  // ✅ CORRECTION: Utiliser CaptchaManager
+  // ✅ NOUVEAU: Initialisation des services
+  Future<void> _initializeServices() async {
+    try {
+      // Vérifier que DatabaseManager est en mode sécurisé
+      if (!_databaseManager.isSafeMode) {
+        print('⚠️ DatabaseManager pas en mode sécurisé, réinitialisation...');
+        await _databaseManager.initializeSafeMode();
+      }
+      
+      _checkLockoutStatus();
+    } catch (e) {
+      print('❌ Erreur initialisation services: $e');
+    }
+  }
+
+  // ✅ NOUVEAU: Vérification du blocage temporaire
   void _checkLockoutStatus() {
     final lockout = _captchaManager.getRemainingLockout(
       identifier: _emailC.text.trim().isEmpty ? null : _emailC.text.trim(),
@@ -83,7 +101,7 @@ class _ConnexionPageState extends State<ConnexionPage> {
     return null;
   }
 
-  // ✅ CORRECTION: Vérifier si le CAPTCHA est nécessaire
+  // ✅ NOUVEAU: Vérifier si le CAPTCHA est nécessaire
   bool _shouldShowCaptcha() {
     return _captchaManager.shouldShowCaptcha(
       'login',
@@ -106,6 +124,68 @@ class _ConnexionPageState extends State<ConnexionPage> {
     return hasCredentials;
   }
 
+  // ✅ NOUVEAU: Formater la durée du blocage
+  String _formatLockoutTime(Duration duration) {
+    final minutes = duration.inMinutes;
+    final seconds = duration.inSeconds % 60;
+    return '${minutes}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  /// ✅ NOUVELLE MÉTHODE: Initialiser Firebase KIPIK après connexion réussie
+  Future<void> _initializeFirebaseAfterLogin() async {
+    try {
+      print('🏗️ Utilisateur connecté → Initialisation Firebase KIPIK...');
+      
+      // 1. Passer DatabaseManager en mode complet (avec tests Firestore)
+      print('🔄 Passage DatabaseManager en mode complet...');
+      await _databaseManager.initializeFullMode();
+      
+      // 2. Initialiser Firebase KIPIK avec l'utilisateur connecté
+      await FirebaseInitService.instance.initializeKipikFirebase(forceReinit: false);
+      
+      print('✅ Firebase KIPIK initialisé avec succès après connexion !');
+      print('🎯 Collections business disponibles');
+      print('🔒 Règles de sécurité respectées');
+      print('🎉 Firebase KIPIK entièrement opérationnel !');
+      
+    } catch (firebaseError) {
+      // ⚠️ Si l'init Firebase échoue, on continue quand même la connexion
+      print('⚠️ Échec partiel initialisation Firebase KIPIK: $firebaseError');
+      print('📱 Connexion utilisateur maintenue');
+      print('🔧 Fonctionnalités de base disponibles');
+      
+      // Afficher un message d'avertissement non-bloquant
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.warning_amber, color: Colors.orange.shade200),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Connexion réussie - Certaines fonctionnalités avancées peuvent être limitées',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.orange.shade600,
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'OK',
+              textColor: Colors.white,
+              onPressed: () {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              },
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (!_canAttemptLogin()) return;
@@ -115,8 +195,11 @@ class _ConnexionPageState extends State<ConnexionPage> {
     try {
       final email = _emailC.text.trim();
       final pass = _passC.text.trim();
-      
-      // ✅ CORRECTION: Utiliser SecureAuthService directement
+
+      print('🔄 Tentative de connexion utilisateur...');
+      print('📧 Email: $email');
+
+      // ✅ ÉTAPE 1: CONNEXION UTILISATEUR D'ABORD
       final user = await _authService.signInWithEmailAndPassword(
         email,
         pass,
@@ -153,32 +236,59 @@ class _ConnexionPageState extends State<ConnexionPage> {
         throw Exception('Impossible de déterminer le rôle utilisateur');
       }
 
-      // Navigation selon le rôle
+      print('✅ Authentification réussie:');
+      print('  - Utilisateur: $email');
+      print('  - Rôle: ${role.name}');
+      print('  - ID: ${user['uid']}');
+
+      // ✅ ÉTAPE 2: INITIALISATION FIREBASE KIPIK (APRÈS CONNEXION)
+      await _initializeFirebaseAfterLogin();
+
+      // ✅ NOUVEAU: Log de connexion avec info base de données
+      print('✅ Connexion complète réussie !');
+      print('  - Base de données: ${_databaseManager.activeDatabaseConfig.name}');
+      print('  - Mode: ${_databaseManager.isDemoMode ? "🎭 DÉMO" : "🏭 PRODUCTION"}');
+      print('  - Mode sécurisé: ${_databaseManager.isSafeMode ? "✅" : "❌ (Mode complet)"}');
+      print('  - Firebase KIPIK: Initialisé ✅');
+
+      // ✅ ÉTAPE 3: NAVIGATION SELON LE RÔLE
       Widget destination;
+      String routeName;
+      
       switch (role) {
         case models.UserRole.client:
-          destination = AccueilParticulierPage();
+          destination = const AccueilParticulierPage();
+          routeName = '/client';
           break;
         case models.UserRole.tatoueur:
           destination = HomePagePro(); 
+          routeName = '/tatoueur';
           break;
         case models.UserRole.admin:
           destination = const AdminDashboardHome();
+          routeName = '/admin';
           break;
         case models.UserRole.organisateur:
           destination = OrganisateurDashboardPage();
+          routeName = '/organisateur';
           break;
         default:
-          destination = AccueilParticulierPage();
+          destination = const AccueilParticulierPage();
+          routeName = '/client';
           print('⚠️ Rôle non reconnu: $role, redirection vers page client');
           break;
       }
 
-      // Navigation avec remplacement
+      // Navigation avec remplacement pour éviter le retour
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => destination),
       );
+
+      // ✅ LOGS FINAUX DE SUCCÈS
+      print('🎉 Session complète établie !');
+      print('🧭 Navigation vers interface ${role.name}');
+      print('✅ Navigation réussie vers $routeName');
 
     } catch (e) {
       print('❌ Erreur de connexion: $e');
@@ -220,13 +330,6 @@ class _ConnexionPageState extends State<ConnexionPage> {
         });
       }
     }
-  }
-
-  // ✅ NOUVEAU: Formater la durée du blocage
-  String _formatLockoutTime(Duration duration) {
-    final minutes = duration.inMinutes;
-    final seconds = duration.inSeconds % 60;
-    return '${minutes}:${seconds.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -271,34 +374,84 @@ class _ConnexionPageState extends State<ConnexionPage> {
                         Image.asset('assets/logo_kipik.png', width: 200),
                         const SizedBox(height: 30),
 
-                        // ✅ NOUVEAU: Indicateur de sécurité
+                        // ✅ NOUVEAU: Indicateur base de données avec mode sécurisé
                         Container(
                           margin: const EdgeInsets.only(bottom: 16),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.green.withOpacity(0.1),
+                            color: _databaseManager.isDemoMode 
+                                ? Colors.orange.withOpacity(0.1)
+                                : _databaseManager.isSafeMode
+                                    ? Colors.blue.withOpacity(0.1)
+                                    : Colors.green.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.green.withOpacity(0.3)),
+                            border: Border.all(
+                              color: _databaseManager.isDemoMode 
+                                  ? Colors.orange.withOpacity(0.3)
+                                  : _databaseManager.isSafeMode
+                                      ? Colors.blue.withOpacity(0.3)
+                                      : Colors.green.withOpacity(0.3),
+                            ),
                           ),
-                          child: const Row(
+                          child: Row(
                             children: [
-                              Icon(Icons.security, color: Colors.green, size: 20),
-                              SizedBox(width: 8),
+                              Icon(
+                                _databaseManager.isDemoMode 
+                                    ? Icons.science 
+                                    : _databaseManager.isSafeMode
+                                        ? Icons.shield
+                                        : Icons.security, 
+                                color: _databaseManager.isDemoMode 
+                                    ? Colors.orange 
+                                    : _databaseManager.isSafeMode
+                                        ? Colors.blue
+                                        : Colors.green, 
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
                               Expanded(
-                                child: Text(
-                                  'Connexion sécurisée avec protection anti-bot',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _databaseManager.isDemoMode 
+                                          ? '🎭 MODE DÉMONSTRATION'
+                                          : _databaseManager.isSafeMode
+                                              ? '🛡️ MODE SÉCURISÉ'
+                                              : '🔒 CONNEXION SÉCURISÉE',
+                                      style: TextStyle(
+                                        color: _databaseManager.isDemoMode 
+                                            ? Colors.orange 
+                                            : _databaseManager.isSafeMode
+                                                ? Colors.blue
+                                                : Colors.green,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        fontFamily: 'PermanentMarker',
+                                      ),
+                                    ),
+                                    Text(
+                                      _databaseManager.isSafeMode
+                                          ? 'Authentification seulement - Tests différés'
+                                          : _databaseManager.activeDatabaseConfig.description,
+                                      style: TextStyle(
+                                        color: _databaseManager.isDemoMode 
+                                            ? Colors.orange[700] 
+                                            : _databaseManager.isSafeMode
+                                                ? Colors.blue[700]
+                                                : Colors.green[700],
+                                        fontSize: 12,
+                                        fontFamily: 'Roboto',
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
                           ),
                         ),
 
-                        // ✅ AMÉLIORÉ: Alerte de blocage si applicable
+                        // ✅ AMÉLIORATION: Alerte de blocage si applicable
                         if (_lockoutTime != null) ...[
                           Container(
                             padding: const EdgeInsets.all(16),
@@ -317,7 +470,7 @@ class _ConnexionPageState extends State<ConnexionPage> {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(
+                                      const Text(
                                         'Compte temporairement bloqué',
                                         style: TextStyle(
                                           color: Colors.red,
@@ -459,7 +612,7 @@ class _ConnexionPageState extends State<ConnexionPage> {
                         ),
                         const SizedBox(height: 20),
 
-                        // ✅ CORRECTION: Widget reCAPTCHA conditionnel
+                        // ✅ NOUVEAU: Widget reCAPTCHA conditionnel
                         if (_shouldShowCaptcha() && _lockoutTime == null) ...[
                           Container(
                             padding: const EdgeInsets.all(16),
@@ -595,45 +748,71 @@ class _ConnexionPageState extends State<ConnexionPage> {
                           child: Text(tr('login.forgotPassword')),
                         ),
                         
-                        // ✅ NOUVEAU: Conseils de sécurité
-                        const SizedBox(height: 16),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                          ),
-                          child: const Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(Icons.info, color: Colors.blue, size: 16),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'Conseils de sécurité :',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
+                        // ✅ NOUVEAU: Info développeur/debug avec mode sécurisé
+                        if (_databaseManager.isDemoMode || _databaseManager.isSafeMode) ...[
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: _databaseManager.isSafeMode 
+                                  ? Colors.blue.withOpacity(0.1)
+                                  : Colors.orange.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: _databaseManager.isSafeMode 
+                                    ? Colors.blue.withOpacity(0.3)
+                                    : Colors.orange.withOpacity(0.3)
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      _databaseManager.isSafeMode 
+                                          ? Icons.shield 
+                                          : Icons.info, 
+                                      color: _databaseManager.isSafeMode 
+                                          ? Colors.blue 
+                                          : Colors.orange, 
+                                      size: 16
                                     ),
-                                  ),
-                                ],
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                '• Utilisez un mot de passe unique pour Kipik\n'
-                                '• Connectez-vous depuis un appareil de confiance\n'
-                                '• Déconnectez-vous après usage sur appareil partagé',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 12,
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      _databaseManager.isSafeMode 
+                                          ? 'Mode sécurisé actif'
+                                          : 'Mode développeur actif',
+                                      style: TextStyle(
+                                        color: _databaseManager.isSafeMode 
+                                            ? Colors.blue 
+                                            : Colors.orange,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 8),
+                                Text(
+                                  _databaseManager.isSafeMode
+                                      ? 'Mode: ${_databaseManager.currentMode}\n'
+                                        'Base: ${_databaseManager.activeDatabaseConfig.name}\n'
+                                        'ID: ${_databaseManager.activeDatabaseConfig.id}'
+                                      : 'Base: ${_databaseManager.activeDatabaseConfig.name}\n'
+                                        'ID: ${_databaseManager.activeDatabaseConfig.id}',
+                                  style: TextStyle(
+                                    color: _databaseManager.isSafeMode 
+                                        ? Colors.blue 
+                                        : Colors.orange,
+                                    fontSize: 12,
+                                    fontFamily: 'monospace',
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),

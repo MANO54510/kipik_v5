@@ -66,3 +66,4 @@ android/app/outputs/
 .env
 **/.env
 functions/.env
+!.env.example

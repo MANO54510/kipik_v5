@@ -1,7 +1,6 @@
 // lib/widgets/common/app_bars/custom_app_bar_particulier.dart
 
 import 'package:flutter/material.dart';
-import '../../../theme/kipik_theme.dart';
 import '../../../pages/particulier/accueil_particulier_page.dart';
 import '../../notifications/notification_badge.dart';
 import '../../../services/notification/firebase_notification_service.dart';
@@ -35,6 +34,7 @@ class CustomAppBarParticulier extends StatefulWidget implements PreferredSizeWid
 class _CustomAppBarParticulierState extends State<CustomAppBarParticulier> {
   final FirebaseNotificationService _notificationService = FirebaseNotificationService.instance;
   bool _isInitialized = false;
+  int _unreadCount = 0;
 
   @override
   void initState() {
@@ -43,20 +43,36 @@ class _CustomAppBarParticulierState extends State<CustomAppBarParticulier> {
   }
 
   Future<void> _initializeNotifications() async {
-    if (!_isInitialized) {
+    if (!_isInitialized && mounted) {
       try {
         await _notificationService.initialize();
         _isInitialized = true;
-        if (mounted) {
-          setState(() {});
-        }
+        _updateUnreadCount();
       } catch (e) {
         print('Erreur initialisation notifications: $e');
         // En cas d'erreur Firebase, utiliser les notifications factices
         _notificationService.generateMockNotifications();
         _isInitialized = true;
+        _updateUnreadCount();
+      }
+    }
+  }
+
+  void _updateUnreadCount() {
+    if (mounted) {
+      try {
+        final count = _notificationService.getUnreadCountSync();
+        if (count != _unreadCount) {
+          setState(() {
+            _unreadCount = count;
+          });
+        }
+      } catch (e) {
+        print('Erreur récupération count: $e');
         if (mounted) {
-          setState(() {});
+          setState(() {
+            _unreadCount = 0;
+          });
         }
       }
     }
@@ -64,72 +80,86 @@ class _CustomAppBarParticulierState extends State<CustomAppBarParticulier> {
 
   @override
   Widget build(BuildContext context) {
-    // Utiliser un StreamBuilder ou setState pour réactualiser le count
-    return StreamBuilder<Object>(
-      stream: Stream.periodic(const Duration(seconds: 2)), // Refresh toutes les 2 secondes
-      builder: (context, snapshot) {
-        // Utiliser la méthode synchrone qui existe dans votre service
-        final int unreadCount = _notificationService.getUnreadCountSync();
-
-        return AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          automaticallyImplyLeading: false,
-          title: Text(
-            widget.title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontFamily: KipikTheme.fontTitle,
-              fontSize: 22,
-            ),
-          ),
-          leading: widget.showBackButton
-              ? IconButton(
-                  icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-                  onPressed: () {
-                    if (widget.onBackButtonPressed != null) {
-                      widget.onBackButtonPressed!();
-                    } else if (widget.redirectToHome) {
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(
-                          builder: (context) => const AccueilParticulierPage(),
+    return AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      automaticallyImplyLeading: false,
+      title: Text(
+        widget.title,
+        style: const TextStyle(
+          color: Colors.white,
+          fontFamily: 'PermanentMarker',
+          fontSize: 22,
+        ),
+      ),
+      leading: widget.showBackButton
+          ? IconButton(
+              icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+              onPressed: () {
+                try {
+                  if (widget.onBackButtonPressed != null) {
+                    widget.onBackButtonPressed!();
+                  } else if (widget.redirectToHome) {
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (context) => const AccueilParticulierPage(),
+                      ),
+                    );
+                  } else {
+                    Navigator.pop(context);
+                  }
+                } catch (e) {
+                  print('Erreur navigation back: $e');
+                }
+              },
+            )
+          : null,
+      actions: [
+        if (widget.showNotificationIcon)
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications, color: Colors.white),
+                onPressed: () {
+                  try {
+                    // Mettre à jour le count avant d'ouvrir
+                    _updateUnreadCount();
+                    showNotificationPopup(context);
+                  } catch (e) {
+                    print('Erreur ouverture popup notifications: $e');
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Impossible d\'ouvrir les notifications'),
+                          backgroundColor: Colors.orange,
                         ),
                       );
-                    } else {
-                      Navigator.pop(context);
                     }
-                  },
-                )
-              : null,
-          actions: [
-            if (widget.showNotificationIcon)
-              Stack(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.notifications, color: Colors.white),
-                    onPressed: () {
-                      // Afficher le popup des notifications
-                      showNotificationPopup(context);
-                    },
-                  ),
-                  if (unreadCount > 0)
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: NotificationBadge(count: unreadCount),
-                    ),
-                ],
+                  }
+                },
               ),
-            if (widget.showBurger)
-              Builder(
-                builder: (context) => IconButton(
-                  icon: const Icon(Icons.menu, color: Colors.white),
-                  onPressed: () => Scaffold.of(context).openEndDrawer(),
+              if (_unreadCount > 0)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: NotificationBadge(count: _unreadCount),
                 ),
-              ),
-          ],
-        );
-      },
+            ],
+          ),
+        if (widget.showBurger)
+          Builder(
+            builder: (context) => IconButton(
+              icon: const Icon(Icons.menu, color: Colors.white),
+              onPressed: () {
+                try {
+                  Scaffold.of(context).openEndDrawer();
+                } catch (e) {
+                  print('Erreur ouverture drawer: $e');
+                }
+              },
+            ),
+          ),
+      ],
     );
   }
 }

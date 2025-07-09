@@ -94,7 +94,7 @@ class _NotificationPopupState extends State<NotificationPopup> {
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 18,
-                          fontFamily: KipikTheme.fontTitle,
+                          fontFamily: 'PermanentMarker',
                         ),
                       ),
                       Row(
@@ -341,8 +341,10 @@ class _NotificationPopupState extends State<NotificationPopup> {
     );
   }
 
+  // ✅ CORRIGÉ: Switch case complet pour tous les types
   String _getTypeLabel(NotificationType type) {
     switch (type) {
+      // Types originaux
       case NotificationType.message:
         return 'MESSAGE';
       case NotificationType.devis:
@@ -359,43 +361,169 @@ class _NotificationPopupState extends State<NotificationPopup> {
         return 'TATOUEUR';
       case NotificationType.system:
         return 'SYSTÈME';
+        
+      // Nouveaux types - Particulier
+      case NotificationType.devisRequested:
+        return 'DEMANDE DEVIS';
+      case NotificationType.devisReceived:
+        return 'DEVIS REÇU';
+      case NotificationType.devisPending:
+        return 'DEVIS EXPIRE';
+      case NotificationType.devisAccepted:
+        return 'DEVIS ACCEPTÉ';
+      case NotificationType.devisRejected:
+        return 'DEVIS REFUSÉ';
+      case NotificationType.appointmentConfirmed:
+        return 'RDV CONFIRMÉ';
+      case NotificationType.appointmentReminder:
+        return 'RAPPEL RDV';
+      case NotificationType.projectUpdated:
+        return 'PROJET MÀJ';
+      case NotificationType.projectCompleted:
+        return 'PROJET FINI';
+        
+      // Nouveaux types - Tatoueur
+      case NotificationType.devisRequestReceived:
+        return 'DEMANDE REÇUE';
+      case NotificationType.devisReminder:
+        return 'RAPPEL DEVIS';
+      case NotificationType.devisExpiringSoon:
+        return 'DEVIS EXPIRE';
+      case NotificationType.paymentRequest:
+        return 'DEMANDE PAIEMENT';
+      case NotificationType.paymentReceived:
+        return 'PAIEMENT REÇU';
+      case NotificationType.paymentOverdue:
+        return 'IMPAYÉ';
+      case NotificationType.clientMessage:
+        return 'MESSAGE CLIENT';
+      case NotificationType.appointmentBooked:
+        return 'RDV RÉSERVÉ';
+      case NotificationType.reviewReceived:
+        return 'AVIS REÇU';
+        
+      // Nouveaux types - Organisateur
+      case NotificationType.eventSubmitted:
+        return 'ÉVÉNEMENT SOUMIS';
+      case NotificationType.eventApproved:
+        return 'ÉVÉNEMENT APPROUVÉ';
+      case NotificationType.eventRejected:
+        return 'ÉVÉNEMENT REFUSÉ';
+      case NotificationType.tattooerApplicationReceived:
+        return 'CANDIDATURE';
+      case NotificationType.tattooerApplicationReminder:
+        return 'RAPPEL CANDIDATURE';
+      case NotificationType.tattooerAccepted:
+        return 'TATOUEUR ACCEPTÉ';
+      case NotificationType.tattooerRejectedByOrganizer:
+        return 'TATOUEUR REFUSÉ';
+      case NotificationType.eventCapacityFull:
+        return 'ÉVÉNEMENT COMPLET';
+      case NotificationType.eventStartsSoon:
+        return 'ÉVÉNEMENT BIENTÔT';
+        
+      // Nouveaux types - Système
+      case NotificationType.welcome:
+        return 'BIENVENUE';
+      case NotificationType.systemMaintenance:
+        return 'MAINTENANCE';
+      case NotificationType.newFeature:
+        return 'NOUVEAUTÉ';
+      case NotificationType.securityAlert:
+        return 'SÉCURITÉ';
+      case NotificationType.subscriptionExpiring:
+        return 'ABONNEMENT';
+      case NotificationType.profileIncomplete:
+        return 'PROFIL';
     }
   }
 
+  // ✅ CORRIGÉ: Navigation mise à jour pour tous les types
   void _handleNotificationTap(NotificationItem notification) {
     // Gérer la navigation selon le type de notification
     switch (notification.type) {
+      // Types originaux
       case NotificationType.message:
+      case NotificationType.clientMessage:
         _showPlaceholder('Messages', notification.projectId);
         break;
+        
       case NotificationType.devis:
+      case NotificationType.devisRequested:
+      case NotificationType.devisReceived:
+      case NotificationType.devisPending:
+      case NotificationType.devisAccepted:
+      case NotificationType.devisRejected:
+      case NotificationType.devisRequestReceived:
+      case NotificationType.devisReminder:
+      case NotificationType.devisExpiringSoon:
         _showPlaceholder('Devis', notification.projectId);
         break;
+        
       case NotificationType.rdv:
+      case NotificationType.appointmentConfirmed:
+      case NotificationType.appointmentReminder:
+      case NotificationType.appointmentBooked:
         _showPlaceholder('Rendez-vous', notification.projectId);
         break;
+        
       case NotificationType.facture:
+      case NotificationType.paymentRequest:
+      case NotificationType.paymentReceived:
+      case NotificationType.paymentOverdue:
         _showPlaceholder('Factures', notification.projectId);
         break;
-      case NotificationType.info:
-        _showPlaceholder('Informations', null);
-        break;
+        
       case NotificationType.projet:
+      case NotificationType.projectUpdated:
+      case NotificationType.projectCompleted:
         _showPlaceholder('Projet', notification.projectId);
         break;
+        
       case NotificationType.tatoueur:
+      case NotificationType.tattooerApplicationReceived:
+      case NotificationType.tattooerApplicationReminder:
+      case NotificationType.tattooerAccepted:
+      case NotificationType.tattooerRejectedByOrganizer:
         _showPlaceholder('Tatoueur', notification.projectId);
         break;
+        
+      case NotificationType.eventSubmitted:
+      case NotificationType.eventApproved:
+      case NotificationType.eventRejected:
+      case NotificationType.eventCapacityFull:
+      case NotificationType.eventStartsSoon:
+        _showPlaceholder('Événement', notification.eventId);
+        break;
+        
+      case NotificationType.reviewReceived:
+        _showPlaceholder('Avis clients', notification.projectId);
+        break;
+        
+      case NotificationType.subscriptionExpiring:
+        _showPlaceholder('Abonnement', null);
+        break;
+        
+      case NotificationType.profileIncomplete:
+        _showPlaceholder('Profil', null);
+        break;
+        
+      // Types généraux
+      case NotificationType.info:
       case NotificationType.system:
-        _showPlaceholder('Système', notification.projectId);
+      case NotificationType.welcome:
+      case NotificationType.systemMaintenance:
+      case NotificationType.newFeature:
+      case NotificationType.securityAlert:
+        _showPlaceholder('Informations', null);
         break;
     }
     Navigator.of(context).pop(); // Fermer le popup
   }
 
-  void _showPlaceholder(String feature, String? projectId) {
-    final message = projectId != null 
-        ? 'Navigation vers $feature (Projet: $projectId) - En cours de développement'
+  void _showPlaceholder(String feature, String? relatedId) {
+    final message = relatedId != null 
+        ? 'Navigation vers $feature (ID: $relatedId) - En cours de développement'
         : 'Navigation vers $feature - En cours de développement';
         
     ScaffoldMessenger.of(context).showSnackBar(

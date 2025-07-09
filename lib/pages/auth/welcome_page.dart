@@ -67,21 +67,40 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Image.asset(
-            selectedBackground,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) {
-              print('❌ Erreur chargement background: $error');
-              return Container(
-                decoration: const BoxDecoration(
+          // Background avec overlay pour meilleure visibilité
+          Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.asset(
+                selectedBackground,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  print('❌ Erreur chargement background: $error');
+                  return Container(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.black87, Colors.black],
+                      ),
+                    ),
+                  );
+                },
+              ),
+              // Overlay pour éclaircir et améliorer la lisibilité
+              Container(
+                decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Colors.black87, Colors.black],
+                    colors: [
+                      Colors.black.withOpacity(0.3), // Plus léger en haut
+                      Colors.black.withOpacity(0.6), // Plus sombre en bas
+                    ],
                   ),
                 ),
-              );
-            },
+              ),
+            ],
           ),
           SafeArea(
             child: Padding(
@@ -101,27 +120,7 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           // Logo et titre
-                          const LogoWithText(), // ✅ CORRECTION: Sans paramètre
-                          SizedBox(height: isLandscape ? 20 : 40),
-
-                          // Tagline
-                          Text(
-                            'welcome.tagline'.tr(),
-                            style: TextStyle(
-                              fontSize: isLandscape ? 16 : 20,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w300,
-                              letterSpacing: 1.2,
-                              shadows: const [
-                                Shadow(
-                                  blurRadius: 10.0,
-                                  color: Colors.black87,
-                                  offset: Offset(2.0, 2.0),
-                                ),
-                              ],
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
+                          const LogoWithText(),
                           SizedBox(height: isLandscape ? 30 : 60),
 
                           // Boutons principaux
@@ -129,30 +128,30 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                             width: buttonWidth,
                             child: Column(
                               children: [
-                                // Se connecter
+                                // Bouton Se connecter
                                 _buildWelcomeButton(
                                   icon: Icons.login,
-                                  text: 'welcome.login'.tr(),
+                                  text: 'loginButton'.tr(), // "Se connecter"
                                   onPressed: () => Navigator.pushNamed(context, '/connexion'),
                                   color: KipikTheme.rouge,
                                 ),
                                 const SizedBox(height: 16),
 
-                                // S'inscrire
+                                // Bouton S'inscrire
                                 _buildWelcomeButton(
                                   icon: Icons.person_add,
-                                  text: 'welcome.register'.tr(),
+                                  text: 'signupButton'.tr(), // "Créer un compte"
                                   onPressed: () => Navigator.pushNamed(context, '/inscription'),
                                   color: Colors.white,
                                   textColor: Colors.black87,
                                 ),
 
-                                // ✅ BOUTON ADMIN - TOUJOURS VISIBLE EN DEBUG
+                                // BOUTON ADMIN - TOUJOURS VISIBLE EN DEBUG
                                 if (kDebugMode) ...[
                                   const SizedBox(height: 16),
                                   _buildAdminButton(buttonWidth),
                                 ]
-                                // Mode production - bouton conditionnel (VOTRE DESIGN ORIGINAL)
+                                // Mode production - bouton conditionnel
                                 else ...[
                                   const SizedBox(height: 16),
                                   FutureBuilder<bool>(
@@ -235,13 +234,22 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
     return Container(
       width: width,
       margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.amber.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: ElevatedButton.icon(
         onPressed: () => Navigator.pushNamed(context, '/first-setup'),
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.amber,
           foregroundColor: Colors.black87,
-          elevation: 8,
-          shadowColor: Colors.amber.withOpacity(0.5),
+          elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -291,6 +299,13 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
         color: Colors.green.withOpacity(0.2),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.green),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.green.withOpacity(0.2),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: const Row(
         mainAxisSize: MainAxisSize.min,
@@ -303,6 +318,7 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
               color: Colors.green,
               fontWeight: FontWeight.bold,
               fontSize: 14,
+              fontFamily: 'PermanentMarker',
             ),
           ),
         ],

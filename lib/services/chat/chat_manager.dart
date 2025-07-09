@@ -2,6 +2,8 @@
 
 import '../../models/chat_message.dart';
 import '../../models/support_ticket.dart';
+import '../ai/ai_service_manager.dart';
+import '../auth/secure_auth_service.dart';
 import 'ai_chat_service.dart';
 import 'project_chat_service.dart';
 import 'support_chat_service.dart';
@@ -10,12 +12,75 @@ class ChatManager {
   static final ProjectChatService _projectChat = ProjectChatService();
   static final SupportChatService _supportChat = SupportChatService();
 
-  // AI Chat
-  static Future<ChatMessage> askAI(String prompt, {bool allowImages = true}) {
-    return AIChatService.getAIResponse(prompt, allowImages);
+  // ===============================
+  // 🤖 AI CHAT - VERSION AMÉLIORÉE
+  // ===============================
+
+  /// 🚀 Point d'entrée principal pour l'IA avec actions interactives
+  static Future<ChatMessage> askAI(
+    String prompt, {
+    bool allowImages = false,
+    String? contextPage,
+  }) async {
+    try {
+      final currentUser = SecureAuthService.instance.currentUser;
+      if (currentUser == null) {
+        throw Exception('Utilisateur non connecté');
+      }
+
+      // ✅ NOUVEAU: Utiliser le service IA enhanced avec actions
+      if (AIServiceManager.isConfigured) {
+        return await AIServiceManager.getAIResponse(
+          prompt,
+          currentUser.uid,
+          allowImageGeneration: allowImages,
+          contextPage: contextPage,
+        );
+      } else {
+        // ✅ FALLBACK: Utiliser l'ancien service si le nouveau n'est pas configuré
+        return await AIChatService.getAIResponse(prompt, allowImages);
+      }
+    } catch (e) {
+      // Message d'erreur user-friendly
+      return ChatMessage(
+        id: 'error_${DateTime.now().millisecondsSinceEpoch}',
+        text: 'Désolé, je ne peux pas répondre pour le moment. Réessayez dans quelques instants.',
+        senderId: 'assistant',
+        timestamp: DateTime.now(),
+      );
+    }
   }
 
-  // Project Chat
+  /// 📊 Statistiques budget IA (pour monitoring)
+  static Future<Map<String, dynamic>> getAIBudgetStats() async {
+    try {
+      if (AIServiceManager.isConfigured) {
+        return await AIServiceManager.getBudgetStats();
+      } else {
+        return {
+          'configured': false,
+          'currentCost': 0.0,
+          'budgetLimit': 35.0,
+          'percentage': 0,
+          'isOverBudget': false,
+        };
+      }
+    } catch (e) {
+      return {
+        'error': true,
+        'configured': false,
+        'currentCost': 0.0,
+        'budgetLimit': 35.0,
+        'percentage': 0,
+        'isOverBudget': false,
+      };
+    }
+  }
+
+  // ===============================
+  // 📝 PROJECT CHAT (inchangé)
+  // ===============================
+
   static Stream<List<ChatMessage>> projectMessages(String projectId) {
     return _projectChat.messagesStream(projectId);
   }
@@ -32,7 +97,10 @@ class ChatManager {
     return _projectChat.getUnreadCount(projectId, userId);
   }
 
-  // Support Chat
+  // ===============================
+  // 🎧 SUPPORT CHAT (inchangé)
+  // ===============================
+
   static Future<String> createSupportTicket({
     required String userId,
     required String subject,
@@ -63,5 +131,21 @@ class ChatManager {
 
   static Future<void> closeSupportTicket(String ticketId) {
     return _supportChat.closeTicket(ticketId);
+  }
+
+  // ===============================
+  // 🛠️ MÉTHODES UTILITAIRES
+  // ===============================
+
+  /// Vérifier si les services IA sont disponibles
+  static bool get isAIAvailable => AIServiceManager.isConfigured;
+
+  /// Obtenir le statut des services
+  static Map<String, bool> getServicesStatus() {
+    return {
+      'aiConfigured': AIServiceManager.isConfigured,
+      'projectChat': true, // Toujours disponible
+      'supportChat': true, // Toujours disponible
+    };
   }
 }

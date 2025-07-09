@@ -1,6 +1,7 @@
 // lib/models/chat_message.dart
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'ai_action.dart'; // ✅ AJOUTÉ
 
 /// A single chat message.
 class ChatMessage {
@@ -24,6 +25,9 @@ class ChatMessage {
   
   /// When the message was read.
   final DateTime? readAt;
+  
+  /// ✅ NOUVEAU: Actions suggérées par l'IA
+  final List<AIAction>? actions;
 
   ChatMessage({
     required this.id,
@@ -33,6 +37,7 @@ class ChatMessage {
     required this.timestamp,
     this.isRead = false,
     this.readAt,
+    this.actions, // ✅ AJOUTÉ
   });
 
   /// Factory constructor pour créer depuis Firestore
@@ -47,6 +52,12 @@ class ChatMessage {
       timestamp: (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isRead: data['isRead'] ?? false,
       readAt: (data['readAt'] as Timestamp?)?.toDate(),
+      // ✅ NOUVEAU: Désérialiser les actions
+      actions: data['actions'] != null 
+          ? (data['actions'] as List)
+              .map((actionData) => AIAction.fromJson(actionData))
+              .toList()
+          : null,
     );
   }
 
@@ -59,6 +70,8 @@ class ChatMessage {
       'timestamp': Timestamp.fromDate(timestamp),
       'isRead': isRead,
       'readAt': readAt != null ? Timestamp.fromDate(readAt!) : null,
+      // ✅ NOUVEAU: Sérialiser les actions
+      'actions': actions?.map((action) => action.toJson()).toList(),
     };
   }
 
@@ -74,6 +87,12 @@ class ChatMessage {
           : DateTime.fromMillisecondsSinceEpoch(map['timestamp'] ?? 0),
       isRead: map['isRead'] ?? false,
       readAt: map['readAt'] != null ? DateTime.fromMillisecondsSinceEpoch(map['readAt']) : null,
+      // ✅ NOUVEAU: Désérialiser les actions depuis Map
+      actions: map['actions'] != null 
+          ? (map['actions'] as List)
+              .map((actionData) => AIAction.fromJson(actionData))
+              .toList()
+          : null,
     );
   }
 
@@ -87,6 +106,8 @@ class ChatMessage {
       'timestamp': timestamp.millisecondsSinceEpoch,
       'isRead': isRead,
       'readAt': readAt?.millisecondsSinceEpoch,
+      // ✅ NOUVEAU: Sérialiser les actions
+      'actions': actions?.map((action) => action.toJson()).toList(),
     };
   }
 
@@ -94,6 +115,9 @@ class ChatMessage {
   bool get hasText => text != null && text!.trim().isNotEmpty;
   bool get hasImage => imageUrl != null && imageUrl!.isNotEmpty;
   bool get hasContent => hasText || hasImage;
+  
+  /// ✅ NOUVEAU: Vérifier si le message a des actions
+  bool get hasActions => actions != null && actions!.isNotEmpty;
   
   /// Vérifier si le message vient d'un utilisateur (pas assistant/agent)
   bool get isFromUser => !senderId.startsWith('assistant') && 
@@ -126,6 +150,7 @@ class ChatMessage {
     DateTime? timestamp,
     bool? isRead,
     DateTime? readAt,
+    List<AIAction>? actions, // ✅ AJOUTÉ
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -135,6 +160,7 @@ class ChatMessage {
       timestamp: timestamp ?? this.timestamp,
       isRead: isRead ?? this.isRead,
       readAt: readAt ?? this.readAt,
+      actions: actions ?? this.actions, // ✅ AJOUTÉ
     );
   }
 
@@ -165,7 +191,7 @@ class ChatMessage {
 
   @override
   String toString() {
-    return 'ChatMessage(id: $id, senderId: $senderId, hasText: $hasText, hasImage: $hasImage, isRead: $isRead)';
+    return 'ChatMessage(id: $id, senderId: $senderId, hasText: $hasText, hasImage: $hasImage, isRead: $isRead, hasActions: $hasActions)';
   }
 
   @override

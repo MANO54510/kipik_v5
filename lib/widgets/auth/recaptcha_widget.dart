@@ -84,10 +84,13 @@ class _ReCaptchaWidgetState extends State<ReCaptchaWidget> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
+          mainAxisSize: MainAxisSize.min, // ✅ CORRIGÉ
           children: [
             const Icon(Icons.check_circle, color: Colors.white),
             const SizedBox(width: 8),
-            const Text('Vérification réussie'),
+            const Flexible( // ✅ CORRIGÉ: Flexible au lieu de Text direct
+              child: Text('Vérification réussie'),
+            ),
           ],
         ),
         backgroundColor: Colors.green,
@@ -102,10 +105,13 @@ class _ReCaptchaWidgetState extends State<ReCaptchaWidget> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
+          mainAxisSize: MainAxisSize.min, // ✅ CORRIGÉ
           children: [
             const Icon(Icons.warning, color: Colors.white),
             const SizedBox(width: 8),
-            const Text('Sécurité moyenne détectée'),
+            const Flexible( // ✅ CORRIGÉ
+              child: Text('Sécurité moyenne détectée'),
+            ),
           ],
         ),
         backgroundColor: Colors.orange,
@@ -120,13 +126,16 @@ class _ReCaptchaWidgetState extends State<ReCaptchaWidget> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
+          mainAxisSize: MainAxisSize.min, // ✅ CORRIGÉ
           children: [
             const Icon(Icons.warning_amber, color: Colors.white),
             const SizedBox(width: 8),
-            const Text('Activité suspecte détectée'),
+            const Flexible( // ✅ CORRIGÉ
+              child: Text('Activité suspecte détectée'),
+            ),
           ],
         ),
-        backgroundColor: Colors.orange[700],
+        backgroundColor: Colors.orange,
         duration: const Duration(seconds: 4),
       ),
     );
@@ -138,13 +147,16 @@ class _ReCaptchaWidgetState extends State<ReCaptchaWidget> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
+          mainAxisSize: MainAxisSize.min, // ✅ CORRIGÉ
           children: [
             const Icon(Icons.security, color: Colors.white),
             const SizedBox(width: 8),
-            const Expanded(child: Text('Vérification supplémentaire requise')),
+            const Flexible( // ✅ CORRIGÉ: Flexible au lieu d'Expanded
+              child: Text('Vérification supplémentaire requise'),
+            ),
           ],
         ),
-        backgroundColor: Colors.red[700],
+        backgroundColor: Colors.red,
         duration: const Duration(seconds: 5),
         action: SnackBarAction(
           label: 'Vérifier',
@@ -206,10 +218,13 @@ class _ReCaptchaWidgetState extends State<ReCaptchaWidget> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
+          mainAxisSize: MainAxisSize.min, // ✅ CORRIGÉ
           children: [
             const Icon(Icons.error, color: Colors.white),
             const SizedBox(width: 8),
-            const Text('Erreur de vérification'),
+            const Flexible( // ✅ CORRIGÉ
+              child: Text('Erreur de vérification'),
+            ),
           ],
         ),
         backgroundColor: Colors.red,
@@ -234,9 +249,10 @@ class _ReCaptchaWidgetState extends State<ReCaptchaWidget> {
     return _buildVisualCaptchaButton();
   }
 
-  /// Indicateur pour reCAPTCHA invisible
+  /// ✅ MÉTHODE DÉFINITIVEMENT CORRIGÉE - Indicateur pour reCAPTCHA invisible
   Widget _buildInvisibleIndicator() {
     return Container(
+      width: double.infinity, // ✅ OBLIGATOIRE : Largeur définie
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: _getIndicatorColor().withOpacity(0.1),
@@ -244,6 +260,7 @@ class _ReCaptchaWidgetState extends State<ReCaptchaWidget> {
         border: Border.all(color: _getIndicatorColor(), width: 1),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min, // ✅ OBLIGATOIRE : Taille minimale
         children: [
           if (_isLoading)
             SizedBox(
@@ -261,7 +278,7 @@ class _ReCaptchaWidgetState extends State<ReCaptchaWidget> {
               size: 20,
             ),
           const SizedBox(width: 12),
-          Expanded(
+          Flexible( // ✅ OBLIGATOIRE : Flexible au lieu d'Expanded
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -300,18 +317,21 @@ class _ReCaptchaWidgetState extends State<ReCaptchaWidget> {
 
   /// Bouton pour CAPTCHA visuel
   Widget _buildVisualCaptchaButton() {
-    return ElevatedButton.icon(
-      onPressed: _isValidated ? null : _validateInvisibleCaptcha,
-      icon: Icon(_isValidated ? Icons.check : Icons.security),
-      label: Text(
-        _isValidated 
-            ? 'Vérifié'
-            : 'Vérifier que vous êtes humain',
-      ),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: _isValidated ? Colors.green : Colors.redAccent,
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    return Container(
+      width: double.infinity, // ✅ AJOUTÉ : Largeur définie
+      child: ElevatedButton.icon(
+        onPressed: _isValidated ? null : _validateInvisibleCaptcha,
+        icon: Icon(_isValidated ? Icons.check : Icons.security),
+        label: Text(
+          _isValidated 
+              ? 'Vérifié'
+              : 'Vérifier que vous êtes humain',
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _isValidated ? Colors.green : Colors.redAccent,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
       ),
     );
   }
@@ -370,11 +390,14 @@ class QuickReCaptcha extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ReCaptchaWidget(
-      onValidated: onValidated,
-      action: action,
-      useInvisible: true,
-      requiredScore: requiredScore,
+    return Container(
+      width: double.infinity, // ✅ AJOUTÉ : Protection layout
+      child: ReCaptchaWidget(
+        onValidated: onValidated,
+        action: action,
+        useInvisible: true,
+        requiredScore: requiredScore,
+      ),
     );
   }
 }
@@ -392,11 +415,14 @@ class HighSecurityCaptcha extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ReCaptchaWidget(
-      onValidated: onValidated,
-      action: action,
-      useInvisible: true,
-      requiredScore: 0.8, // Score élevé requis
+    return Container(
+      width: double.infinity, // ✅ AJOUTÉ : Protection layout
+      child: ReCaptchaWidget(
+        onValidated: onValidated,
+        action: action,
+        useInvisible: true,
+        requiredScore: 0.8, // Score élevé requis
+      ),
     );
   }
 }

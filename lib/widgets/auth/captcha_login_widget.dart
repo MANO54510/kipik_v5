@@ -1,7 +1,6 @@
 // lib/widgets/auth/captcha_login_widget.dart
 
 import 'package:flutter/material.dart';
-import 'package:kipik_v5/widgets/auth/recaptcha_widget.dart';
 import 'package:kipik_v5/services/auth/captcha_manager.dart';
 import 'package:kipik_v5/utils/auth_helper.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
@@ -30,8 +29,6 @@ class _CaptchaLoginWidgetState extends State<CaptchaLoginWidget> {
   late final TextEditingController _passwordController;
   
   bool _isLoading = false;
-  bool _captchaValidated = false;
-  CaptchaResult? _captchaResult;
   Duration? _lockoutTime;
 
   @override
@@ -43,7 +40,7 @@ class _CaptchaLoginWidgetState extends State<CaptchaLoginWidget> {
   }
 
   void _checkLockoutStatus() {
-    final lockout = CaptchaAuthHelper.getLoginLockoutTime();
+    final lockout = CaptchaManager.instance.getRemainingLockout();
     if (lockout != null) {
       setState(() => _lockoutTime = lockout);
       
@@ -66,6 +63,7 @@ class _CaptchaLoginWidgetState extends State<CaptchaLoginWidget> {
           // Message de blocage si applicable
           if (_lockoutTime != null) ...[
             Container(
+              width: double.infinity,
               padding: const EdgeInsets.all(16),
               margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
@@ -74,10 +72,11 @@ class _CaptchaLoginWidgetState extends State<CaptchaLoginWidget> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.lock_clock, color: Colors.red),
                   const SizedBox(width: 12),
-                  Expanded(
+                  Flexible(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -142,17 +141,33 @@ class _CaptchaLoginWidgetState extends State<CaptchaLoginWidget> {
           ),
           const SizedBox(height: 20),
 
-          // Widget reCAPTCHA (conditionnel)
-          if (CaptchaAuthHelper.shouldShowCaptcha('login')) ...[
-            ReCaptchaWidget(
-              action: 'login',
-              useInvisible: true,
-              onValidated: (result) {
-                setState(() {
-                  _captchaValidated = result.isValid;
-                  _captchaResult = result;
-                });
-              },
+          // ✅ Indicateur CAPTCHA (sans widget complexe pour éviter les erreurs)
+          if (CaptchaManager.instance.shouldShowCaptcha('login')) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                border: Border.all(color: Colors.blue.shade200),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.security, color: Colors.blue),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      'Vérification de sécurité renforcée activée',
+                      style: TextStyle(
+                        color: Colors.blue[700],
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
           ],
@@ -171,6 +186,7 @@ class _CaptchaLoginWidgetState extends State<CaptchaLoginWidget> {
             child: _isLoading
                 ? Row(
                     mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       SizedBox(
                         width: 20,
@@ -200,15 +216,8 @@ class _CaptchaLoginWidgetState extends State<CaptchaLoginWidget> {
   bool _canAttemptLogin() {
     if (_lockoutTime != null || _isLoading) return false;
     
-    bool hasCredentials = _emailController.text.isNotEmpty && 
-                         _passwordController.text.isNotEmpty;
-    
-    // Si CAPTCHA requis, vérifier qu'il est validé
-    if (CaptchaAuthHelper.shouldShowCaptcha('login')) {
-      return hasCredentials && _captchaValidated;
-    }
-    
-    return hasCredentials;
+    return _emailController.text.isNotEmpty && 
+           _passwordController.text.isNotEmpty;
   }
 
   Future<void> _handleLogin() async {
@@ -217,25 +226,53 @@ class _CaptchaLoginWidgetState extends State<CaptchaLoginWidget> {
     setState(() => _isLoading = true);
 
     try {
-      // ✅ Utiliser auth_helper sécurisé
+      // ✅ 1. Validation CAPTCHA si nécessaire (invisible)
+      CaptchaResult? captchaResult;
+      if (CaptchaManager.instance.shouldShowCaptcha('login')) {
+        captchaResult = await CaptchaManager.instance.validateLogin(
+          identifier: _emailController.text.trim(),
+          context: context,
+        );
+
+        if (!captchaResult.isValid) {
+          widget.onError?.call('Vérification de sécurité échouée. Réessayez.');
+          CaptchaManager.instance.recordFailedAttempt('login', 
+            identifier: _emailController.text.trim());
+          return;
+        }
+
+        print('✅ CAPTCHA Login validé: ${captchaResult.score}/${captchaResult.requiredScore}');
+      }
+
+      // ✅ 2. Tentative de connexion
       final role = await checkUserCredentialsSecure(
         email: _emailController.text.trim(),
         password: _passwordController.text,
-        captchaResult: _captchaResult,
+        captchaResult: captchaResult,
       );
 
       if (role != null) {
-        // Connexion réussie
+        // ✅ 3. Connexion réussie
+        CaptchaManager.instance.recordSuccessfulAttempt('login',
+          identifier: _emailController.text.trim());
         widget.onLoginSuccess?.call();
       } else {
-        widget.onError?.call('Échec de la connexion');
+        // ❌ 4. Échec de connexion
+        CaptchaManager.instance.recordFailedAttempt('login',
+          identifier: _emailController.text.trim());
+        widget.onError?.call('Email ou mot de passe incorrect');
       }
 
     } catch (e) {
-      widget.onError?.call(e.toString());
-      _checkLockoutStatus(); // Vérifier si bloqué après échec
+      print('❌ Erreur connexion: $e');
+      CaptchaManager.instance.recordFailedAttempt('login',
+        identifier: _emailController.text.trim());
+      widget.onError?.call('Erreur de connexion: ${e.toString()}');
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _checkLockoutStatus();
+      }
     }
   }
 

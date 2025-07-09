@@ -1,12 +1,14 @@
-// lib/pages/particulier/inspirations_page.dart
+// lib/pages/shared/inspirations/inspirations_page.dart
 
 import 'package:flutter/material.dart';
-import 'dart:math';  // Import pour Random
+import 'dart:math';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
-import '../../widgets/common/app_bars/custom_app_bar_particulier.dart';
-import '../../theme/kipik_theme.dart';
-import '../../models/inspiration_post.dart';
-import '../../services/inspiration/inspiration_service.dart';
+import '../../../widgets/common/app_bars/custom_app_bar_particulier.dart';
+import '../../../theme/kipik_theme.dart';
+import '../../../models/inspiration_post.dart';
+import '../../../services/inspiration/firebase_inspiration_service.dart';
+import '../../../services/auth/secure_auth_service.dart';
+import '../../../models/user_role.dart';
 import 'detail_inspiration_page.dart';
 
 class InspirationsPage extends StatefulWidget {
@@ -20,10 +22,13 @@ class _InspirationsPageState extends State<InspirationsPage> {
   final ScrollController _scrollController = ScrollController();
   bool _isLoading = false;
   List<InspirationPost> _posts = [];
-  final InspirationService _inspirationService = InspirationService();
+  final FirebaseInspirationService _inspirationService = FirebaseInspirationService.instance;
   
-  // Filtres
-  final List<String> _categories = ['Tous', 'Clients', 'Professionnels', 'Dessins', 'Réalisations'];
+  // ✅ NOUVEAU : Détection du rôle utilisateur
+  UserRole? _currentUserRole;
+  
+  // Filtres adaptés aux rôles
+  List<String> _categories = ['Tous', 'Clients', 'Professionnels', 'Dessins', 'Réalisations'];
   String _selectedCategory = 'Tous';
   
   // Liste des images de fond disponibles
@@ -32,18 +37,17 @@ class _InspirationsPageState extends State<InspirationsPage> {
     'assets/background_tatoo1.png',
     'assets/background_tatoo2.png',
     'assets/background_tatoo3.png',
-    // Ajoutez d'autres chemins d'images selon vos besoins
   ];
   
-  // Variable pour stocker l'image de fond sélectionnée aléatoirement
   late String _selectedBackground;
 
   @override
   void initState() {
     super.initState();
+    _initializeUserRole();
     _loadPosts();
     
-    // Ajouter la pagination infinie
+    // Pagination infinie
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.8 &&
           !_isLoading) {
@@ -61,13 +65,34 @@ class _InspirationsPageState extends State<InspirationsPage> {
     super.dispose();
   }
 
+  /// ✅ NOUVEAU : Initialiser le rôle utilisateur
+  void _initializeUserRole() {
+    final currentUser = SecureAuthService.instance.currentUser;
+    _currentUserRole = currentUser?.role;
+    
+    // Adapter les catégories selon le rôle
+    if (_currentUserRole == UserRole.tatoueur) {
+      _categories = ['Tous', 'Mes Inspirations', 'Autres Artistes', 'Clients', 'Flashs'];
+    } else {
+      _categories = ['Tous', 'Professionnels', 'Flashs Disponibles', 'Styles', 'Réalisations'];
+    }
+  }
+
   Future<void> _loadPosts() async {
     setState(() {
       _isLoading = true;
     });
     
     try {
-      final posts = await _inspirationService.getPosts(category: _selectedCategory == 'Tous' ? null : _selectedCategory);
+      // ✅ NOUVEAU : Utiliser FirebaseInspirationService
+      final inspirationsData = await _inspirationService.getInspirations(
+        category: _selectedCategory == 'Tous' ? null : _selectedCategory,
+        limit: 20,
+      );
+      
+      // Convertir les données en InspirationPost
+      final posts = inspirationsData.map((data) => _mapToInspirationPost(data)).toList();
+      
       setState(() {
         _posts = posts;
         _isLoading = false;
@@ -76,7 +101,7 @@ class _InspirationsPageState extends State<InspirationsPage> {
       setState(() {
         _isLoading = false;
       });
-      // Gérer l'erreur
+      _showErrorSnackBar('Erreur lors du chargement des inspirations');
     }
   }
 
@@ -88,10 +113,13 @@ class _InspirationsPageState extends State<InspirationsPage> {
     });
     
     try {
-      final morePosts = await _inspirationService.getMorePosts(
-        lastPostId: _posts.isNotEmpty ? _posts.last.id : null,
-        category: _selectedCategory == 'Tous' ? null : _selectedCategory
+      // Pour la pagination, on peut simuler en récupérant plus d'inspirations
+      final moreInspirationsData = await _inspirationService.getInspirations(
+        category: _selectedCategory == 'Tous' ? null : _selectedCategory,
+        limit: 10,
       );
+      
+      final morePosts = moreInspirationsData.map((data) => _mapToInspirationPost(data)).toList();
       
       setState(() {
         _posts.addAll(morePosts);
@@ -101,24 +129,34 @@ class _InspirationsPageState extends State<InspirationsPage> {
       setState(() {
         _isLoading = false;
       });
-      // Gérer l'erreur
     }
+  }
+
+  /// ✅ NOUVEAU : Mapper les données Firebase vers InspirationPost
+  InspirationPost _mapToInspirationPost(Map<String, dynamic> data) {
+    return InspirationPost.fromFirebaseData(data);
   }
 
   Future<void> _toggleFavorite(InspirationPost post) async {
     try {
-      final updatedPost = await _inspirationService.toggleFavorite(post.id);
+      final currentUser = SecureAuthService.instance.currentUser;
+      if (currentUser == null) return;
+
+      final newFavoriteStatus = await _inspirationService.toggleFavorite(
+        inspirationId: post.id,
+        userId: currentUser.uid,
+      );
       
       setState(() {
         final index = _posts.indexWhere((p) => p.id == post.id);
         if (index != -1) {
-          _posts[index] = updatedPost;
+          _posts[index] = post.copyWith(isFavorite: newFavoriteStatus);
         }
       });
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(updatedPost.isFavorite 
+          content: Text(newFavoriteStatus 
             ? 'Ajouté aux favoris' 
             : 'Retiré des favoris'),
           duration: const Duration(seconds: 2),
@@ -126,18 +164,49 @@ class _InspirationsPageState extends State<InspirationsPage> {
         ),
       );
     } catch (e) {
-      // Gérer l'erreur
+      _showErrorSnackBar('Erreur lors de la mise à jour des favoris');
     }
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  /// ✅ NOUVEAU : Navigation adaptée selon le rôle
+  void _navigateToAddInspiration() {
+    if (_currentUserRole == UserRole.tatoueur) {
+      // Naviguer vers la page de publication flash/inspiration pour tatoueurs
+      // TODO: Implémenter dans les prochaines semaines
+      _showInfoSnackBar('Publication flash/inspiration - Bientôt disponible');
+    } else {
+      // Pour les particuliers, peut-être partager une réalisation
+      _showInfoSnackBar('Partage inspiration - Bientôt disponible');
+    }
+  }
+
+  void _showInfoSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: KipikTheme.rouge,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Utilisation de CustomAppBarParticulier avec redirectToHome à true
       appBar: CustomAppBarParticulier(
-        title: 'Inspirations',
+        title: _currentUserRole == UserRole.tatoueur ? 'Portfolio & Inspirations' : 'Inspirations',
         showBackButton: true,
-        redirectToHome: true, // Ajout de cette ligne pour rediriger vers l'accueil
+        redirectToHome: true,
         showNotificationIcon: true,
       ),
       body: Stack(
@@ -178,7 +247,7 @@ class _InspirationsPageState extends State<InspirationsPage> {
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: isSelected 
-                              ? KipikTheme.rouge  // Utiliser le rouge de Kipik
+                              ? KipikTheme.rouge
                               : Colors.white.withOpacity(0.2),
                           foregroundColor: Colors.white,
                           elevation: isSelected ? 4 : 0,
@@ -197,46 +266,10 @@ class _InspirationsPageState extends State<InspirationsPage> {
               // Grille d'images
               Expanded(
                 child: _posts.isEmpty && !_isLoading
-                    ? Center(
-                        child: Container(
-                          padding: const EdgeInsets.all(24),
-                          margin: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.95),
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.image_search,
-                                size: 64,
-                                color: Colors.grey[800],
-                              ),
-                              const SizedBox(height: 16),
-                              const Text(
-                                'Aucune inspiration trouvée',
-                                style: TextStyle(
-                                  fontFamily: 'PermanentMarker',
-                                  fontSize: 20,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Essayez une autre catégorie ou revenez plus tard',
-                                style: TextStyle(
-                                  color: Colors.grey[600],
-                                  fontSize: 16,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
+                    ? _buildEmptyState()
                     : RefreshIndicator(
                         onRefresh: _loadPosts,
-                        color: KipikTheme.rouge,  // Utiliser le rouge de Kipik
+                        color: KipikTheme.rouge,
                         child: MasonryGridView.count(
                           controller: _scrollController,
                           crossAxisCount: 2,
@@ -250,14 +283,13 @@ class _InspirationsPageState extends State<InspirationsPage> {
                                 child: Padding(
                                   padding: EdgeInsets.all(16.0),
                                   child: CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(KipikTheme.rouge),  // Utiliser le rouge de Kipik
+                                    valueColor: AlwaysStoppedAnimation<Color>(KipikTheme.rouge),
                                   ),
                                 ),
                               );
                             }
                             
                             final post = _posts[index];
-                            
                             return _buildInspirationCard(post);
                           },
                         ),
@@ -267,19 +299,62 @@ class _InspirationsPageState extends State<InspirationsPage> {
           ),
         ],
       ),
-      // Bouton pour ajouter une nouvelle inspiration
+      // ✅ NOUVEAU : Bouton adapté selon le rôle
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // Naviguer vers la page d'ajout d'inspiration
-        },
-        backgroundColor: KipikTheme.rouge,  // Utiliser le rouge de Kipik
-        child: const Icon(Icons.add, color: Colors.white),
+        onPressed: _navigateToAddInspiration,
+        backgroundColor: KipikTheme.rouge,
+        child: Icon(
+          _currentUserRole == UserRole.tatoueur ? Icons.add_a_photo : Icons.add,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        margin: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.95),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.image_search,
+              size: 64,
+              color: Colors.grey[800],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Aucune inspiration trouvée',
+              style: TextStyle(
+                fontFamily: 'PermanentMarker',
+                fontSize: 20,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _currentUserRole == UserRole.tatoueur 
+                ? 'Publiez vos premières œuvres' 
+                : 'Essayez une autre catégorie ou revenez plus tard',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 16,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildInspirationCard(InspirationPost post) {
-    final double cardHeight = 150 + (post.id.hashCode % 100); // Hauteur variable pour effet Pinterest
+    final double cardHeight = 150 + (post.id.hashCode % 100);
     
     return GestureDetector(
       onTap: () {
@@ -294,7 +369,7 @@ class _InspirationsPageState extends State<InspirationsPage> {
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: KipikTheme.rouge.withOpacity(0.3), width: 1),  // Bordure rouge Kipik
+          side: BorderSide(color: KipikTheme.rouge.withOpacity(0.3), width: 1),
         ),
         elevation: 4,
         child: Stack(
@@ -316,7 +391,7 @@ class _InspirationsPageState extends State<InspirationsPage> {
                             ? loadingProgress.cumulativeBytesLoaded / 
                               loadingProgress.expectedTotalBytes!
                             : null,
-                        valueColor: const AlwaysStoppedAnimation<Color>(KipikTheme.rouge),  // Utiliser le rouge de Kipik
+                        valueColor: const AlwaysStoppedAnimation<Color>(KipikTheme.rouge),
                       ),
                     );
                   },
@@ -365,7 +440,7 @@ class _InspirationsPageState extends State<InspirationsPage> {
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                           fontSize: 12,
-                          fontFamily: 'PermanentMarker',  // Utiliser la police Kipik
+                          fontFamily: 'PermanentMarker',
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -390,7 +465,7 @@ class _InspirationsPageState extends State<InspirationsPage> {
                   ),
                   child: Icon(
                     post.isFavorite ? Icons.favorite : Icons.favorite_border,
-                    color: post.isFavorite ? KipikTheme.rouge : Colors.white,  // Utiliser le rouge de Kipik
+                    color: post.isFavorite ? KipikTheme.rouge : Colors.white,
                     size: 20,
                   ),
                 ),
@@ -405,7 +480,7 @@ class _InspirationsPageState extends State<InspirationsPage> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: KipikTheme.rouge,  // Utiliser le rouge de Kipik
+                    color: KipikTheme.rouge,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Text(

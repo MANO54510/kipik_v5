@@ -15,11 +15,18 @@ import 'package:kipik_v5/pages/particulier/mes_devis_page.dart';
 import 'package:kipik_v5/pages/particulier/mes_projets_particulier_page.dart';
 import 'package:kipik_v5/pages/particulier/messages_particulier_page.dart';
 import 'package:kipik_v5/pages/particulier/profil_particulier_page.dart';
-import 'package:kipik_v5/pages/particulier/inspirations_page.dart';
 import 'package:kipik_v5/pages/particulier/favoris_page.dart';
 import 'package:kipik_v5/pages/particulier/notifications_page.dart';
 import 'package:kipik_v5/pages/particulier/parametres_page.dart';
 import 'package:kipik_v5/pages/particulier/aide_support_page.dart';
+
+// ✅ IMPORT CORRIGÉ : Pages shared
+import 'package:kipik_v5/pages/shared/inspirations/inspirations_page.dart';
+
+// ✅ NOUVEAUX IMPORTS FLASH (Semaine 2)
+import 'package:kipik_v5/pages/pro/flashs/publier_flash_page.dart';
+import 'package:kipik_v5/pages/pro/flashs/gestion_flashs_page.dart';
+import 'package:kipik_v5/pages/shared/flashs/flash_detail_page.dart';
 
 // Partie Pro
 import 'package:kipik_v5/pages/pro/home_page_pro.dart';
@@ -83,16 +90,19 @@ final Map<String, WidgetBuilder> appRoutes = {
   '/devis': (_) => const MesDevisPage(),
   '/mes-projets': (_) => const MesProjetsParticulierPage(),
   '/messages': (_) => const MessagesParticulierPage(),
-  '/inspirations': (_) => const InspirationsPage(),
   '/favoris': (_) => const FavorisPage(),
+
+  // ✅ ROUTE CORRIGÉE : Inspirations maintenant depuis /shared/
+  '/inspirations': (_) => const InspirationsPage(), // ✅ Fonctionne toujours, même classe
 
   // Pro
   '/pro': (_) => const HomePagePro(),
   '/pro/dashboard': (_) => const DashboardPage(),
   '/pro/profil': (_) => const ProfilTatoueur(),
-  '/pro/inscription': (_) =>  InscriptionProPage(),
+  '/pro/inscription': (_) => InscriptionProPage(),
   '/pro/notifications': (_) => const NotificationsProPage(),
-  '/pro/parametres': (_) => const ParametresProPage(),  '/pro/aide': (_) => const AideProPage(),
+  '/pro/parametres': (_) => const ParametresProPage(),
+  '/pro/aide': (_) => const AideProPage(),
   '/pro/agenda': (_) => const ProAgendaHomePage(),
   '/pro/comptabilite': (_) => const ComptabilitePage(),
   '/pro/realisations': (_) => const MesRealisationsPage(),
@@ -127,6 +137,27 @@ final Map<String, WidgetBuilder> appRoutes = {
   // Légal
   '/cgu': (_) => const CGUPage(),
   '/cgv': (_) => const CGVPage(),
+
+// ✅ NOUVELLES ROUTES FLASH (Semaine 2) - DÉCOMMENTER
+// Flash & Booking
+'/pro/flash/publier': (_) => const PublierFlashPage(),
+'/pro/flash/gestion': (_) => const GestionFlashsPage(),
+
+// Flash partagé
+'/flash/detail': (_) => const FlashDetailPage(),
+
+/*
+// ✅ ROUTES FUTURES (Semaines 3-7) - À décommenter plus tard
+'/flash/swipe': (_) => const FlashSwipePage(),
+'/flash/minute': (_) => const FlashMinuteFeedPage(),
+'/flash/favoris': (_) => const MesFavorisFlashsPage(),
+'/flash/rdv': (_) => const MesRdvFlashsPage(),
+'/flash/historique': (_) => const HistoriqueFlashsPage(),
+'/booking/flow': (_) => const BookingFlowPage(),
+'/pro/flash/minute': (_) => const FlashMinuteCreatePage(),
+'/pro/flash/demandes': (_) => const DemandesRdvPage(),
+'/pro/flash/validation': (_) => const RdvValidationPage(),
+*/
 };
 
 // Guard pour l'accès à la configuration initiale admin
@@ -203,6 +234,25 @@ Route<dynamic>? generateRoute(RouteSettings settings) {
       ),
     );
   }
+
+  // ✅ FUTURES ROUTES DYNAMIQUES FLASH (Semaine 2)
+  /*
+  // Route dynamique pour détail flash
+  if (parts.length == 3 && parts[0] == 'flash' && parts[1] == 'detail') {
+    final flashId = parts[2];
+    return MaterialPageRoute(
+      builder: (_) => FlashDetailPage(flashId: flashId),
+    );
+  }
+  
+  // Route dynamique pour booking flow
+  if (parts.length == 3 && parts[0] == 'booking' && parts[1] == 'flow') {
+    final flashId = parts[2];
+    return MaterialPageRoute(
+      builder: (_) => BookingFlowPage(flashId: flashId),
+    );
+  }
+  */
 
   return null;
 }

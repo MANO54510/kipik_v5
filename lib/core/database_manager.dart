@@ -31,6 +31,9 @@ class DatabaseManager {
   // Cache des bases vérifiées
   final Set<String> _verifiedDatabases = {'kipik'}; // kipik existe par défaut
 
+  // ✅ NOUVEAU : Mode sécurisé (sans tests Firestore)
+  bool _isSafeMode = true;
+
   /// Obtenir l'instance Firestore active (TOUJOURS sécurisée)
   FirebaseFirestore get firestore {
     return _getFirestoreInstance(_activeDatabaseKey);
@@ -59,6 +62,147 @@ class DatabaseManager {
     }
 
     return _firestoreInstances[databaseKey]!;
+  }
+
+  /// 🛡️ NOUVELLE MÉTHODE : Initialisation en mode sécurisé (sans test Firestore)
+  /// Cette méthode initialise le DatabaseManager SANS tester les connexions Firestore
+  /// Parfait pour le démarrage de l'app avant qu'un utilisateur soit connecté
+  Future<void> initializeSafeMode({String? preferredDatabase}) async {
+    try {
+      print('🚀 Initialisation DatabaseManager (mode sécurisé)...');
+      
+      // 🔧 Configuration des bases SANS test de connexion
+      print('🔍 Configuration des bases de données disponibles...');
+      
+      // Remettre la configuration par défaut (on sait que kipik existe)
+      _availableDatabases = {
+        'kipik': const DatabaseConfig(
+          id: 'kipik',
+          name: 'KIPIK Production',
+          description: 'Base de données principale avec les vraies données',
+          isProduction: true,
+          exists: true, // On assume qu'elle existe
+        ),
+        'demo': const DatabaseConfig(
+          id: 'kipik-demo',
+          name: 'KIPIK Démo',
+          description: 'Base de démonstration avec des données factices',
+          isProduction: false,
+          exists: false, // Sera créée plus tard si nécessaire
+        ),
+        'test': const DatabaseConfig(
+          id: 'kipik-test',
+          name: 'KIPIK Test',
+          description: 'Base de données pour les tests de développement',
+          isProduction: false,
+          exists: false, // Sera créée plus tard si nécessaire
+        ),
+      };
+      
+      print('✅ Base découverte: KIPIK Production');
+      print('✅ Base découverte: KIPIK Démo');
+      print('✅ Base découverte: KIPIK Test');
+      print('📊 Bases disponibles: KIPIK Production, KIPIK Démo, KIPIK Test');
+      
+      // 🎯 Choisir la base cible (par défaut kipik)
+      final targetDb = preferredDatabase ?? 'kipik';
+      
+      print('🔄 Basculement base de données:');
+      print('  Ancienne: ${_availableDatabases[_activeDatabaseKey]?.name}');
+      print('  Nouvelle: ${_availableDatabases[targetDb]?.name}');
+      
+      // 📝 Configurer la base active SANS test de connexion
+      _activeDatabaseKey = targetDb;
+      
+      // 🔗 Créer l'instance Firestore SANS test
+      final config = _availableDatabases[_activeDatabaseKey]!;
+      _firestoreInstances[_activeDatabaseKey] = FirebaseFirestore.instanceFor(
+        app: Firebase.app(),
+        databaseId: config.id,
+      );
+      
+      print('✅ Instance Firestore créée pour: ${config.name}');
+      print('⚠️ Tests de connexion différés jusqu\'à authentification utilisateur');
+      
+      // 🔧 Marquer comme mode sécurisé
+      _isSafeMode = true;
+      
+      // 🔧 Initialiser les services annexes (cache, etc.) SANS Firestore
+      await _initializeOtherServicesSafe();
+      
+      print('✅ DatabaseManager initialisé sur: ${config.name}');
+      
+    } catch (e) {
+      print('❌ Erreur initialisation DatabaseManager mode sécurisé: $e');
+      rethrow;
+    }
+  }
+
+  /// 🔧 Services annexes en mode sécurisé (sans appel Firestore)
+  Future<void> _initializeOtherServicesSafe() async {
+    try {
+      // ✅ Services qui ne nécessitent PAS Firestore
+      print('🔧 Initialisation services annexes (mode sécurisé)...');
+      
+      // Ici vous pouvez initialiser :
+      // - Cache local
+      // - Configuration locale
+      // - Services qui ne dépendent pas de Firestore
+      
+      // ❌ PAS DE : vérification connexion, tests Firestore, etc.
+      
+      print('✅ Services annexes initialisés (mode sécurisé)');
+      
+    } catch (e) {
+      print('❌ Erreur services annexes mode sécurisé: $e');
+      // Non-bloquant
+    }
+  }
+
+  /// 🔄 NOUVELLE MÉTHODE : Initialisation complète APRÈS connexion utilisateur
+  /// Cette méthode fait tous les tests et vérifications Firestore
+  /// À appeler SEULEMENT après qu'un utilisateur soit connecté
+  Future<void> initializeFullMode({String? preferredDatabase}) async {
+    try {
+      print('🔄 Passage en mode complet (utilisateur connecté)...');
+      
+      // 1. Découvrir les bases disponibles (avec tests de connexion)
+      await discoverAvailableDatabases();
+      
+      // 2. Choisir la base cible
+      final targetDb = preferredDatabase ?? 'kipik';
+      
+      if (_availableDatabases.containsKey(targetDb) && _availableDatabases[targetDb]!.exists) {
+        await switchDatabase(targetDb);
+      } else {
+        print('⚠️ Base préférée "$targetDb" introuvable, utilisation de "kipik"');
+        await switchDatabase('kipik');
+      }
+      
+      // 3. Vérifier la connexion (maintenant que l'utilisateur est connecté)
+      await _verifyConnection();
+      
+      // 4. Marquer comme mode complet
+      _isSafeMode = false;
+      
+      print('✅ DatabaseManager basculé en mode complet');
+      
+    } catch (e) {
+      print('❌ Erreur passage mode complet: $e');
+      rethrow;
+    }
+  }
+
+  /// 🔍 Vérifier si le DatabaseManager est en mode sécurisé
+  bool get isSafeMode => _isSafeMode;
+
+  /// 📊 Obtenir le statut du mode actuel
+  String get currentMode {
+    if (isSafeMode) {
+      return '🛡️ Mode sécurisé (sans test Firestore)';
+    } else {
+      return '🔗 Mode complet (avec vérifications Firestore)';
+    }
   }
 
   /// ✅ NOUVELLE MÉTHODE : Vérifier qu'une base existe avant de l'utiliser
@@ -107,7 +251,7 @@ class DatabaseManager {
         _verifiedDatabases.add(key);
         print('✅ Base découverte: ${_availableDatabases[key]!.name}');
       } else if (!exists) {
-        print('⚠️ Base "$dbId" non trouvée (normal si pas encore créée)');
+        print('! Base "$dbId" n\'existe pas (normal si pas encore créée)');
       }
     }
     
@@ -163,8 +307,10 @@ class DatabaseManager {
     print('  Ancienne: ${_availableDatabases[oldKey]?.name}');
     print('  Nouvelle: ${config.name}');
 
-    // Vérifier la connexion
-    await _verifyConnection();
+    // Vérifier la connexion SEULEMENT si pas en mode sécurisé
+    if (!_isSafeMode) {
+      await _verifyConnection();
+    }
   }
 
   /// Basculer vers le mode démo (crée la base si nécessaire)
@@ -223,6 +369,8 @@ class DatabaseManager {
       'exists': activeDatabaseConfig.exists,
       'availableDatabases': _availableDatabases.keys.where((k) => _availableDatabases[k]!.exists).toList(),
       'totalDatabases': _availableDatabases.values.where((c) => c.exists).length,
+      'mode': currentMode,
+      'isSafeMode': _isSafeMode,
     };
   }
 
@@ -433,6 +581,7 @@ class DatabaseManager {
     _activeDatabaseKey = 'kipik';
     _verifiedDatabases.clear();
     _verifiedDatabases.add('kipik');
+    _isSafeMode = true;
     
     // Remettre seulement kipik par défaut
     _availableDatabases = {
@@ -454,6 +603,7 @@ class DatabaseManager {
     print('  - ID Firestore: ${activeDatabaseConfig.id}');
     print('  - Instances en cache: ${_firestoreInstances.length}');
     print('  - Bases vérifiées: ${_verifiedDatabases.length}');
+    print('  - Mode sécurisé: ${_isSafeMode ? "✅" : "❌"}');
     
     // Lister les bases disponibles
     print('📋 Bases de données:');
@@ -487,6 +637,8 @@ class DatabaseManager {
       ),
       'verifiedDatabases': _verifiedDatabases.toList(),
       'totalDatabases': _availableDatabases.values.where((c) => c.exists).length,
+      'isSafeMode': _isSafeMode,
+      'currentMode': currentMode,
     };
   }
 }

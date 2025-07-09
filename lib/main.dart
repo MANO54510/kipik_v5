@@ -1,10 +1,11 @@
+// lib/main.dart
+
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:kipik_v5/utils/payment_limits_manager.dart';
@@ -12,16 +13,15 @@ import 'package:kipik_v5/services/auth/captcha_manager.dart';
 
 import 'package:kipik_v5/locator.dart';
 import 'package:kipik_v5/routes/router.dart';
-import 'package:kipik_v5/services/auth/secure_auth_service.dart';
 import 'package:kipik_v5/services/payment/firebase_payment_service.dart';
-import 'package:kipik_v5/services/init/firebase_init_service.dart';
-import 'package:kipik_v5/core/database_manager.dart'; // ✅ AJOUTÉ
-import 'package:kipik_v5/utils/database_sync_manager.dart'; // ✅ AJOUTÉ
+import 'package:kipik_v5/core/database_manager.dart';
+import 'package:kipik_v5/utils/database_sync_manager.dart';
+import 'package:kipik_v5/services/config/api_config.dart';
 
 // Splash Screen
 import 'package:kipik_v5/pages/splash/combined_splash_screen.dart';
 
-// ← **NOUVEAU** : import des options générées par FlutterFire CLI
+// import des options générées par FlutterFire CLI
 import 'firebase_options.dart';
 
 void main() async {
@@ -48,37 +48,42 @@ void main() async {
       return Future.value();
     });
 
-    // 4. INITIALISATION FIREBASE CORE
+    // 3.5 INITIALISATION API CONFIG
+    try {
+      print('🔄 Initialisation configuration API...');
+      await ApiConfig.initialize();
+      print('✅ Configuration API initialisée avec succès');
+      
+      // Debug en mode développement
+      if (dotenv.env['APP_ENV'] == 'development') {
+        await ApiConfig.debugConfiguration();
+      }
+    } catch (apiError) {
+      print('⚠️ Erreur configuration API: $apiError');
+      print('   → Certaines fonctionnalités (Google Vision) peuvent être limitées');
+    }
+
+    // 4. INITIALISATION FIREBASE CORE SEULEMENT
     print('🔄 Initialisation Firebase Core...');
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
     print('✅ Firebase Core initialisé avec succès');
 
-    // 4.1 TEST DE CONNECTIVITÉ FIREBASE (non-bloquant)
+    // 4.1 TEST DE CONNECTIVITÉ FIREBASE BASIC (non-bloquant, sans Firestore)
     try {
-      await testFirebaseConnectivity();
+      await testFirebaseConnectivityBasic();
     } catch (_) {
       print('⚠️ Test connectivité a échoué malgré tout, on continue…');
     }
 
-    // 4.5 INITIALISATION AUTOMATIQUE DE LA STRUCTURE FIREBASE KIPIK
-    try {
-      print('🔄 Initialisation structure Firebase KIPIK...');
-      final initService = FirebaseInitService.instance;
-      await initService.initializeKipikFirebase();
-      print('✅ Structure Firebase KIPIK initialisée automatiquement');
-      if (dotenv.env['APP_ENV'] == 'development') {
-        await initService.debugInitService();
-      }
-    } catch (initError) {
-      print('⚠️ Erreur initialisation structure Firebase: $initError');
-    }
+    // ✅ 4.5 - MODIFIÉ : Init Firebase KIPIK différée jusqu'à connexion utilisateur
+    print('🏗️ Init Firebase KIPIK différée jusqu\'à connexion utilisateur');
+    print('📱 Seules les fonctionnalités d\'authentification sont disponibles');
 
     // 5. Émulateur Functions en dev
     if (dotenv.env['APP_ENV'] == 'development') {
-      // FirebaseFunctions.instance.useFunctionsEmulator('localhost', 5001);
-      print('🔧 Mode développement activé - Functions émulateur disponible');
+      print('🔧 Mode développement activé');
     }
 
     // 6. Configuration Stripe
@@ -92,28 +97,15 @@ void main() async {
     setupLocator();
     print('✅ Services initialisés');
 
-    // ✅ 8.5 INITIALISATION DU GESTIONNAIRE DE BASE DE DONNÉES
+    // 8.5 INITIALISATION DU GESTIONNAIRE DE BASE DE DONNÉES EN MODE SÉCURISÉ
     try {
-      await DatabaseManager.instance.initialize();
+      await DatabaseManager.instance.initializeSafeMode();
       print('✅ DatabaseManager initialisé sur: ${DatabaseManager.instance.activeDatabaseConfig.name}');
       
       // Debug en mode développement
       if (dotenv.env['APP_ENV'] == 'development') {
         DatabaseManager.instance.debugDatabaseManager();
-        
-        // ✅ SYNCHRONISATION AUTOMATIQUE DES BASES DÉMO/TEST
-        try {
-          print('🔄 Synchronisation automatique démo/test...');
-          await DatabaseSyncManager.instance.autoSyncOnStartup();
-          print('✅ Synchronisation automatique terminée');
-        } catch (syncError) {
-          print('⚠️ Erreur synchronisation auto: $syncError');
-        }
-        
-        // Test de toutes les connexions disponibles
-        print('🧪 Test des connexions aux bases disponibles...');
-        final testResults = await testAllDatabaseConnections();
-        print('📊 Résultats des tests: $testResults');
+        print('🛡️ Mode: ${DatabaseManager.instance.currentMode}');
       }
     } catch (dbError) {
       print('⚠️ Erreur initialisation DatabaseManager: $dbError');
@@ -143,17 +135,21 @@ void main() async {
       print('⚠️ Erreur initialisation service paiement: $paymentError');
     }
 
-    // 11. Validation finale Firebase
-    await validateFirebaseInitialization();
+    // ✅ 11. SUPPRIMÉ : La validation Firebase se fera après connexion utilisateur
+    print('🎯 Validation Firebase KIPIK en attente de connexion utilisateur');
 
-    print('🎉 Toutes les initialisations terminées avec succès !');
+    print('🎉 Toutes les initialisations de base terminées avec succès !');
+    print('🏗️ Init Firebase KIPIK en attente de connexion utilisateur...');
     
     // Debug final du système complet en développement
     if (dotenv.env['APP_ENV'] == 'development') {
       print('\n🔍 ÉTAT FINAL DU SYSTÈME:');
       print('  - Base active: ${DatabaseManager.instance.activeDatabaseConfig.name}');
-      print('  - Mode: ${DatabaseManager.instance.isDemoMode ? "🎭 DÉMO" : "🏭 PRODUCTION"}');
+      print('  - Mode DB: ${DatabaseManager.instance.isDemoMode ? "🎭 DÉMO" : "🏭 PRODUCTION"}');
+      print('  - Mode sécurisé: ${DatabaseManager.instance.isSafeMode ? "✅" : "❌"}');
       print('  - Services disponibles: ${locator.isRegistered<DatabaseManager>() ? "✅" : "❌"}');
+      print('  - API Config: ${await ApiConfig.isConfigurationValid ? "✅" : "❌"}');
+      print('  - Firebase KIPIK: 🔄 En attente connexion utilisateur');
       print('  - Prêt pour basculement: ✅');
     }
 
@@ -172,6 +168,8 @@ void main() async {
       ),
     );
     print('🚀 Application KIPIK V5 lancée avec succès');
+    print('🔐 Prêt pour authentification utilisateur');
+    
   } catch (e, stackTrace) {
     print('❌ ERREUR CRITIQUE D\'INITIALISATION: $e');
     print('📍 Stack trace: $stackTrace');
@@ -189,11 +187,11 @@ void main() async {
   }
 }
 
-/// ✅ Test de connectivité Firebase (non-bloquant)
-Future<void> testFirebaseConnectivity() async {
-  print('🔄 Test connectivité Firebase…');
+/// ✅ Test de connectivité Firebase BASIC (SANS Firestore - non-bloquant)
+Future<void> testFirebaseConnectivityBasic() async {
+  print('🔄 Test connectivité Firebase basic…');
 
-  // 1️⃣ Test Auth
+  // 1️⃣ Test Auth seulement
   try {
     final user = FirebaseAuth.instance.currentUser;
     print('✅ Auth accessible (user: ${user?.uid ?? 'anonyme'})');
@@ -201,22 +199,14 @@ Future<void> testFirebaseConnectivity() async {
     print('⚠️ Auth non accessible : $e');
   }
 
-  // 2️⃣ Test Firestore "kipik"
-  try {
-    final fs = FirebaseFirestore.instanceFor(
-      app: Firebase.app(),
-      databaseId: 'kipik',
-    );
-    final doc = await fs.collection('_connectivity_test').doc('test').get();
-    print('✅ Firestore kipik accessible (existe : ${doc.exists})');
-  } catch (e) {
-    print('⚠️ Firestore kipik non accessible (continuons quand même) : $e');
-  }
+  // ❌ PAS DE TEST FIRESTORE AU DÉMARRAGE
+  print('🏗️ Tests Firestore différés jusqu\'à connexion utilisateur');
+  print('📱 Seules les fonctionnalités d\'authentification sont disponibles');
 
-  print('✅ Connectivité Firebase testée');
+  print('✅ Connectivité Firebase testée (mode basic)');
 }
 
-/// ✅ NOUVEAU - Test de toutes les bases de données disponibles
+/// ✅ Test de toutes les bases de données disponibles (APRÈS connexion utilisateur)
 Future<Map<String, bool>> testAllDatabaseConnections() async {
   final results = <String, bool>{};
   final databases = ['kipik', 'kipik-demo', 'kipik-test'];
@@ -264,21 +254,6 @@ Future<void> initializeStripe() async {
     }
   } catch (stripeError) {
     print('⚠️ Erreur initialisation Stripe: $stripeError');
-  }
-}
-
-/// ✅ Validation finale Firebase
-Future<void> validateFirebaseInitialization() async {
-  try {
-    final status = await FirebaseInitService.instance.getInitializationStatus();
-    if (status['fully_initialized'] == true) {
-      print('🎉 Firebase KIPIK entièrement opérationnel !');
-    } else {
-      print('⚠️ Firebase partiellement initialisé - Certaines fonctionnalités peuvent être limitées');
-      print('   Status: $status');
-    }
-  } catch (e) {
-    print('⚠️ Impossible de vérifier le statut Firebase: $e');
   }
 }
 

@@ -34,10 +34,19 @@
 
   "signup": {
     "choiceTitle": "Choisissez votre profil",
-    "particulier": "Particulier",
-    "pro": "Tatoueur",
     "title": "Inscription",
+    "accountTypeTitle": "Choisissez votre type de compte",
+    "particulier": "Particulier",
+    "particulierDesc": "Pour les clients qui souhaitent se faire tatouer",
+    "pro": "Tatoueur",
+    "proDesc": "Pour les tatoueurs professionnels",
+    "organisateur": "Organisateur",
+    "organisateurDesc": "Pour les organisateurs de conventions",
     "confirmPassword": "Confirmer le mot de passe",
+    "securityVerification": "Vérification de sécurité requise",
+    "securityValidated": "Sécurité validée ✓",
+    "securityHelp": "Veuillez valider la vérification de sécurité ci-dessus pour continuer",
+    "securityError": "Veuillez valider la vérification de sécurité",
     "validation": {
       "passwordMismatch": "Les mots de passe ne correspondent pas"
     }
@@ -86,8 +95,8 @@
     "success": "Super-admin créé avec succès !",
     "error": "Impossible de créer l'administrateur",
     "validation": {
-      "emailRequired": "L’e-mail est requis",
-      "emailInvalid": "Format d’e-mail invalide",
+      "emailRequired": "L'e-mail est requis",
+      "emailInvalid": "Format d'e-mail invalide",
       "passwordRequired": "Le mot de passe est requis",
       "passwordTooShort": "8 caractères minimum",
       "passwordUppercase": "1 majuscule au moins",

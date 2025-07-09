@@ -64,6 +64,10 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
   bool _showPassword   = false;
   bool _showConfirm    = false;
 
+  // ✅ NOUVEAU: Variables pour la vérification d'âge
+  bool majoriteConfirmee = false; // ✅ Certification majorité
+  String? ageError; // ✅ Erreur d'âge
+
   // Nombre d'inscrits actuel
   final int _currentSignupCount = 45;
   static const int _promoLimit = 100;
@@ -83,7 +87,21 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
     _promoCode.dispose();
     super.dispose();
   }
-  
+
+  // ✅ NOUVEAU: Méthode de vérification d'âge
+  bool _isOver18(DateTime birthDate) {
+    final today = DateTime.now();
+    final age = today.year - birthDate.year;
+    
+    // Vérification précise avec mois et jour
+    if (today.month < birthDate.month || 
+        (today.month == birthDate.month && today.day < birthDate.day)) {
+      return age - 1 >= 18;
+    }
+    return age >= 18;
+  }
+
+  // ✅ MISE À JOUR: Validation avec vérification d'âge
   bool get _canSubmit =>
       _formKey.currentState?.validate() == true &&
       _shopName.text.isNotEmpty &&
@@ -91,6 +109,8 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
       _tatoueurPrenom.text.isNotEmpty &&
       _tatoueurNom.text.isNotEmpty &&
       _birthDate     != null &&
+      majoriteConfirmee && // ✅ Certification obligatoire
+      (_birthDate != null ? _isOver18(_birthDate!) : false) && // ✅ Vérification âge
       _societeForme  != null &&
       _siren.text.isNotEmpty &&
       _phonePro.text.isNotEmpty &&
@@ -203,6 +223,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
           'emailPro': _emailPro.text.trim(),
           'newsletter': _newsletter,
           'role': 'tatoueur',
+          'majoriteConfirmee': majoriteConfirmee, // ✅ Enregistrement de la certification
           
           // Données d'essai 30 jours
           'subscriptionType': 'trial',
@@ -290,22 +311,50 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
     return null;
   }
 
+  // ✅ OPTIMISÉ: InputDecoration compact avec PermanentMarker
   InputDecoration _decoration(String label, {Widget? suffixIcon}) => InputDecoration(
         labelText: label,
         labelStyle: const TextStyle(
-          fontFamily: 'PermanentMarker',
+          fontFamily: 'PermanentMarker', // ✅ PermanentMarker conservé
+          fontSize: 11, // ✅ Taille réduite mais lisible
           color: Colors.black87,
+          height: 0.9, // ✅ Interligne serré pour économiser l'espace
+        ),
+        floatingLabelStyle: const TextStyle(
+          fontFamily: 'PermanentMarker', 
+          fontSize: 12, // ✅ Taille contrôlée quand il flotte
+          color: Colors.black87,
+          height: 0.9,
         ),
         filled: true,
         fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14, 
+          vertical: 18, // ✅ Juste assez d'espace pour le label flottant
+        ),
+        isDense: true, // ✅ CRUCIAL: Réduit la hauteur globale du champ
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: KipikTheme.rouge, width: 2),
+          borderSide: BorderSide(color: KipikTheme.rouge, width: 1.5),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: KipikTheme.rouge, width: 3),
+          borderSide: BorderSide(color: KipikTheme.rouge, width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.red, width: 1.5),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.red, width: 2),
+        ),
+        errorStyle: const TextStyle(
+          fontFamily: 'PermanentMarker',
+          fontSize: 10, // ✅ Erreurs compactes
+          color: Colors.red,
+          height: 1.0,
         ),
         suffixIcon: suffixIcon ?? (label == 'Mot de passe' || label == 'Confirmer mot de passe'
             ? IconButton(
@@ -324,6 +373,144 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
               )
             : null),
       );
+
+  // ✅ NOUVEAU: Widget de certification de majorité
+  Widget _buildMajoriteConfirmation() {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: majoriteConfirmee ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: majoriteConfirmee ? Colors.green : Colors.orange,
+          width: 2,
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Checkbox(
+                value: majoriteConfirmee,
+                onChanged: _birthDate != null && _isOver18(_birthDate!) 
+                    ? (value) => setState(() => majoriteConfirmee = value!) 
+                    : null, // ✅ Désactivé si pas majeur
+                activeColor: KipikTheme.rouge,
+              ),
+              Expanded(
+                child: Text(
+                  "Je certifie avoir plus de 18 ans *",
+                  style: TextStyle(
+                    fontFamily: 'PermanentMarker',
+                    fontSize: 14,
+                    color: _birthDate != null && _isOver18(_birthDate!) 
+                        ? Colors.white 
+                        : Colors.grey,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Icon(
+                majoriteConfirmee ? Icons.check_circle : Icons.warning,
+                color: majoriteConfirmee ? Colors.green : Colors.orange,
+              ),
+            ],
+          ),
+          if (ageError != null) // ✅ Affichage de l'erreur d'âge
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.error, color: Colors.red, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      ageError!,
+                      style: const TextStyle(
+                        fontFamily: 'PermanentMarker',
+                        fontSize: 11,
+                        color: Colors.red,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ Widget titres de sections avec headers tattoo (sans emoji dans le texte)
+  Widget _buildSectionTitleWithHeader(String title, IconData icon, {int headerIndex = 1}) {
+    final headers = [
+      'assets/images/header_tattoo_wallpaper.png',
+      'assets/images/header_tattoo_wallpaper2.png', 
+      'assets/images/header_tattoo_wallpaper3.png',
+    ];
+    
+    final headerImage = headers[(headerIndex - 1) % headers.length];
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        image: DecorationImage(
+          image: AssetImage(headerImage),
+          fit: BoxFit.cover,
+          colorFilter: ColorFilter.mode(
+            Colors.white.withOpacity(0.6),
+            BlendMode.lighten,
+          ),
+        ),
+        border: Border.all(color: KipikTheme.rouge, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            color: KipikTheme.rouge,
+            size: 20,
+            shadows: [
+              Shadow(
+                color: Colors.white.withOpacity(0.8),
+                blurRadius: 2,
+                offset: const Offset(1, 1),
+              ),
+            ],
+          ),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: const TextStyle(
+              fontFamily: 'PermanentMarker',
+              fontSize: 16,
+              color: Colors.black87,
+              fontWeight: FontWeight.bold,
+              shadows: [
+                Shadow(
+                  color: Colors.white,
+                  blurRadius: 3,
+                  offset: Offset(1, 1),
+                ),
+              ],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
 
   bool get _isReferralCode {
     return _validatedPromoCode?['type'] == 'referral';
@@ -387,7 +574,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                           ),
                           SizedBox(height: 8),
                           Text(
-                            '🎉 ESSAI GRATUIT 30 JOURS',
+                            'ESSAI GRATUIT 30 JOURS',
                             style: TextStyle(
                               fontFamily: 'PermanentMarker',
                               fontSize: 18,
@@ -410,7 +597,9 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                       ),
                     ),
 
-                    // 1) Code promo
+                    // ✅ Section Code promo avec header tattoo
+                    _buildSectionTitleWithHeader('Code promo', Icons.card_giftcard, headerIndex: 1),
+                    
                     Container(
                       padding: const EdgeInsets.all(16),
                       margin: const EdgeInsets.only(bottom: 20),
@@ -422,16 +611,6 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Text(
-                            '🎁 Avez-vous un code promo ?',
-                            style: TextStyle(
-                              fontFamily: 'PermanentMarker',
-                              fontSize: 16,
-                              color: Colors.black87,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 8),
                           const Text(
                             'Bénéficiez d\'une réduction sur votre futur abonnement',
                             style: TextStyle(
@@ -453,6 +632,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                                     fontFamily: 'Roboto',
                                     color: Colors.black87,
                                     fontWeight: FontWeight.bold,
+                                    fontSize: 16,
                                   ),
                                   textCapitalization: TextCapitalization.characters,
                                 ),
@@ -523,12 +703,14 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                       ),
                     ),
 
-                    // 2) Shop
+                    // ✅ Section Shop avec header tattoo
+                    _buildSectionTitleWithHeader('Informations du shop', Icons.store, headerIndex: 2),
+
                     TextFormField(
                       controller: _shopName,
                       decoration: _decoration('Nom du shop'),
                       style: const TextStyle(
-                          fontFamily: 'Roboto', color: Colors.black87),
+                          fontFamily: 'Roboto', color: Colors.black87, fontSize: 16),
                       validator: _required,
                     ),
                     const SizedBox(height: 12),
@@ -536,17 +718,20 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                       controller: _shopAddress,
                       decoration: _decoration('Adresse du shop'),
                       style: const TextStyle(
-                          fontFamily: 'Roboto', color: Colors.black87),
+                          fontFamily: 'Roboto', color: Colors.black87, fontSize: 16),
                       validator: _required,
                     ),
 
                     const SizedBox(height: 20),
-                    // 3) Tatoueur
+                    
+                    // ✅ Section Tatoueur avec header tattoo
+                    _buildSectionTitleWithHeader('Informations personnelles', Icons.person, headerIndex: 3),
+                    
                     TextFormField(
                       controller: _tatoueurPrenom,
                       decoration: _decoration('Prénom'),
                       style: const TextStyle(
-                          fontFamily: 'Roboto', color: Colors.black87),
+                          fontFamily: 'Roboto', color: Colors.black87, fontSize: 16),
                       validator: _required,
                     ),
                     const SizedBox(height: 12),
@@ -554,12 +739,13 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                       controller: _tatoueurNom,
                       decoration: _decoration('Nom'),
                       style: const TextStyle(
-                          fontFamily: 'Roboto', color: Colors.black87),
+                          fontFamily: 'Roboto', color: Colors.black87, fontSize: 16),
                       validator: _required,
                     ),
 
                     const SizedBox(height: 12),
-                    // Date de naissance
+                    
+                    // ✅ MISE À JOUR: Date de naissance avec validation d'âge
                     InkWell(
                       onTap: () async {
                         final now = DateTime.now();
@@ -570,33 +756,80 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                           lastDate: now,
                           locale: const Locale('fr'),
                           builder: (ctx, child) => Theme(
-                            data: ThemeData.dark().copyWith(
-                              colorScheme: const ColorScheme.dark(
-                                primary: Colors.white,
-                                onPrimary: Colors.black,
-                                surface: Colors.black,
-                                onSurface: Colors.white,
+                            data: Theme.of(context).copyWith(
+                              colorScheme: ColorScheme.light(
+                                primary: KipikTheme.rouge,
+                                onPrimary: Colors.white,
+                                surface: Colors.white,
+                                onSurface: Colors.black,
                               ),
-                              dialogBackgroundColor: Colors.black,
+                              textButtonTheme: TextButtonThemeData(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: KipikTheme.rouge,
+                                ),
+                              ),
                             ),
                             child: child!,
                           ),
                         );
-                        if (pick != null) setState(() => _birthDate = pick);
+                        
+                        if (pick != null) {
+                          setState(() {
+                            _birthDate = pick;
+                            
+                            // ✅ VALIDATION AUTOMATIQUE D'ÂGE
+                            if (!_isOver18(pick)) {
+                              ageError = "Vous devez avoir au moins 18 ans pour vous inscrire";
+                              majoriteConfirmee = false;
+                            } else {
+                              ageError = null;
+                              // Ne pas cocher automatiquement, l'utilisateur doit le faire
+                            }
+                          });
+                        }
                       },
                       child: InputDecorator(
-                        decoration: _decoration('Date de naissance'),
-                        child: Text(
-                          _birthDate == null
-                              ? 'Sélectionner la date'
-                              : '${_birthDate!.day}/${_birthDate!.month}/${_birthDate!.year}',
-                          style: const TextStyle(
-                              fontFamily: 'Roboto', color: Colors.black87),
+                        decoration: _decoration('Date de naissance').copyWith(
+                          // ✅ Bordure rouge si mineur
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: _birthDate != null && !_isOver18(_birthDate!) 
+                                  ? Colors.red 
+                                  : KipikTheme.rouge, 
+                              width: 1.5
+                            ),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _birthDate == null
+                                    ? 'Sélectionner la date'
+                                    : '${_birthDate!.day}/${_birthDate!.month}/${_birthDate!.year}',
+                                style: TextStyle(
+                                  fontFamily: 'Roboto', 
+                                  color: _birthDate == null ? Colors.grey : Colors.black87,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                            if (_birthDate != null)
+                              Icon(
+                                _isOver18(_birthDate!) ? Icons.check_circle : Icons.error,
+                                color: _isOver18(_birthDate!) ? Colors.green : Colors.red,
+                              ),
+                          ],
                         ),
                       ),
                     ),
-
+                    
                     const SizedBox(height: 12),
+                    
+                    // ✅ NOUVEAU: Widget de certification de majorité
+                    _buildMajoriteConfirmation(),
+
                     // Forme juridique
                     DropdownButtonFormField<String>(
                       value: _societeForme,
@@ -612,7 +845,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                       validator: (v) => v == null ? 'Champ obligatoire' : null,
                       dropdownColor: Colors.white,
                       style: const TextStyle(
-                          fontFamily: 'Roboto', color: Colors.black87),
+                          fontFamily: 'Roboto', color: Colors.black87, fontSize: 16),
                     ),
 
                     const SizedBox(height: 12),
@@ -622,18 +855,21 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                       decoration: _decoration('SIREN'),
                       keyboardType: TextInputType.number,
                       style: const TextStyle(
-                          fontFamily: 'Roboto', color: Colors.black87),
+                          fontFamily: 'Roboto', color: Colors.black87, fontSize: 16),
                       validator: _required,
                     ),
 
                     const SizedBox(height: 20),
-                    // 4) Coordonnées pro
+                    
+                    // ✅ Section Coordonnées avec header tattoo
+                    _buildSectionTitleWithHeader('Coordonnées professionnelles', Icons.business, headerIndex: 1),
+                    
                     TextFormField(
                       controller: _phonePro,
                       decoration: _decoration('Téléphone pro'),
                       keyboardType: TextInputType.phone,
                       style: const TextStyle(
-                          fontFamily: 'Roboto', color: Colors.black87),
+                          fontFamily: 'Roboto', color: Colors.black87, fontSize: 16),
                       validator: _required,
                     ),
                     const SizedBox(height: 12),
@@ -642,22 +878,14 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                       decoration: _decoration('Email pro'),
                       keyboardType: TextInputType.emailAddress,
                       style: const TextStyle(
-                          fontFamily: 'Roboto', color: Colors.black87),
+                          fontFamily: 'Roboto', color: Colors.black87, fontSize: 16),
                       validator: _validateEmail,
                     ),
 
                     const SizedBox(height: 20),
-                    // 5) Pièces obligatoires
-                    const Text(
-                      '📄 Documents obligatoires',
-                      style: TextStyle(
-                        fontFamily: 'PermanentMarker',
-                        fontSize: 18,
-                        color: Colors.white,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
+                    
+                    // ✅ Section Documents avec header tattoo
+                    _buildSectionTitleWithHeader('Documents obligatoires', Icons.folder, headerIndex: 2),
                     
                     for (var btn in [
                       ['Joindre pièce d\'identité', () async {
@@ -678,7 +906,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                         final f = await openFile(acceptedTypeGroups: [fg]);
                         if (f != null) setState(() => _kbis = f);
                       }, _kbis != null],
-                      ['🏦 Joindre RIB (prélèvements SEPA)', () async {
+                      ['Joindre RIB (prélèvements SEPA)', () async {
                         final fg = XTypeGroup(
                             label: 'docs', extensions: ['jpg', 'png', 'pdf']);
                         final f = await openFile(acceptedTypeGroups: [fg]);
@@ -735,13 +963,16 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                     ),
 
                     const SizedBox(height: 20),
-                    // 6) Identifiants
+                    
+                    // ✅ Section Identifiants avec header tattoo
+                    _buildSectionTitleWithHeader('Identifiants de connexion', Icons.lock, headerIndex: 3),
+                    
                     TextFormField(
                       controller: _email,
                       decoration: _decoration('Email'),
                       keyboardType: TextInputType.emailAddress,
                       style: const TextStyle(
-                          fontFamily: 'Roboto', color: Colors.black87),
+                          fontFamily: 'Roboto', color: Colors.black87, fontSize: 16),
                       validator: _validateEmail,
                     ),
                     const SizedBox(height: 12),
@@ -750,7 +981,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                       obscureText: !_showPassword,
                       decoration: _decoration('Mot de passe'),
                       style: const TextStyle(
-                          fontFamily: 'Roboto', color: Colors.black87),
+                          fontFamily: 'Roboto', color: Colors.black87, fontSize: 16),
                       validator: _validatePassword,
                     ),
                     const SizedBox(height: 12),
@@ -759,12 +990,16 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                       obscureText: !_showConfirm,
                       decoration: _decoration('Confirmer mot de passe'),
                       style: const TextStyle(
-                          fontFamily: 'Roboto', color: Colors.black87),
+                          fontFamily: 'Roboto', color: Colors.black87, fontSize: 16),
                       validator: _validateConfirm,
                     ),
 
                     const SizedBox(height: 20),
-                    // 7) CGU / CGV
+                    
+                    // ✅ Section Conditions avec header tattoo
+                    _buildSectionTitleWithHeader('Conditions d\'utilisation', Icons.gavel, headerIndex: 1),
+                    
+                    // CGU / CGV
                     CGUCGVValidationWidget(
                       cguAccepted: _cguAccepted,
                       cgvAccepted: _cgvAccepted,
@@ -781,7 +1016,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                     ),
 
                     const SizedBox(height: 12),
-                    // 8) Newsletter
+                    // Newsletter
                     CheckboxListTile(
                       value: _newsletter,
                       onChanged: (v) => setState(() => _newsletter = v!),
@@ -794,7 +1029,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                     ),
 
                     const SizedBox(height: 24),
-                    // 9) Validation finale
+                    // Validation finale
                     if (_canSubmit)
                       ElevatedButton(
                         onPressed: _submitForm,
@@ -806,7 +1041,7 @@ class _InscriptionProPageState extends State<InscriptionProPage> {
                           ),
                         ),
                         child: const Text(
-                          '🚀 Commencer mon essai gratuit',
+                          'Commencer mon essai gratuit',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 18,

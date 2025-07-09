@@ -1,10 +1,14 @@
 // lib/pages/admin/admin_setup_page.dart
 
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
 import '../../core/database_manager.dart';
 import '../../widgets/database_switcher.dart';
+import '../../services/auth/secure_auth_service.dart'; // ✅ AJOUTÉ
+import '../../services/auth/captcha_manager.dart'; // ✅ AJOUTÉ
+import '../../models/user_role.dart'; // ✅ AJOUTÉ
 
 class AdminSetupPage extends StatefulWidget {
   const AdminSetupPage({Key? key}) : super(key: key);
@@ -17,10 +21,34 @@ class _AdminSetupPageState extends State<AdminSetupPage> {
   bool _isLoading = true;
   Map<String, dynamic> _systemConfig = {};
   
+  // ✅ AJOUTÉ: Services sécurisés
+  SecureAuthService get _authService => SecureAuthService.instance;
+  CaptchaManager get _captchaManager => CaptchaManager.instance;
+  
   @override
   void initState() {
     super.initState();
-    _loadSystemConfig();
+    _checkAdminAccess();
+  }
+
+  // ✅ NOUVEAU: Vérification des accès admin
+  Future<void> _checkAdminAccess() async {
+    final userRole = _authService.currentUserRole;
+    
+    if (userRole != UserRole.admin) {
+      // Rediriger si pas admin
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed('/admin/dashboard');
+      }
+      return;
+    }
+    
+    // Vérifier si c'est le super admin pour les actions sensibles
+    if (!_authService.isSuperAdmin) {
+      print('⚠️ Accès admin setup sans privilèges super admin');
+    }
+    
+    await _loadSystemConfig();
   }
 
   Future<void> _loadSystemConfig() async {
@@ -29,6 +57,11 @@ class _AdminSetupPageState extends State<AdminSetupPage> {
     try {
       // Charger la configuration système
       _systemConfig = DatabaseManager.instance.exportConfig();
+      
+      // Ajouter des infos de sécurité
+      _systemConfig['currentUser'] = _authService.currentUser;
+      _systemConfig['isSuperAdmin'] = _authService.isSuperAdmin;
+      _systemConfig['securityLevel'] = _authService.isSuperAdmin ? 'Super Admin' : 'Admin Standard';
       
       // Simuler un délai de chargement pour l'UX
       await Future.delayed(const Duration(milliseconds: 500));
@@ -41,53 +74,155 @@ class _AdminSetupPageState extends State<AdminSetupPage> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ CORRECTION 1: Background aléatoire comme les autres pages
+    final backgrounds = [
+      'assets/background1.png',
+      'assets/background2.png',
+      'assets/background3.png',
+      'assets/background4.png',
+    ];
+    final bg = backgrounds[DateTime.now().millisecond % backgrounds.length];
+
     return Scaffold(
+      // ✅ CORRECTION 2: extendBodyBehindAppBar pour background complet
+      extendBodyBehindAppBar: true,
       appBar: const CustomAppBarKipik(
         title: 'Configuration Système',
         showBackButton: true,
         showBurger: false,
         showNotificationIcon: false,
       ),
-      body: SafeArea(
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : RefreshIndicator(
-                onRefresh: _loadSystemConfig,
-                child: SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header avec statut système
-                      _buildSystemStatusHeader(),
-                      
-                      const SizedBox(height: 24),
-                      
-                      // Section Base de Données
-                      _buildDatabaseSection(),
-                      
-                      const SizedBox(height: 24),
-                      
-                      // Section Sécurité
-                      _buildSecuritySection(),
-                      
-                      const SizedBox(height: 24),
-                      
-                      // Section Configuration avancée
-                      _buildAdvancedConfigSection(),
-                      
-                      const SizedBox(height: 24),
-                      
-                      // Section Actions système
-                      _buildSystemActionsSection(),
-                      
-                      // Padding bottom
-                      const SizedBox(height: 20),
-                    ],
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // ✅ CORRECTION 1: Background image
+          Image.asset(bg, fit: BoxFit.cover),
+          
+          // ✅ CORRECTION 2: SafeArea pour éviter les débordements
+          SafeArea(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : RefreshIndicator(
+                    onRefresh: _loadSystemConfig,
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // ✅ NOUVEAU: Badge de sécurité admin
+                          _buildAdminSecurityBadge(),
+                          
+                          const SizedBox(height: 16),
+                          
+                          // Header avec statut système
+                          _buildSystemStatusHeader(),
+                          
+                          const SizedBox(height: 24),
+                          
+                          // Section Base de Données
+                          _buildDatabaseSection(),
+                          
+                          const SizedBox(height: 24),
+                          
+                          // Section Sécurité
+                          _buildSecuritySection(),
+                          
+                          const SizedBox(height: 24),
+                          
+                          // Section Configuration avancée
+                          _buildAdvancedConfigSection(),
+                          
+                          const SizedBox(height: 24),
+                          
+                          // Section Actions système
+                          _buildSystemActionsSection(),
+                          
+                          // ✅ CORRECTION 3: Padding bottom suffisant pour éviter overflow
+                          const SizedBox(height: 100),
+                        ],
+                      ),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ NOUVEAU: Badge de sécurité admin
+  Widget _buildAdminSecurityBadge() {
+    final isSuperAdmin = _authService.isSuperAdmin;
+    final currentUser = _authService.currentUser;
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isSuperAdmin 
+              ? [Colors.purple, Colors.purple.withOpacity(0.8)]
+              : [Colors.blue, Colors.blue.withOpacity(0.8)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: (isSuperAdmin ? Colors.purple : Colors.blue).withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isSuperAdmin ? Icons.admin_panel_settings : Icons.security,
+            color: Colors.white,
+            size: 24,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isSuperAdmin ? 'SUPER ADMINISTRATEUR' : 'ADMINISTRATEUR',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'PermanentMarker',
                   ),
                 ),
+                Text(
+                  currentUser?['email'] ?? 'admin@kipik.ink',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontFamily: 'Roboto',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              isSuperAdmin ? 'SUPER' : 'ADMIN',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Roboto',
               ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -216,9 +351,18 @@ class _AdminSetupPageState extends State<AdminSetupPage> {
   }
 
   Widget _buildDatabaseSection() {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.95), // ✅ Fond semi-transparent
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -288,9 +432,18 @@ class _AdminSetupPageState extends State<AdminSetupPage> {
   }
 
   Widget _buildSecuritySection() {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.95), // ✅ Fond semi-transparent
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -346,6 +499,16 @@ class _AdminSetupPageState extends State<AdminSetupPage> {
               Colors.green,
             ),
             
+            // ✅ NOUVEAU: Statut admin actuel
+            const SizedBox(height: 8),
+            
+            _buildSecurityStatusItem(
+              'Niveau administrateur',
+              _systemConfig['securityLevel'] ?? 'Standard',
+              Icons.admin_panel_settings,
+              _authService.isSuperAdmin ? Colors.purple : Colors.blue,
+            ),
+            
             const SizedBox(height: 16),
             
             ElevatedButton.icon(
@@ -366,9 +529,18 @@ class _AdminSetupPageState extends State<AdminSetupPage> {
   }
 
   Widget _buildAdvancedConfigSection() {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.95), // ✅ Fond semi-transparent
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -405,9 +577,9 @@ class _AdminSetupPageState extends State<AdminSetupPage> {
               subtitle: const Text('Synchroniser les données en temps réel'),
               trailing: Switch(
                 value: true,
-                onChanged: (value) {
+                onChanged: _authService.isSuperAdmin ? (value) {
                   // TODO: Implémenter
-                },
+                } : null, // ✅ Désactivé si pas super admin
               ),
             ),
             
@@ -417,9 +589,9 @@ class _AdminSetupPageState extends State<AdminSetupPage> {
               subtitle: const Text('Alertes système et utilisateur'),
               trailing: Switch(
                 value: true,
-                onChanged: (value) {
+                onChanged: _authService.isSuperAdmin ? (value) {
                   // TODO: Implémenter
-                },
+                } : null,
               ),
             ),
             
@@ -429,11 +601,39 @@ class _AdminSetupPageState extends State<AdminSetupPage> {
               subtitle: const Text('Collecte de données d\'usage'),
               trailing: Switch(
                 value: false,
-                onChanged: (value) {
+                onChanged: _authService.isSuperAdmin ? (value) {
                   // TODO: Implémenter
-                },
+                } : null,
               ),
             ),
+            
+            // ✅ NOUVEAU: Avertissement si pas super admin
+            if (!_authService.isSuperAdmin)
+              Container(
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info, color: Colors.orange, size: 16),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Certaines options nécessitent les privilèges de super administrateur',
+                        style: TextStyle(
+                          color: Colors.orange,
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
@@ -441,9 +641,18 @@ class _AdminSetupPageState extends State<AdminSetupPage> {
   }
 
   Widget _buildSystemActionsSection() {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.95), // ✅ Fond semi-transparent
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -512,13 +721,13 @@ class _AdminSetupPageState extends State<AdminSetupPage> {
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () {
+                    onPressed: _authService.isSuperAdmin ? () {
                       _restartServices();
-                    },
+                    } : null, // ✅ Réservé aux super admins
                     icon: const Icon(Icons.restart_alt),
                     label: const Text('Redémarrer services'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
+                      backgroundColor: _authService.isSuperAdmin ? Colors.red : Colors.grey,
                       foregroundColor: Colors.white,
                     ),
                   ),
@@ -611,7 +820,7 @@ class _AdminSetupPageState extends State<AdminSetupPage> {
     );
   }
 
-  // MÉTHODES D'ACTION
+  // MÉTHODES D'ACTION (inchangées mais avec vérifications de sécurité)
   Future<void> _clearCache() async {
     showDialog(
       context: context,
@@ -647,6 +856,16 @@ class _AdminSetupPageState extends State<AdminSetupPage> {
   }
 
   void _restartServices() {
+    if (!_authService.isSuperAdmin) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Action réservée aux super administrateurs'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -691,18 +910,35 @@ class _AdminSetupPageState extends State<AdminSetupPage> {
             Text('Audit de sécurité'),
           ],
         ),
-        content: const Column(
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Dernière vérification: Il y a 2 heures'),
-            SizedBox(height: 8),
-            Text('✅ Authentification: OK'),
-            Text('✅ Chiffrement: OK'),
-            Text('✅ Permissions: OK'),
-            Text('⚠️ Mots de passe: 3 comptes avec mots de passe faibles'),
-            SizedBox(height: 8),
-            Text('Score de sécurité: 8.5/10'),
+            const Text('Dernière vérification: Il y a 2 heures'),
+            const SizedBox(height: 8),
+            const Text('✅ Authentification: OK'),
+            const Text('✅ Chiffrement: OK'),
+            const Text('✅ Permissions: OK'),
+            const Text('⚠️ Mots de passe: 3 comptes avec mots de passe faibles'),
+            const SizedBox(height: 8),
+            const Text('Score de sécurité: 8.5/10'),
+            const SizedBox(height: 12),
+            // ✅ NOUVEAU: Infos admin actuelles
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Admin connecté: ${_authService.currentUser?['email'] ?? 'N/A'}'),
+                  Text('Niveau: ${_authService.isSuperAdmin ? 'Super Admin' : 'Admin Standard'}'),
+                  Text('Session sécurisée: ${_authService.isAuthenticated ? '✅' : '❌'}'),
+                ],
+              ),
+            ),
           ],
         ),
         actions: [

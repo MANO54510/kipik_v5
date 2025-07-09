@@ -2,7 +2,6 @@
 
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:easy_localization/easy_localization.dart';
 import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
 import 'package:kipik_v5/widgets/auth/recaptcha_widget.dart';
 import 'package:kipik_v5/services/auth/captcha_manager.dart';
@@ -19,7 +18,7 @@ class InscriptionPage extends StatefulWidget {
 }
 
 class _InscriptionPageState extends State<InscriptionPage> {
-  // ✅ NOUVEAU: Variables reCAPTCHA
+  // Variables reCAPTCHA
   bool _captchaValidated = false;
   CaptchaResult? _captchaResult;
 
@@ -35,8 +34,8 @@ class _InscriptionPageState extends State<InscriptionPage> {
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: CustomAppBarKipik(
-        title: tr('signup.choiceTitle'),
+      appBar: const CustomAppBarKipik(
+        title: 'Inscription',
         showBackButton: true,
         showBurger: false,
         showNotificationIcon: false,
@@ -44,47 +43,65 @@ class _InscriptionPageState extends State<InscriptionPage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Image.asset(bg, fit: BoxFit.cover),
-          Center(
-            child: Padding(
+          // Background avec overlay
+          Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.asset(bg, fit: BoxFit.cover),
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.3),
+                      Colors.black.withOpacity(0.6),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SafeArea(
+            child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Logo KIPIK
+                  const SizedBox(height: 10),
+                  
+                  // Logo avec la largeur des cartes
                   Container(
-                    padding: const EdgeInsets.all(20),
-                    child: Text(
-                      'KIPIK',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: KipikTheme.rouge,
-                        fontFamily: 'PermanentMarker',
-                        shadows: [
-                          Shadow(
-                            offset: const Offset(2, 2),
-                            blurRadius: 4,
-                            color: Colors.black.withOpacity(0.3),
-                          ),
-                        ],
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Center(
+                      child: Image.asset(
+                        'assets/logo_kipik.png', 
+                        height: 60,
+                        fit: BoxFit.contain,
                       ),
                     ),
                   ),
+                  const SizedBox(height: 12),
 
-                  // Titre de section
+                  // Titre de section compact
                   Container(
-                    padding: const EdgeInsets.all(16),
-                    margin: const EdgeInsets.only(bottom: 20),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    margin: const EdgeInsets.only(bottom: 10),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.9),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: KipikTheme.rouge, width: 2),
+                      color: Colors.white.withOpacity(0.95),
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: Text(
                       'Choisissez votre type de compte',
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: KipikTheme.rouge,
                         fontFamily: 'PermanentMarker',
@@ -93,110 +110,116 @@ class _InscriptionPageState extends State<InscriptionPage> {
                     ),
                   ),
 
-                  // ✅ NOUVEAU: reCAPTCHA obligatoire pour TOUTES les inscriptions
+                  // reCAPTCHA minimal
                   Container(
-                    padding: const EdgeInsets.all(16),
-                    margin: const EdgeInsets.only(bottom: 20),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    margin: const EdgeInsets.only(bottom: 8),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
+                      color: Colors.white.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                         color: KipikTheme.rouge.withOpacity(0.3),
                         width: 1,
                       ),
                     ),
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.verified_user, 
-                                 color: KipikTheme.rouge, size: 20),
-                            const SizedBox(width: 8),
+                                 color: KipikTheme.rouge, size: 12),
+                            const SizedBox(width: 4),
                             Text(
-                              'Vérification de sécurité requise',
+                              'Sécurité',
                               style: TextStyle(
                                 color: KipikTheme.rouge,
                                 fontWeight: FontWeight.bold,
                                 fontFamily: 'PermanentMarker',
-                                fontSize: 14,
+                                fontSize: 10,
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
-                        ReCaptchaWidget(
-                          action: 'signup',
-                          useInvisible: true,
-                          onValidated: (result) {
-                            setState(() {
-                              _captchaValidated = result.isValid;
-                              _captchaResult = result;
-                            });
-                          },
+                        const SizedBox(height: 4),
+                        SizedBox(
+                          height: 80,
+                          child: ReCaptchaWidget(
+                            action: 'signup',
+                            useInvisible: true,
+                            onValidated: (result) {
+                              setState(() {
+                                _captchaValidated = result.isValid;
+                                _captchaResult = result;
+                              });
+                            },
+                          ),
                         ),
                       ],
                     ),
                   ),
 
-                  // Boutons de choix de type de compte
+                  // Boutons de choix avec headers tattoo
                   _buildChoiceButton(
                     context,
-                    tr('signup.particulier'),
-                    'Pour les clients qui souhaitent se faire tatouer',
-                    Icons.person,
+                    'Particulier',
+                    'Trouvez votre tatoueur idéal • Gérez vos projets • Suivez vos rendez-vous',
+                    'assets/avatars/avatar_client.png',
                     InscriptionParticulierPage(),
                     enabled: _captchaValidated,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
                   
                   _buildChoiceButton(
                     context,
-                    tr('signup.pro'),
-                    'Pour les tatoueurs professionnels',
-                    Icons.brush,
+                    'Tatoueur Pro',
+                    'Développez votre clientèle • Gérez votre agenda • Boostez votre visibilité',
+                    'assets/avatars/avatar_tatoueur.png',
                     InscriptionProPage(),
                     enabled: _captchaValidated,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
                   
                   _buildChoiceButton(
                     context,
-                    tr('signup.organisateur'),
-                    'Pour les organisateurs de conventions',
-                    Icons.event,
+                    'Organisateur',
+                    'Créez vos événements • Gérez vos exposants • Maximisez votre impact',
+                    'assets/avatars/avatar_orga.png',
                     InscriptionOrganisateurPage(),
                     enabled: _captchaValidated,
                   ),
 
-                  // ✅ NOUVEAU: Message d'aide si reCAPTCHA pas validé
+                  // Message d'aide si reCAPTCHA pas validé
                   if (!_captchaValidated) ...[
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 8),
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.orange[50],
+                        color: Colors.orange.withOpacity(0.1),
                         border: Border.all(color: Colors.orange),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(4),
                       ),
                       child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.info, color: Colors.orange[700], size: 20),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Veuillez valider la vérification de sécurité ci-dessus pour continuer',
-                              style: TextStyle(
-                                color: Colors.orange[700],
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
+                          Icon(Icons.info, color: Colors.orange[700], size: 12),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Validez la sécurité ci-dessus',
+                            style: TextStyle(
+                              color: Colors.orange[700],
+                              fontSize: 9,
+                              fontWeight: FontWeight.w500,
+                              fontFamily: 'Roboto',
                             ),
                           ),
                         ],
                       ),
                     ),
                   ],
+                  
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
@@ -210,122 +233,220 @@ class _InscriptionPageState extends State<InscriptionPage> {
     BuildContext context,
     String title,
     String description,
-    IconData icon,
+    String avatarPath,
     Widget page, {
     bool enabled = true,
   }) {
-    return SizedBox(
+    // ✅ Sélection du header selon le type
+    String headerImage;
+    if (title == 'Particulier') {
+      headerImage = 'assets/images/header_tattoo_wallpaper.png';
+    } else if (title == 'Tatoueur Pro') {
+      headerImage = 'assets/images/header_tattoo_wallpaper2.png';
+    } else { // Organisateur
+      headerImage = 'assets/images/header_tattoo_wallpaper3.png';
+    }
+
+    return Container(
       width: double.infinity,
-      child: ElevatedButton(
-        onPressed: enabled 
-            ? () => _navigateToSignup(context, page, title)
-            : null,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: enabled ? Colors.white : Colors.grey[300],
-          foregroundColor: enabled ? Colors.black : Colors.grey,
-          disabledBackgroundColor: Colors.grey[300],
-          padding: const EdgeInsets.all(20),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          elevation: enabled ? 6 : 2,
-          shadowColor: enabled ? Colors.black45 : Colors.transparent,
-        ),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: enabled 
-                        ? KipikTheme.rouge.withOpacity(0.1)
-                        : Colors.grey[400],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    icon,
-                    color: enabled ? KipikTheme.rouge : Colors.grey,
-                    size: 24,
-                  ),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: enabled 
+            ? [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              ]
+            : [],
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          image: enabled ? DecorationImage(
+            image: AssetImage(headerImage),
+            fit: BoxFit.cover,
+            colorFilter: ColorFilter.mode(
+              Colors.white.withOpacity(0.6), // ✅ Même opacité que les autres pages
+              BlendMode.lighten,
+            ),
+          ) : null,
+          color: enabled ? null : Colors.grey[300],
+          border: Border.all(
+            color: enabled ? KipikTheme.rouge : Colors.grey,
+            width: 2,
+          ),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: enabled 
+                ? () => _navigateToSignup(context, page, title)
+                : null,
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  Row(
                     children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontFamily: 'PermanentMarker',
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: enabled ? Colors.black : Colors.grey,
+                      // Avatar avec fond blanc
+                      Container(
+                        width: 70,
+                        height: 70,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: enabled ? KipikTheme.rouge : Colors.grey,
+                            width: 2,
+                          ),
+                          color: Colors.white,
+                          boxShadow: [
+                            if (enabled)
+                              BoxShadow(
+                                color: KipikTheme.rouge.withOpacity(0.2),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            color: Colors.white,
+                            child: Image.asset(
+                              avatarPath,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  color: Colors.white,
+                                  child: Icon(
+                                    title == 'Particulier' ? Icons.person :
+                                    title == 'Tatoueur Pro' ? Icons.brush : Icons.event,
+                                    color: enabled ? KipikTheme.rouge : Colors.grey,
+                                    size: 35,
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        description,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: enabled ? Colors.grey[600] : Colors.grey,
-                          fontStyle: FontStyle.italic,
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // ✅ Titre directement sur le fond (sans bulle)
+                            Text(
+                              title,
+                              style: TextStyle(
+                                fontFamily: 'PermanentMarker',
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: enabled ? Colors.black87 : Colors.grey,
+                                // ✅ Ombre pour détacher du fond tattoo
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.white,
+                                    blurRadius: 3,
+                                    offset: const Offset(1, 1),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            // ✅ Description directement sur le fond (sans bulle)
+                            Text(
+                              description,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: enabled ? Colors.grey[800] : Colors.grey,
+                                fontWeight: FontWeight.w600,
+                                fontFamily: 'Roboto',
+                                height: 1.3,
+                                // ✅ Ombre pour détacher du fond tattoo
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.white,
+                                    blurRadius: 2,
+                                    offset: const Offset(0.5, 0.5),
+                                  ),
+                                ],
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      // ✅ Icône flèche avec fond blanc
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: enabled ? KipikTheme.rouge.withOpacity(0.3) : Colors.grey,
+                            width: 1,
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.arrow_forward_ios,
+                          color: enabled ? KipikTheme.rouge : Colors.grey,
+                          size: 18,
                         ),
                       ),
                     ],
                   ),
-                ),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  color: enabled ? KipikTheme.rouge : Colors.grey,
-                  size: 16,
-                ),
-              ],
-            ),
-            
-            // ✅ NOUVEAU: Indicateur de sécurité validée
-            if (enabled && _captchaValidated) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.green[50],
-                  border: Border.all(color: Colors.green[200]!),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.check_circle, 
-                         color: Colors.green[700], size: 14),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Sécurité validée',
-                      style: TextStyle(
-                        color: Colors.green[700],
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
+                  
+                  // Indicateur de sécurité validée
+                  if (enabled && _captchaValidated) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.green,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.check_circle, 
+                               color: Colors.white, size: 12),
+                          const SizedBox(width: 4),
+                          const Text(
+                            'Sécurité validée ✓',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'PermanentMarker',
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
-                ),
+                ],
               ),
-            ],
-          ],
+            ),
+          ),
         ),
       ),
     );
   }
 
-  // ✅ NOUVEAU: Navigation sécurisée avec transmission du résultat reCAPTCHA
+  // Navigation sécurisée avec transmission du résultat reCAPTCHA
   void _navigateToSignup(BuildContext context, Widget page, String type) {
     if (!_captchaValidated || _captchaResult == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Row(
+          content: const Row(
             children: [
               Icon(Icons.security, color: Colors.white),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               Text('Veuillez valider la vérification de sécurité'),
             ],
           ),

@@ -115,6 +115,83 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
       }
     }).toList();
   }
+
+  // ✅ OPTIMISÉ: InputDecoration compact avec PermanentMarker
+  InputDecoration _inputDecoration(String label) => InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(
+          fontFamily: 'PermanentMarker', // ✅ PermanentMarker conservé
+          fontSize: 11, // ✅ Taille réduite mais lisible
+          color: Colors.white70,
+          height: 0.9, // ✅ Interligne serré
+        ),
+        floatingLabelStyle: const TextStyle(
+          fontFamily: 'PermanentMarker', 
+          fontSize: 12, // ✅ Taille contrôlée quand il flotte
+          color: Colors.white,
+          height: 0.9,
+        ),
+        filled: true,
+        fillColor: Colors.grey[900],
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14, 
+          vertical: 12, // ✅ Padding réduit pour compacter
+        ),
+        isDense: true, // ✅ CRUCIAL: Réduit la hauteur globale
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: KipikTheme.rouge, width: 1),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: KipikTheme.rouge, width: 2),
+        ),
+      );
+
+  // ✅ NOUVEAU: Widget pour les titres de section
+  Widget _buildSectionTitle(String title, IconData icon) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: KipikTheme.rouge, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            color: KipikTheme.rouge,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: const TextStyle(
+              fontFamily: 'PermanentMarker',
+              fontSize: 14,
+              color: Colors.black87,
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
   
   void _showInscriptionDetails(Map<String, dynamic> inscription) {
     showModalBottomSheet(
@@ -161,6 +238,7 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
                           color: Colors.white,
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
+                          fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les initiales
                         ),
                       ),
                     ),
@@ -175,7 +253,7 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
                               color: Colors.white,
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              fontFamily: 'PermanentMarker',
+                              fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les noms
                             ),
                           ),
                           Text(
@@ -183,6 +261,7 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
                             style: TextStyle(
                               color: Colors.grey[400],
                               fontSize: 14,
+                              fontFamily: 'Roboto', // ✅ Roboto pour les détails
                             ),
                           ),
                           SizedBox(height: 4),
@@ -198,6 +277,7 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
                                 color: Colors.white,
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
+                                fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les statuts
                               ),
                             ),
                           ),
@@ -224,7 +304,12 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
                       // Ouvrir le portfolio
                     },
                     icon: Icon(Icons.photo_library),
-                    label: Text('Voir le portfolio'),
+                    label: Text(
+                      'Voir le portfolio',
+                      style: TextStyle(
+                        fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les boutons
+                      ),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.grey[800],
                       foregroundColor: Colors.white,
@@ -261,7 +346,12 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          child: Text('Accepter'),
+                          child: Text(
+                            'Accepter',
+                            style: TextStyle(
+                              fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les boutons
+                            ),
+                          ),
                         ),
                       ),
                       SizedBox(width: 16),
@@ -285,7 +375,12 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          child: Text('Refuser'),
+                          child: Text(
+                            'Refuser',
+                            style: TextStyle(
+                              fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les boutons
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -304,7 +399,12 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: Text('Contacter'),
+                    child: Text(
+                      'Contacter',
+                      style: TextStyle(
+                        fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les boutons
+                      ),
+                    ),
                   ),
               ],
             ),
@@ -337,7 +437,7 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
             color: KipikTheme.rouge,
             fontSize: 16,
             fontWeight: FontWeight.bold,
-            fontFamily: 'PermanentMarker',
+            fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les titres de section
           ),
         ),
         SizedBox(height: 12),
@@ -358,6 +458,7 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
               style: TextStyle(
                 color: Colors.grey[400],
                 fontSize: 14,
+                fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les labels
               ),
             ),
           ),
@@ -367,6 +468,7 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 14,
+                fontFamily: 'Roboto', // ✅ Roboto pour les valeurs
               ),
             ),
           ),
@@ -399,18 +501,50 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
           SafeArea(
             child: Column(
               children: [
-                // Onglets (Tatoueurs / Vendeurs)
+                // ✅ Section Titre avec icône
                 Container(
-                  color: Colors.black.withOpacity(0.7),
+                  padding: const EdgeInsets.all(16),
+                  child: _buildSectionTitle('Gestion des inscriptions', Icons.people),
+                ),
+
+                // Onglets (Tatoueurs / Vendeurs) - Optimisés
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: KipikTheme.rouge, width: 1),
+                  ),
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
                   child: TabBar(
                     controller: _tabController,
                     tabs: [
-                      Tab(text: 'Tatoueurs'),
-                      Tab(text: 'Vendeurs'),
+                      Tab(
+                        child: Text(
+                          'Tatoueurs',
+                          style: TextStyle(
+                            fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les onglets
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      Tab(
+                        child: Text(
+                          'Vendeurs',
+                          style: TextStyle(
+                            fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les onglets
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
                     ],
                     labelColor: KipikTheme.rouge,
                     unselectedLabelColor: Colors.grey[400],
                     indicatorColor: KipikTheme.rouge,
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    indicator: BoxDecoration(
+                      color: KipikTheme.rouge.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     onTap: (_) {
                       setState(() {
                         // Mise à jour de la liste filtrée
@@ -419,31 +553,59 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
                   ),
                 ),
                 
-                // Filtres
+                const SizedBox(height: 16),
+                
+                // ✅ Filtres optimisés
                 Container(
-                  padding: EdgeInsets.all(16),
-                  color: Colors.black.withOpacity(0.5),
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  margin: EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: KipikTheme.rouge.withOpacity(0.5)),
+                  ),
                   child: Column(
                     children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.filter_list,
+                            color: KipikTheme.rouge,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Filtres',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontFamily: 'PermanentMarker',
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
                       Row(
                         children: [
                           Expanded(
                             child: DropdownButtonFormField<String>(
                               value: _selectedConvention,
-                              decoration: InputDecoration(
-                                labelText: 'Convention',
-                                labelStyle: TextStyle(color: Colors.grey[400]),
-                                border: OutlineInputBorder(),
-                                filled: true,
-                                fillColor: Colors.grey[900],
-                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: _inputDecoration('Convention'),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontFamily: 'Roboto', // ✅ Roboto pour le contenu
+                                fontSize: 14,
                               ),
-                              style: TextStyle(color: Colors.white),
                               dropdownColor: Colors.grey[800],
                               items: _conventions.map((convention) {
                                 return DropdownMenuItem<String>(
                                   value: convention,
-                                  child: Text(convention),
+                                  child: Text(
+                                    convention,
+                                    style: TextStyle(
+                                      fontFamily: 'Roboto', // ✅ Roboto pour les options
+                                    ),
+                                  ),
                                 );
                               }).toList(),
                               onChanged: (value) {
@@ -459,20 +621,22 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
                           Expanded(
                             child: DropdownButtonFormField<String>(
                               value: _status,
-                              decoration: InputDecoration(
-                                labelText: 'Statut',
-                                labelStyle: TextStyle(color: Colors.grey[400]),
-                                border: OutlineInputBorder(),
-                                filled: true,
-                                fillColor: Colors.grey[900],
-                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: _inputDecoration('Statut'),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontFamily: 'Roboto', // ✅ Roboto pour le contenu
+                                fontSize: 14,
                               ),
-                              style: TextStyle(color: Colors.white),
                               dropdownColor: Colors.grey[800],
                               items: _statuses.map((status) {
                                 return DropdownMenuItem<String>(
                                   value: status,
-                                  child: Text(status),
+                                  child: Text(
+                                    status,
+                                    style: TextStyle(
+                                      fontFamily: 'Roboto', // ✅ Roboto pour les options
+                                    ),
+                                  ),
                                 );
                               }).toList(),
                               onChanged: (value) {
@@ -490,15 +654,42 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
                   ),
                 ),
                 
+                const SizedBox(height: 16),
+                
                 // Liste des inscriptions
                 Expanded(
                   child: _isLoading
                       ? Center(child: CircularProgressIndicator(color: KipikTheme.rouge))
                       : _filteredInscriptions.isEmpty
                           ? Center(
-                              child: Text(
-                                'Aucune inscription trouvée',
-                                style: TextStyle(color: Colors.white),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.inbox,
+                                    size: 64,
+                                    color: Colors.grey[600],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'Aucune inscription trouvée',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les messages
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Modifiez vos filtres pour voir plus de résultats',
+                                    style: TextStyle(
+                                      color: Colors.grey[400],
+                                      fontFamily: 'Roboto', // ✅ Roboto pour les sous-textes
+                                      fontSize: 14,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
                               ),
                             )
                           : ListView.builder(
@@ -526,7 +717,12 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
       color: Colors.grey[900],
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: KipikTheme.rouge.withOpacity(0.3), // ✅ Bordure Kipik subtile
+          width: 1,
+        ),
       ),
+      elevation: 4, // ✅ Ombre pour plus de profondeur
       child: InkWell(
         onTap: () => _showInscriptionDetails(inscription),
         borderRadius: BorderRadius.circular(12),
@@ -546,6 +742,7 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
                         color: Colors.white,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
+                        fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les initiales
                       ),
                     ),
                   ),
@@ -560,23 +757,27 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
                             color: Colors.white,
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
+                            fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les noms
                           ),
                         ),
-                        Text(
-                          inscription['studioName'] != 'N/A' ? inscription['studioName'] : '',
-                          style: TextStyle(
-                            color: Colors.grey[400],
-                            fontSize: 14,
+                        if (inscription['studioName'] != 'N/A')
+                          Text(
+                            inscription['studioName'],
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 14,
+                              fontFamily: 'Roboto', // ✅ Roboto pour les détails
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),
                   Container(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
                       color: statusColor.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: statusColor, width: 1),
                     ),
                     child: Text(
                       inscription['status'],
@@ -584,34 +785,45 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
                         color: statusColor,
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
+                        fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les statuts
                       ),
                     ),
                   ),
                 ],
               ),
               SizedBox(height: 12),
-              Row(
-                children: [
-                  Icon(Icons.event, size: 16, color: Colors.grey[400]),
-                  SizedBox(width: 4),
-                  Text(
-                    inscription['conventionName'],
-                    style: TextStyle(
-                      color: Colors.grey[400],
-                      fontSize: 12,
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.grey[800],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.event, size: 16, color: KipikTheme.rouge),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        inscription['conventionName'],
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontFamily: 'Roboto', // ✅ Roboto pour les détails
+                        ),
+                      ),
                     ),
-                  ),
-                  Spacer(),
-                  Icon(Icons.calendar_today, size: 16, color: Colors.grey[400]),
-                  SizedBox(width: 4),
-                  Text(
-                    DateFormat('dd/MM/yyyy').format(inscription['submissionDate']),
-                    style: TextStyle(
-                      color: Colors.grey[400],
-                      fontSize: 12,
+                    Icon(Icons.calendar_today, size: 16, color: Colors.grey[400]),
+                    SizedBox(width: 6),
+                    Text(
+                      DateFormat('dd/MM/yyyy').format(inscription['submissionDate']),
+                      style: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 12,
+                        fontFamily: 'Roboto', // ✅ Roboto pour les dates
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),

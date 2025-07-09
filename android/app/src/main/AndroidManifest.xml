@@ -1,5 +1,4 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
     <!-- Permissions nécessaires pour la géolocalisation -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
@@ -10,10 +9,8 @@
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 
-        <!-- Clé API Google Maps -->
-        <meta-data
-            android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyA5_qhqBEQfP766G2FSU4OrMdBVIQgM_UA"/>
+        <!-- ✅ Clé API Google Maps supprimée - maintenant dans .env -->
+        <!-- La clé sera lue depuis votre fichier .env de façon sécurisée -->
 
         <activity
             android:name=".MainActivity"

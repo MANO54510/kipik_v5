@@ -3,7 +3,9 @@
 import 'package:flutter/material.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
 import 'package:kipik_v5/models/chat_message.dart';
+import 'package:kipik_v5/models/ai_action.dart';
 import 'package:kipik_v5/services/chat/chat_manager.dart';
+import 'ai_actions_widget.dart'; // ✅ AJOUTÉ
 
 class AIChatBottomSheet extends StatefulWidget {
   final bool allowImageGeneration;
@@ -52,6 +54,8 @@ class _AIChatBottomSheetState extends State<AIChatBottomSheet> {
       text: _getWelcomeMessage(),
       senderId: 'assistant',
       timestamp: DateTime.now(),
+      // ✅ NOUVEAU: Actions de bienvenue selon le contexte
+      actions: _getWelcomeActions(),
     );
     
     setState(() {
@@ -63,6 +67,8 @@ class _AIChatBottomSheetState extends State<AIChatBottomSheet> {
     String baseMessage = "👋 Salut ! Je suis l'Assistant Kipik.\n\n";
     
     switch (widget.contextPage) {
+      case 'client':
+        return "${baseMessage}Je peux t'aider avec ton projet de tatouage ! Pose-moi tes questions ou explore mes suggestions 👇";
       case 'devis':
         return "${baseMessage}Je peux t'aider à créer des devis et ${widget.allowImageGeneration ? 'générer des images de tatouages' : 'répondre à tes questions'} !";
       case 'agenda':
@@ -75,6 +81,41 @@ class _AIChatBottomSheetState extends State<AIChatBottomSheet> {
         return "${baseMessage}Je peux t'expliquer comment t'inscrire aux conventions !";
       default:
         return "${baseMessage}Que puis-je faire pour toi aujourd'hui ?";
+    }
+  }
+
+  /// ✅ NOUVEAU: Actions suggérées dès l'ouverture
+  List<AIAction>? _getWelcomeActions() {
+    switch (widget.contextPage) {
+      case 'client':
+        return [
+          const AIAction(
+            type: AIActionType.navigate,
+            title: '🔍 Rechercher un tatoueur',
+            subtitle: 'Trouve le tatoueur parfait',
+            route: '/recherche-tatoueur',
+            icon: 'search',
+            color: 'primary',
+          ),
+          const AIAction(
+            type: AIActionType.navigate,
+            title: '🎨 Voir la galerie',
+            subtitle: 'Explore les réalisations',
+            route: '/galerie',
+            icon: 'photo_library',
+            color: 'purple',
+          ),
+          const AIAction(
+            type: AIActionType.navigate,
+            title: '💰 Estimer le prix',
+            subtitle: 'Calcule ton budget',
+            route: '/estimateur',
+            icon: 'calculate',
+            color: 'orange',
+          ),
+        ];
+      default:
+        return null;
     }
   }
 
@@ -108,6 +149,7 @@ class _AIChatBottomSheetState extends State<AIChatBottomSheet> {
       final aiResponse = await ChatManager.askAI(
         trimmedText, 
         allowImages: widget.allowImageGeneration,
+        contextPage: widget.contextPage,
       );
 
       setState(() {
@@ -129,6 +171,46 @@ class _AIChatBottomSheetState extends State<AIChatBottomSheet> {
     }
 
     _scrollToBottom();
+  }
+
+  /// ✅ NOUVEAU: Gestionnaire d'actions IA
+  void _handleAIAction(AIAction action) {
+    switch (action.type) {
+      case AIActionType.navigate:
+        if (action.route != null) {
+          Navigator.pop(context); // Fermer le chat
+          Navigator.pushNamed(context, action.route!);
+        }
+        break;
+        
+      case AIActionType.generateImage:
+        // Déclencher la génération d'image avec le prompt de l'action
+        if (action.data != null && action.data!['prompt'] != null) {
+          _sendMessage('Génère une image : ${action.data!['prompt']}');
+        }
+        break;
+        
+      case AIActionType.contact:
+        Navigator.pop(context);
+        if (action.route != null) {
+          Navigator.pushNamed(context, action.route!);
+        }
+        break;
+        
+      case AIActionType.custom:
+        // Logique personnalisée selon les besoins
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Action : ${action.title}'),
+            backgroundColor: KipikTheme.rouge,
+          ),
+        );
+        break;
+        
+      case AIActionType.openLink:
+        // Implémenter l'ouverture de lien si nécessaire
+        break;
+    }
   }
 
   void _scrollToBottom() {
@@ -229,7 +311,6 @@ class _AIChatBottomSheetState extends State<AIChatBottomSheet> {
                 backgroundColor: KipikTheme.rouge,
                 backgroundImage: const AssetImage('assets/avatars/avatar_assistant_kipik.png'),
                 onBackgroundImageError: (_, __) {},
-                child: const Icon(Icons.smart_toy, color: Colors.white),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -245,10 +326,11 @@ class _AIChatBottomSheetState extends State<AIChatBottomSheet> {
                       ),
                     ),
                     Text(
-                      widget.allowImageGeneration ? 'Aide + Images' : 'Assistant navigation',
+                      _getContextSubtitle(),
                       style: const TextStyle(
                         color: Colors.white70,
                         fontSize: 12,
+                        fontFamily: 'Roboto',
                       ),
                     ),
                   ],
@@ -259,12 +341,12 @@ class _AIChatBottomSheetState extends State<AIChatBottomSheet> {
               IconButton(
                 onPressed: _toggleExpanded,
                 icon: Icon(
-                  _isExpanded ? Icons.expand_less : Icons.expand_more,
+                  _isExpanded ? Icons.expand_more : Icons.expand_less,
                   color: Colors.white70,
                 ),
                 tooltip: _isExpanded ? 'Réduire' : 'Agrandir',
               ),
-              if (_messages.length > 1) // Afficher seulement s'il y a des messages
+              if (_messages.length > 1)
                 IconButton(
                   onPressed: _clearConversation,
                   icon: const Icon(Icons.refresh, color: Colors.white70),
@@ -282,6 +364,19 @@ class _AIChatBottomSheetState extends State<AIChatBottomSheet> {
     );
   }
 
+  String _getContextSubtitle() {
+    switch (widget.contextPage) {
+      case 'client':
+        return 'Expert tatouage pour particuliers';
+      case 'devis':
+        return 'Aide création de devis';
+      case 'agenda':
+        return 'Optimisation agenda';
+      default:
+        return widget.allowImageGeneration ? 'Aide + Images' : 'Assistant navigation';
+    }
+  }
+
   Widget _buildMessageBubble(ChatMessage message) {
     final isAssistant = message.isFromAssistant;
     
@@ -296,62 +391,76 @@ class _AIChatBottomSheetState extends State<AIChatBottomSheet> {
               backgroundColor: KipikTheme.rouge,
               backgroundImage: const AssetImage('assets/avatars/avatar_assistant_kipik.png'),
               onBackgroundImageError: (_, __) {},
-              child: const Icon(Icons.smart_toy, color: Colors.white, size: 14),
             ),
             const SizedBox(width: 8),
           ],
           Expanded(
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: isAssistant ? Colors.white : KipikTheme.rouge,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(isAssistant ? 4 : 16),
-                  topRight: Radius.circular(isAssistant ? 16 : 4),
-                  bottomLeft: const Radius.circular(16),
-                  bottomRight: const Radius.circular(16),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Bulle de message
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isAssistant ? Colors.white : KipikTheme.rouge,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(isAssistant ? 4 : 16),
+                      topRight: Radius.circular(isAssistant ? 16 : 4),
+                      bottomLeft: const Radius.circular(16),
+                      bottomRight: const Radius.circular(16),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (message.hasImage) ...[
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        message.imageUrl!,
-                        height: 120,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (message.hasImage) ...[
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(
+                            message.imageUrl!,
                             height: 120,
-                            color: Colors.grey[300],
-                            child: const Icon(Icons.broken_image, size: 40),
-                          );
-                        },
-                      ),
-                    ),
-                    if (message.hasText) const SizedBox(height: 8),
-                  ],
-                  if (message.hasText)
-                    Text(
-                      message.text!,
-                      style: TextStyle(
-                        color: isAssistant ? Colors.black87 : Colors.white,
-                        fontSize: 14,
-                        height: 1.3,
-                      ),
-                    ),
-                ],
-              ),
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                height: 120,
+                                color: Colors.grey[300],
+                                child: const Icon(Icons.broken_image, size: 40),
+                              );
+                            },
+                          ),
+                        ),
+                        if (message.hasText) const SizedBox(height: 8),
+                      ],
+                      if (message.hasText)
+                        Text(
+                          message.text!,
+                          style: TextStyle(
+                            color: isAssistant ? Colors.black87 : Colors.white,
+                            fontSize: 14,
+                            height: 1.4,
+                            fontFamily: 'Roboto',
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                
+                // ✅ NOUVEAU: Actions interactives
+                if (isAssistant && message.hasActions)
+                  AIActionsWidget(
+                    actions: message.actions!,
+                    onActionTap: _handleAIAction,
+                  ),
+              ],
             ),
           ),
           if (!isAssistant) ...[
@@ -377,7 +486,6 @@ class _AIChatBottomSheetState extends State<AIChatBottomSheet> {
             backgroundColor: KipikTheme.rouge,
             backgroundImage: const AssetImage('assets/avatars/avatar_assistant_kipik.png'),
             onBackgroundImageError: (_, __) {},
-            child: const Icon(Icons.smart_toy, color: Colors.white, size: 14),
           ),
           const SizedBox(width: 8),
           const Text(
@@ -386,6 +494,7 @@ class _AIChatBottomSheetState extends State<AIChatBottomSheet> {
               color: Colors.white70,
               fontStyle: FontStyle.italic,
               fontSize: 12,
+              fontFamily: 'Roboto',
             ),
           ),
           const SizedBox(width: 8),
@@ -404,7 +513,13 @@ class _AIChatBottomSheetState extends State<AIChatBottomSheet> {
 
   Widget _buildInputArea() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 
+                MediaQuery.of(context).padding.bottom + 16,
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
@@ -421,8 +536,17 @@ class _AIChatBottomSheetState extends State<AIChatBottomSheet> {
           Expanded(
             child: TextField(
               controller: _messageController,
+              style: const TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+              ),
               decoration: InputDecoration(
                 hintText: 'Pose ta question...',
+                hintStyle: const TextStyle(
+                  fontFamily: 'Roboto',
+                  color: Colors.grey,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(20),
                   borderSide: BorderSide.none,

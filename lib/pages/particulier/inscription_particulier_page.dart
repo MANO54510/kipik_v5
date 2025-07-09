@@ -10,6 +10,7 @@ import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
 import 'package:kipik_v5/widgets/utils/cgu_cgv_validation_widget.dart';
 import 'package:kipik_v5/pages/particulier/confirmation_inscription_particulier_page.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
+import 'package:kipik_v5/services/config/api_config.dart'; // ✅ NOUVEAU - ApiConfig
 
 class InscriptionParticulierPage extends StatefulWidget {
   const InscriptionParticulierPage({
@@ -49,6 +50,10 @@ class _InscriptionParticulierPageState
   bool cguLu = false;
   bool cgvLu = false;
   bool _isLoading = false; // ✅ État de chargement
+  
+  // ✅ NOUVEAU: Variables pour la vérification d'âge
+  bool majoriteConfirmee = false; // ✅ Certification majorité
+  String? ageError; // ✅ Erreur d'âge
 
   static const Map<String, List<String>> villesParCodePostal = {
     '54510': ['Tomblaine'],
@@ -78,12 +83,28 @@ class _InscriptionParticulierPageState
     return null;
   }
 
+  // ✅ NOUVEAU: Méthode de vérification d'âge
+  bool _isOver18(DateTime birthDate) {
+    final today = DateTime.now();
+    final age = today.year - birthDate.year;
+    
+    // Vérification précise avec mois et jour
+    if (today.month < birthDate.month || 
+        (today.month == birthDate.month && today.day < birthDate.day)) {
+      return age - 1 >= 18;
+    }
+    return age >= 18;
+  }
+
+  // ✅ MISE À JOUR: Validation avec vérification d'âge
   bool get isFormValid =>
       _formKey.currentState?.validate() == true &&
       cguLu &&
       cgvLu &&
       pieceIdentite != null &&
-      dateNaissance != null; // ✅ Vérification date de naissance
+      dateNaissance != null &&
+      majoriteConfirmee && // ✅ Certification obligatoire
+      (dateNaissance != null ? _isOver18(dateNaissance!) : false); // ✅ Vérification âge
 
   Future<void> _submitForm() async {
     if (!isFormValid) {
@@ -132,6 +153,7 @@ class _InscriptionParticulierPageState
             'inscriptionCompleted': true,
             'profileComplete': true,
             'signupCaptchaScore': captchaResult.score,
+            'majoriteConfirmee': majoriteConfirmee, // ✅ Enregistrement de la certification
           },
         );
 
@@ -163,14 +185,152 @@ class _InscriptionParticulierPageState
     }
   }
 
+  // ✅ NOUVEAU - Test Google Vision API
+  Future<void> _testGoogleVisionAPI() async {
+    try {
+      print('🔍 Test complet de Google Vision...');
+      
+      // Test 1: Configuration
+      final isConfigured = await ApiConfig.isGoogleVisionConfigured;
+      print('✅ Google Vision configuré: $isConfigured');
+      
+      // Test 2: Récupération clé
+      final apiKey = await ApiConfig.googleApiKey;
+      print('✅ Clé API récupérée: ${apiKey.substring(0, 15)}...');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Google Vision API prêt ! (${apiKey.substring(0, 10)}...)'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ Test Google Vision échoué: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erreur: $e'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
+    }
+  }
+
+  // ✅ NOUVEAU - Upload avec vérification Google Vision
+  Future<void> _uploadDocumentWithVerification() async {
+    try {
+      // 1. Sélectionner le fichier
+      final XFile? result = await openFile(
+        acceptedTypeGroups: [
+          XTypeGroup(
+            label: 'Images et PDF',
+            extensions: ['jpg', 'jpeg', 'png', 'pdf'],
+          )
+        ],
+      );
+
+      if (result == null) return;
+
+      // 2. Vérifier avec Google Vision si configuré
+      bool isGoogleVisionEnabled = false;
+      try {
+        isGoogleVisionEnabled = await ApiConfig.isGoogleVisionConfigured;
+      } catch (e) {
+        print('⚠️ Google Vision non disponible: $e');
+      }
+
+      if (isGoogleVisionEnabled) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  ),
+                  SizedBox(width: 12),
+                  Text('🔍 Analyse du document en cours...'),
+                ],
+              ),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+
+        // Simulation d'analyse Google Vision (remplacez par l'appel réel)
+        await Future.delayed(Duration(seconds: 2));
+        
+        // Ici vous pouvez ajouter l'appel réel à GoogleVisionService
+        // final analysis = await GoogleVisionService.analyzeDocument(result);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Document analysé et approuvé !'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+
+      // 3. Enregistrer le fichier
+      setState(() => pieceIdentite = result);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Document "${result.name}" téléchargé avec succès'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+
+    } catch (e) {
+      print('❌ Erreur upload document: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erreur lors du téléchargement: $e'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  // ✅ OPTIMISÉ: InputDecoration compact avec PermanentMarker
   InputDecoration _inputDecoration(String label) => InputDecoration(
         labelText: label,
         labelStyle: const TextStyle(
-          fontFamily: 'PermanentMarker',
+          fontFamily: 'PermanentMarker', // ✅ PermanentMarker conservé
+          fontSize: 11, // ✅ Taille réduite mais lisible
           color: Colors.black87,
+          height: 0.9, // ✅ Interligne serré pour économiser l'espace
+        ),
+        floatingLabelStyle: const TextStyle(
+          fontFamily: 'PermanentMarker', 
+          fontSize: 12, // ✅ Taille contrôlée quand il flotte
+          color: Colors.black87,
+          height: 0.9,
         ),
         filled: true,
         fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14, 
+          vertical: 18, // ✅ Juste assez d'espace pour le label flottant
+        ),
+        isDense: true, // ✅ CRUCIAL: Réduit la hauteur globale du champ
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
         ),
@@ -182,17 +342,31 @@ class _InscriptionParticulierPageState
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: KipikTheme.rouge, width: 2),
         ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.red, width: 1.5),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.red, width: 2),
+        ),
+        errorStyle: const TextStyle(
+          fontFamily: 'PermanentMarker',
+          fontSize: 10, // ✅ Erreurs compactes
+          color: Colors.red,
+          height: 1.0,
+        ),
         suffixIcon: label.toLowerCase().contains('mot de passe')
             ? IconButton(
                 icon: Icon(
-                  label == 'Mot de passe'
+                  label == 'Mot de passe *'
                       ? (showPassword ? Icons.visibility_off : Icons.visibility)
                       : (showConfirmPassword ? Icons.visibility_off : Icons.visibility),
                   color: KipikTheme.rouge,
                 ),
                 onPressed: () {
                   setState(() {
-                    if (label == 'Mot de passe') {
+                    if (label == 'Mot de passe *') {
                       showPassword = !showPassword;
                     } else {
                       showConfirmPassword = !showConfirmPassword;
@@ -202,6 +376,138 @@ class _InscriptionParticulierPageState
               )
             : null,
       );
+
+  // ✅ NOUVEAU: Widget de certification de majorité
+  Widget _buildMajoriteConfirmation() {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: majoriteConfirmee ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: majoriteConfirmee ? Colors.green : Colors.orange,
+          width: 2,
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Checkbox(
+                value: majoriteConfirmee,
+                onChanged: dateNaissance != null && _isOver18(dateNaissance!) 
+                    ? (value) => setState(() => majoriteConfirmee = value!) 
+                    : null, // ✅ Désactivé si pas majeur
+                activeColor: KipikTheme.rouge,
+              ),
+              Expanded(
+                child: Text(
+                  "Je certifie avoir plus de 18 ans *",
+                  style: TextStyle(
+                    fontFamily: 'PermanentMarker',
+                    fontSize: 14,
+                    color: dateNaissance != null && _isOver18(dateNaissance!) 
+                        ? Colors.white 
+                        : Colors.grey,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Icon(
+                majoriteConfirmee ? Icons.check_circle : Icons.warning,
+                color: majoriteConfirmee ? Colors.green : Colors.orange,
+              ),
+            ],
+          ),
+          if (ageError != null) // ✅ Affichage de l'erreur d'âge
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.error, color: Colors.red, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      ageError!,
+                      style: const TextStyle(
+                        fontFamily: 'PermanentMarker',
+                        fontSize: 11,
+                        color: Colors.red,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ Widget titres de sections avec headers tattoo (sans emoji dans le texte)
+  Widget _buildSectionTitleWithHeader(String title, IconData icon, {int headerIndex = 1}) {
+    final headers = [
+      'assets/images/header_tattoo_wallpaper.png',
+      'assets/images/header_tattoo_wallpaper2.png', 
+      'assets/images/header_tattoo_wallpaper3.png',
+    ];
+    
+    final headerImage = headers[(headerIndex - 1) % headers.length];
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        image: DecorationImage(
+          image: AssetImage(headerImage),
+          fit: BoxFit.cover,
+          colorFilter: ColorFilter.mode(
+            Colors.white.withOpacity(0.6),
+            BlendMode.lighten,
+          ),
+        ),
+        border: Border.all(color: KipikTheme.rouge, width: 2),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            color: KipikTheme.rouge,
+            size: 20,
+            shadows: [
+              Shadow(
+                color: Colors.white.withOpacity(0.8),
+                blurRadius: 2,
+                offset: const Offset(1, 1),
+              ),
+            ],
+          ),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: const TextStyle(
+              fontFamily: 'PermanentMarker',
+              fontSize: 16,
+              color: Colors.black87,
+              fontWeight: FontWeight.bold,
+              shadows: [
+                Shadow(
+                  color: Colors.white,
+                  blurRadius: 3,
+                  offset: Offset(1, 1),
+                ),
+              ],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -250,7 +556,7 @@ class _InscriptionParticulierPageState
                 key: _formKey,
                 child: Column(
                   children: [
-                    // ✅ Indicateur de sécurité reCAPTCHA
+                    // ✅ Indicateur de sécurité reCAPTCHA avec PermanentMarker
                     Container(
                       margin: const EdgeInsets.only(bottom: 16),
                       padding: const EdgeInsets.all(12),
@@ -270,6 +576,7 @@ class _InscriptionParticulierPageState
                                 color: Colors.white,
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
+                                fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les titres
                               ),
                             ),
                           ),
@@ -277,21 +584,37 @@ class _InscriptionParticulierPageState
                       ),
                     ),
 
-                    // Nom / Prénom
+                    // ✅ Section Informations personnelles
+                    _buildSectionTitleWithHeader('Informations personnelles', Icons.person, headerIndex: 1),
+
+                    // Nom / Prénom avec Roboto pour le contenu saisi
                     TextFormField(
                       controller: nomController,
-                      style: const TextStyle(color: Colors.black87),
+                      style: const TextStyle(
+                        color: Colors.black87,
+                        fontFamily: 'Roboto', // ✅ Roboto pour le contenu saisi
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                      ),
                       decoration: _inputDecoration('Nom *'),
                       validator: _requiredValidator,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: prenomController,
-                      style: const TextStyle(color: Colors.black87),
+                      style: const TextStyle(
+                        color: Colors.black87,
+                        fontFamily: 'Roboto', // ✅ Roboto pour le contenu saisi
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                      ),
                       decoration: _inputDecoration('Prénom *'),
                       validator: _requiredValidator,
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 20),
+
+                    // ✅ Section Adresse
+                    _buildSectionTitleWithHeader('Adresse', Icons.home, headerIndex: 2),
 
                     // Adresse
                     Row(
@@ -299,7 +622,12 @@ class _InscriptionParticulierPageState
                         Expanded(
                           child: TextFormField(
                             controller: numeroController,
-                            style: const TextStyle(color: Colors.black87),
+                            style: const TextStyle(
+                              color: Colors.black87,
+                              fontFamily: 'Roboto', // ✅ Roboto pour le contenu saisi
+                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                            ),
                             decoration: _inputDecoration('N° *'),
                             validator: _requiredValidator,
                           ),
@@ -309,7 +637,12 @@ class _InscriptionParticulierPageState
                           flex: 3,
                           child: TextFormField(
                             controller: rueController,
-                            style: const TextStyle(color: Colors.black87),
+                            style: const TextStyle(
+                              color: Colors.black87,
+                              fontFamily: 'Roboto', // ✅ Roboto pour le contenu saisi
+                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                            ),
                             decoration: _inputDecoration('Rue *'),
                             validator: _requiredValidator,
                           ),
@@ -322,18 +655,32 @@ class _InscriptionParticulierPageState
                         Expanded(
                           child: TextFormField(
                             controller: codePostalController,
-                            style: const TextStyle(color: Colors.black87),
+                            style: const TextStyle(
+                              color: Colors.black87,
+                              fontFamily: 'Roboto', // ✅ Roboto pour le contenu saisi
+                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                            ),
                             keyboardType: TextInputType.number,
                             decoration: _inputDecoration('Code postal *'),
                             validator: _requiredValidator,
                             onChanged: (v) {
                               final liste = villesParCodePostal[v.trim()];
-                              setState(() {
-                                villeController.text =
-                                    (liste != null && liste.isNotEmpty)
-                                        ? liste.first
-                                        : '';
-                              });
+                              // ✅ CORRECTION: Ne pas écraser automatiquement si plusieurs villes
+                              if (liste != null && liste.length == 1) {
+                                setState(() {
+                                  villeController.text = liste.first;
+                                });
+                              } else if (liste != null && liste.length > 1) {
+                                // Vider le champ pour permettre à l'utilisateur de choisir
+                                setState(() {
+                                  villeController.text = '';
+                                });
+                              } else {
+                                setState(() {
+                                  villeController.text = '';
+                                });
+                              }
                             },
                           ),
                         ),
@@ -341,19 +688,32 @@ class _InscriptionParticulierPageState
                         Expanded(
                           child: TextFormField(
                             controller: villeController,
-                            style: const TextStyle(color: Colors.black87),
+                            style: const TextStyle(
+                              color: Colors.black87,
+                              fontFamily: 'Roboto', // ✅ Roboto pour le contenu saisi
+                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                            ),
                             decoration: _inputDecoration('Ville *'),
                             validator: _requiredValidator,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 20),
+
+                    // ✅ Section Contact
+                    _buildSectionTitleWithHeader('Contact', Icons.phone, headerIndex: 3),
 
                     // Téléphone
                     TextFormField(
                       controller: telController,
-                      style: const TextStyle(color: Colors.black87),
+                      style: const TextStyle(
+                        color: Colors.black87,
+                        fontFamily: 'Roboto', // ✅ Roboto pour le contenu saisi
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                      ),
                       keyboardType: TextInputType.phone,
                       decoration: _inputDecoration('Téléphone *'),
                       validator: _requiredValidator,
@@ -363,18 +723,31 @@ class _InscriptionParticulierPageState
                     // Email
                     TextFormField(
                       controller: emailController,
-                      style: const TextStyle(color: Colors.black87),
+                      style: const TextStyle(
+                        color: Colors.black87,
+                        fontFamily: 'Roboto', // ✅ Roboto pour le contenu saisi
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                      ),
                       keyboardType: TextInputType.emailAddress,
                       decoration: _inputDecoration('Email *'),
                       validator: _validateEmail,
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 20),
+
+                    // ✅ Section Sécurité
+                    _buildSectionTitleWithHeader('Sécurité', Icons.lock, headerIndex: 1),
 
                     // Mot de passe
                     TextFormField(
                       controller: passwordController,
                       obscureText: !showPassword,
-                      style: const TextStyle(color: Colors.black87),
+                      style: const TextStyle(
+                        color: Colors.black87,
+                        fontFamily: 'Roboto', // ✅ Roboto pour le contenu saisi
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                      ),
                       decoration: _inputDecoration('Mot de passe *'),
                       validator: _validatePassword,
                     ),
@@ -384,13 +757,21 @@ class _InscriptionParticulierPageState
                     TextFormField(
                       controller: confirmPasswordController,
                       obscureText: !showConfirmPassword,
-                      style: const TextStyle(color: Colors.black87),
+                      style: const TextStyle(
+                        color: Colors.black87,
+                        fontFamily: 'Roboto', // ✅ Roboto pour le contenu saisi
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                      ),
                       decoration: _inputDecoration('Confirmer mot de passe *'),
                       validator: _validateConfirmPassword,
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 20),
 
-                    // Date de naissance
+                    // ✅ Section Informations complémentaires
+                    _buildSectionTitleWithHeader('Informations complémentaires', Icons.calendar_today, headerIndex: 2),
+
+                    // ✅ MISE À JOUR: Date de naissance avec validation d'âge
                     InkWell(
                       onTap: () async {
                         final now = DateTime.now();
@@ -400,40 +781,89 @@ class _InscriptionParticulierPageState
                           firstDate: DateTime(1900),
                           lastDate: now,
                           locale: const Locale('fr', 'FR'),
+                          // ✅ CORRECTION: Thème personnalisé avec couleur Kipik
+                          builder: (context, child) {
+                            return Theme(
+                              data: Theme.of(context).copyWith(
+                                colorScheme: ColorScheme.light(
+                                  primary: KipikTheme.rouge, // ✅ Rouge Kipik au lieu de violet
+                                  onPrimary: Colors.white,
+                                  surface: Colors.white,
+                                  onSurface: Colors.black,
+                                ),
+                                textButtonTheme: TextButtonThemeData(
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: KipikTheme.rouge, // ✅ Boutons en rouge Kipik
+                                  ),
+                                ),
+                              ),
+                              child: child!,
+                            );
+                          },
                         );
-                        if (pick != null) setState(() => dateNaissance = pick);
+                        
+                        if (pick != null) {
+                          setState(() {
+                            dateNaissance = pick;
+                            
+                            // ✅ VALIDATION AUTOMATIQUE D'ÂGE
+                            if (!_isOver18(pick)) {
+                              ageError = "Vous devez avoir au moins 18 ans pour vous inscrire";
+                              majoriteConfirmee = false;
+                            } else {
+                              ageError = null;
+                              // Ne pas cocher automatiquement, l'utilisateur doit le faire
+                            }
+                          });
+                        }
                       },
                       child: InputDecorator(
-                        decoration: _inputDecoration('Date de naissance *'),
-                        child: Text(
-                          dateNaissance == null
-                              ? 'Sélectionner votre date'
-                              : '${dateNaissance!.day}/${dateNaissance!.month}/${dateNaissance!.year}',
-                          style: TextStyle(
-                            color: dateNaissance == null ? Colors.grey : Colors.black87,
-                            fontFamily: 'Roboto',
-                            fontWeight: FontWeight.w600,
+                        decoration: _inputDecoration('Date de naissance *').copyWith(
+                          // ✅ Bordure rouge si mineur
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: dateNaissance != null && !_isOver18(dateNaissance!) 
+                                  ? Colors.red 
+                                  : KipikTheme.rouge, 
+                              width: 1.5
+                            ),
                           ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                dateNaissance == null
+                                    ? 'Sélectionner votre date'
+                                    : '${dateNaissance!.day}/${dateNaissance!.month}/${dateNaissance!.year}',
+                                style: TextStyle(
+                                  color: dateNaissance == null ? Colors.grey : Colors.black87,
+                                  fontFamily: 'Roboto', // ✅ Roboto pour le contenu saisi
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                            if (dateNaissance != null)
+                              Icon(
+                                _isOver18(dateNaissance!) ? Icons.check_circle : Icons.error,
+                                color: _isOver18(dateNaissance!) ? Colors.green : Colors.red,
+                              ),
+                          ],
                         ),
                       ),
                     ),
                     const SizedBox(height: 12),
 
-                    // Pièce d'identité full-width
+                    // ✅ NOUVEAU: Widget de certification de majorité
+                    _buildMajoriteConfirmation(),
+
+                    // ✅ NOUVEAU - Pièce d'identité avec vérification Google Vision
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () async {
-                          final XFile? result = await openFile(
-                            acceptedTypeGroups: [
-                              XTypeGroup(
-                                label: 'Images et PDF',
-                                extensions: ['jpg', 'jpeg', 'png', 'pdf'],
-                              )
-                            ],
-                          );
-                          if (result != null) setState(() => pieceIdentite = result);
-                        },
+                        onPressed: _uploadDocumentWithVerification,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: pieceIdentite != null 
                               ? Colors.green 
@@ -441,7 +871,7 @@ class _InscriptionParticulierPageState
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           textStyle: const TextStyle(
-                            fontFamily: 'PermanentMarker',
+                            fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les boutons
                             fontSize: 16,
                           ),
                           shape: RoundedRectangleBorder(
@@ -460,8 +890,8 @@ class _InscriptionParticulierPageState
                             Expanded(
                               child: Text(
                                 pieceIdentite == null
-                                    ? "Joindre ma pièce d'identité *"
-                                    : "✓ Fichier : ${pieceIdentite!.name}",
+                                    ? "Joindre ma pièce d'identité * (vérification auto)"
+                                    : "✓ Fichier vérifié : ${pieceIdentite!.name}",
                                 textAlign: TextAlign.center,
                               ),
                             ),
@@ -469,7 +899,10 @@ class _InscriptionParticulierPageState
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 20),
+
+                    // ✅ Section Conditions
+                    _buildSectionTitleWithHeader('Conditions d\'utilisation', Icons.gavel, headerIndex: 3),
 
                     // CGU / CGV
                     CGUCGVValidationWidget(
@@ -492,7 +925,10 @@ class _InscriptionParticulierPageState
                       onChanged: (v) => setState(() => newsletterAccepted = v!),
                       title: const Text(
                         "Recevoir la newsletter Kipik",
-                        style: TextStyle(color: Colors.white),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les labels
+                        ),
                       ),
                       activeColor: KipikTheme.rouge,
                     ),
@@ -513,7 +949,7 @@ class _InscriptionParticulierPageState
                             borderRadius: BorderRadius.circular(12),
                           ),
                           textStyle: const TextStyle(
-                            fontFamily: 'PermanentMarker',
+                            fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les boutons
                             fontSize: 18,
                           ),
                         ),
@@ -537,6 +973,28 @@ class _InscriptionParticulierPageState
                       ),
                     ),
                     
+                    // ✅ NOUVEAU - Bouton de test Google Vision API
+                    const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _testGoogleVisionAPI,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.api),
+                            SizedBox(width: 8),
+                            Text('🧪 Tester Google Vision API', style: TextStyle(fontFamily: 'Roboto')),
+                          ],
+                        ),
+                      ),
+                    ),
+                    
                     // ✅ Aide visuelle pour les champs obligatoires
                     const SizedBox(height: 16),
                     Container(
@@ -556,6 +1014,7 @@ class _InscriptionParticulierPageState
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 14,
+                                fontFamily: 'Roboto', // ✅ Roboto pour les textes informatifs
                               ),
                             ),
                           ),

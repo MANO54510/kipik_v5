@@ -8,7 +8,7 @@ import '../../services/inspiration/firebase_inspiration_service.dart';
 import '../../services/auth/secure_auth_service.dart';
 import '../../core/database_manager.dart';
 import '../../theme/kipik_theme.dart';
-import 'detail_inspiration_page.dart';
+import '../shared/inspirations/detail_inspiration_page.dart';
 
 class DetailTattooistPage extends StatefulWidget {
   final TatoueurSummary tatoueur;

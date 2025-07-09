@@ -3,417 +3,186 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
-import 'package:kipik_v5/services/auth/secure_auth_service.dart'; // ✅ SEUL SERVICE UTILISÉ
-import 'package:kipik_v5/models/user_role.dart';
-import 'package:kipik_v5/widgets/common/drawers/secure_drawer_components.dart';
+import 'package:kipik_v5/services/auth/secure_auth_service.dart';
+import 'package:kipik_v5/utils/chat_helper.dart';
 
-// Support & Chat
-import 'package:kipik_v5/pages/support/support_chat_page.dart';
-import 'package:kipik_v5/widgets/chat/ai_chat_bottom_sheet.dart';
+// ✅ IMPORTS CORRIGÉS : Pages existantes + nouvelles pages /shared/
+import 'package:kipik_v5/pages/particulier/recherche_tatoueur_page.dart';
+import 'package:kipik_v5/pages/shared/inspirations/inspirations_page.dart'; // ✅ NOUVEAU CHEMIN
+import 'package:kipik_v5/pages/particulier/mes_projets_particulier_page.dart';
+import 'package:kipik_v5/pages/particulier/guide_tatouage_page.dart';
+import 'package:kipik_v5/pages/particulier/aide_support_page.dart';
+import 'package:kipik_v5/pages/particulier/profil_particulier_page.dart';
+import 'package:kipik_v5/pages/particulier/parametres_page.dart';
 
-class CustomDrawerParticulier extends StatelessWidget with SecureDrawerMixin {
+class CustomDrawerParticulier extends StatelessWidget {
   const CustomDrawerParticulier({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    // ✅ CHANGÉ : Utiliser SecureAuthService uniquement
     final currentUser = SecureAuthService.instance.currentUser;
     
-    // Vérifications de sécurité avec SecureAuthService
+    // Vérifications de sécurité
     if (currentUser == null || !SecureAuthService.instance.isAuthenticated) {
-      return SecureDrawerFactory.buildFallbackDrawer();
-    }
-    
-    final currentRole = SecureAuthService.instance.currentUserRole;
-    if (currentRole != UserRole.client) {
-      return SecureDrawerFactory.buildInsufficientRoleDrawer(
-        currentRole: currentRole ?? UserRole.client,
-        requiredRole: UserRole.client,
+      return Drawer(
+        child: Container(
+          color: Colors.red[50],
+          child: const Center(
+            child: Text('Erreur d\'authentification'),
+          ),
+        ),
       );
     }
-    
-    // ✅ AJOUTÉ : Extraction des données utilisateur depuis SecureAuthService
-    final userName = currentUser['name'] ?? currentUser['displayName'] ?? 'Client';
-    final userEmail = currentUser['email'] ?? '';
-    final userId = currentUser['uid'] ?? currentUser['id'] ?? '';
-    final profileImageUrl = currentUser['photoURL'] ?? currentUser['profileImageUrl'];
-    
-    final headerImages = [
-      'assets/images/header_tattoo_wallpaper.png',
-      'assets/images/header_tattoo_wallpaper2.png',
-      'assets/images/header_tattoo_wallpaper3.png',
-    ];
-    final bgImage = headerImages[Random().nextInt(headerImages.length)];
 
     return Drawer(
-      backgroundColor: const Color(0xFF0A0A0A),
       child: Column(
         children: [
-          // Header avec thème client
-          Container(
-            width: double.infinity,
-            height: 160,
-            decoration: BoxDecoration(
-              image: DecorationImage(
-                image: AssetImage(bgImage),
-                fit: BoxFit.cover,
-                colorFilter: ColorFilter.mode(
-                  Colors.blue.withOpacity(0.2),
-                  BlendMode.multiply,
+          // Header SANS SafeArea pour qu'il occupe tout l'écran
+          _buildHeader(currentUser),
+          
+          // Menu principal avec SafeArea seulement pour le contenu
+          Expanded(
+            child: SafeArea(
+              top: false, // Pas de SafeArea en haut
+              child: SingleChildScrollView(
+                padding: EdgeInsets.only(
+                  bottom: 15 + MediaQuery.of(context).padding.bottom,
                 ),
-              ),
-            ),
-            child: Stack(
-              children: [
-                // Badge client
-                Positioned(
-                  top: 50,
-                  right: 16,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.9),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.blue, width: 2),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.person, color: Colors.white, size: 16),
-                        SizedBox(width: 4),
-                        Text(
-                          'CLIENT',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 15),
+                    
+                    // ✅ Section Navigation principale - MISE À JOUR
+                    _buildMenuSection(
+                      'PROJETS & RECHERCHE', // ✅ NOUVEAU NOM
+                      [
+                        _MenuItemData(
+                          icon: Icons.search,
+                          title: 'Rechercher un tatoueur',
+                          subtitle: 'Trouve ton artiste idéal',
+                          onTap: () => _navigateToPage(context, const RechercheTatoueurPage()),
+                        ),
+                        _MenuItemData(
+                          icon: Icons.photo_library,
+                          title: 'Galerie d\'inspiration', // ✅ FONCTIONNE TOUJOURS
+                          subtitle: 'Découvre les styles',
+                          onTap: () => _navigateToPage(context, const InspirationsPage()),
+                        ),
+                        _MenuItemData(
+                          icon: Icons.folder_open,
+                          title: 'Mes projets',
+                          subtitle: 'Gère tes tatouages',
+                          onTap: () => _navigateToPage(context, const MesProjetsParticulierPage()),
                         ),
                       ],
                     ),
-                  ),
-                ),
-                Positioned(
-                  top: -30,
-                  right: -30,
-                  child: Container(
-                    width: 100,
-                    height: 100,
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.2),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-                Positioned(
-                  bottom: 16,
-                  left: 16,
-                  right: 16,
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 48,
-                        backgroundColor: Colors.blue,
-                        child: CircleAvatar(
-                          radius: 46,
-                          backgroundImage: profileImageUrl?.isNotEmpty == true
-                              ? NetworkImage(profileImageUrl!)
-                              : const AssetImage('assets/avatars/avatar_client.png') as ImageProvider,
+                    
+                    // ✅ NOUVELLES SECTIONS POUR PHASE 2 (commentées pour l'instant)
+                    /*
+                    const SizedBox(height: 15),
+                    
+                    // Section FLASHS & DÉCOUVERTE (Semaine 2)
+                    _buildMenuSection(
+                      'FLASHS & DÉCOUVERTE',
+                      [
+                        _MenuItemData(
+                          icon: Icons.swipe,
+                          title: 'Découvrir des Flashs',
+                          subtitle: 'Swipe pour trouver ton style',
+                          onTap: () => _navigateToPage(context, const FlashSwipePage()),
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      Flexible(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              userName, // ✅ CHANGÉ : Variable extraite
-                              style: const TextStyle(
-                                fontFamily: 'PermanentMarker',
-                                fontSize: 22,
-                                color: Colors.blue,
-                                shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.8),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  'CLIENT PARTICULIER',
-                                  style: TextStyle(
-                                    color: Colors.blue,
-                                    fontSize: 12,
-                                    fontFamily: 'Roboto',
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
+                        _MenuItemData(
+                          icon: Icons.flash_on,
+                          title: 'Flash Minute',
+                          subtitle: 'Offres last-minute à prix réduit',
+                          onTap: () => _navigateToPage(context, const FlashMinuteFeedPage()),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Menu client sécurisé
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                const SizedBox(height: 16),
-                
-                // SECTION TABLEAU DE BORD
-                const _SectionHeader('TABLEAU DE BORD'),
-                _buildSecureMenuItem(
-                  context,
-                  icon: Icons.dashboard_outlined,
-                  title: 'Mon espace client',
-                  subtitle: 'Vue d\'ensemble de mes projets',
-                  onTap: () => showDevelopmentMessage(context, 'Dashboard client'),
-                ),
-
-                const _SectionDivider(),
-                
-                // SECTION CHAT & ASSISTANCE
-                const _SectionHeader('CHAT & ASSISTANCE'),
-                _buildSecureMenuItem(
-                  context,
-                  icon: Icons.smart_toy_outlined,
-                  title: 'Assistant IA Kipik',
-                  subtitle: 'Idées de tatouages, conseils',
-                  onTap: () => _openAIAssistant(context),
-                ),
-                _buildSecureMenuItem(
-                  context,
-                  icon: Icons.support_agent_outlined,
-                  title: 'Support Client',
-                  subtitle: 'Aide et questions',
-                  onTap: () => secureNavigate(context, SupportChatPage(userId: userId)), // ✅ CHANGÉ
-                ),
-
-                const _SectionDivider(),
-                
-                // SECTION MES PROJETS
-                const _SectionHeader('MES PROJETS'),
-                _buildSecureMenuItem(
-                  context,
-                  icon: Icons.folder_outlined,
-                  title: 'Mes projets tatouage',
-                  subtitle: 'Projets en cours et terminés',
-                  onTap: () => showDevelopmentMessage(context, 'Mes projets'),
-                ),
-                _buildSecureMenuItem(
-                  context,
-                  icon: Icons.add_circle_outline,
-                  title: 'Nouveau projet',
-                  subtitle: 'Lancer un nouveau tatouage',
-                  onTap: () => showDevelopmentMessage(context, 'Nouveau projet'),
-                ),
-                _buildSecureMenuItem(
-                  context,
-                  icon: Icons.chat_bubble_outline,
-                  title: 'Mes conversations',
-                  subtitle: 'Chat avec mes tatoueurs',
-                  onTap: () => showDevelopmentMessage(context, 'Conversations'),
-                ),
-
-                const _SectionDivider(),
-                
-                // SECTION DÉCOUVERTE
-                const _SectionHeader('DÉCOUVERTE'),
-                _buildSecureMenuItem(
-                  context,
-                  icon: Icons.search_outlined,
-                  title: 'Trouver un tatoueur',
-                  subtitle: 'Rechercher par style, ville...',
-                  onTap: () => showDevelopmentMessage(context, 'Recherche tatoueurs'),
-                ),
-                _buildSecureMenuItem(
-                  context,
-                  icon: Icons.map_outlined,
-                  title: 'Conventions',
-                  subtitle: 'Événements tatouage près de moi',
-                  onTap: () => showDevelopmentMessage(context, 'Carte des conventions'),
-                ),
-                _buildSecureMenuItem(
-                  context,
-                  icon: Icons.photo_library_outlined,
-                  title: 'Galerie d\'inspiration',
-                  subtitle: 'Explorer les réalisations',
-                  onTap: () => showDevelopmentMessage(context, 'Galerie'),
-                ),
-
-                const _SectionDivider(),
-                
-                // SECTION OUTILS
-                const _SectionHeader('OUTILS'),
-                _buildSecureMenuItem(
-                  context,
-                  icon: Icons.calculate_outlined,
-                  title: 'Estimateur de prix',
-                  subtitle: 'Estimer le coût de mon projet',
-                  onTap: () => showDevelopmentMessage(context, 'Estimateur'),
-                ),
-                _buildSecureMenuItem(
-                  context,
-                  icon: Icons.info_outline,
-                  title: 'Guide du tatouage',
-                  subtitle: 'Conseils et informations',
-                  onTap: () => showDevelopmentMessage(context, 'Guide'),
-                ),
-                _buildSecureMenuItem(
-                  context,
-                  icon: Icons.palette_outlined,
-                  title: 'Générateur d\'idées IA',
-                  subtitle: 'Inspiration assistée par IA',
-                  onTap: () => _openAIAssistant(context),
-                ),
-
-                const _SectionDivider(),
-                
-                // SECTION SOCIAL & COMMUNAUTÉ
-                const _SectionHeader('COMMUNAUTÉ'),
-                _buildSecureMenuItem(
-                  context,
-                  icon: Icons.favorite_outline,
-                  title: 'Mes tatoueurs favoris',
-                  subtitle: 'Artistes que je suis',
-                  onTap: () => showDevelopmentMessage(context, 'Favoris'),
-                ),
-                _buildSecureMenuItem(
-                  context,
-                  icon: Icons.star_outline,
-                  title: 'Mes avis',
-                  subtitle: 'Évaluations que j\'ai données',
-                  onTap: () => showDevelopmentMessage(context, 'Mes avis'),
-                ),
-                _buildSecureMenuItem(
-                  context,
-                  icon: Icons.share_outlined,
-                  title: 'Partager mes tatouages',
-                  subtitle: 'Montrer mes réalisations',
-                  onTap: () => showDevelopmentMessage(context, 'Partage'),
-                ),
-
-                const _SectionDivider(),
-                
-                // SECTION PARAMÈTRES
-                const _SectionHeader('PARAMÈTRES'),
-                _buildSecureMenuItem(
-                  context,
-                  icon: Icons.person_outline,
-                  title: 'Mon profil',
-                  onTap: () => showDevelopmentMessage(context, 'Profil client'),
-                ),
-                _buildSecureMenuItem(
-                  context,
-                  icon: Icons.notifications_outlined,
-                  title: 'Notifications',
-                  onTap: () => showDevelopmentMessage(context, 'Notifications'),
-                ),
-                _buildSecureMenuItem(
-                  context,
-                  icon: Icons.privacy_tip_outlined,
-                  title: 'Confidentialité',
-                  subtitle: 'Gérer mes données personnelles',
-                  onTap: () => showDevelopmentMessage(context, 'Confidentialité'),
-                ),
-                _buildSecureMenuItem(
-                  context,
-                  icon: Icons.settings_outlined,
-                  title: 'Paramètres',
-                  onTap: () => showDevelopmentMessage(context, 'Paramètres'),
-                ),
-
-                const SizedBox(height: 24),
-              ],
-            ),
-          ),
-
-          // Actions rapides client
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: Color(0xFF1F2937), width: 1)),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      showDevelopmentMessage(context, 'Nouveau projet');
-                    },
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Projet', style: TextStyle(fontSize: 12)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
+                        _MenuItemData(
+                          icon: Icons.favorite,
+                          title: 'Mes Flashs Favoris',
+                          subtitle: 'Flashs que j\'aime',
+                          onTap: () => _navigateToPage(context, const MesFavorisFlashsPage()),
+                        ),
+                      ],
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _openAIAssistant(context);
-                    },
-                    icon: const Icon(Icons.smart_toy, size: 16),
-                    label: const Text('IA', style: TextStyle(fontSize: 12)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    
+                    const SizedBox(height: 15),
+                    
+                    // Section MES RÉSERVATIONS (Semaine 3)
+                    _buildMenuSection(
+                      'MES RÉSERVATIONS',
+                      [
+                        _MenuItemData(
+                          icon: Icons.calendar_today,
+                          title: 'Mes RDV Flash',
+                          subtitle: 'Réservations en cours et passées',
+                          onTap: () => _navigateToPage(context, const MesRdvFlashsPage()),
+                        ),
+                        _MenuItemData(
+                          icon: Icons.history,
+                          title: 'Historique Flashs',
+                          subtitle: 'Mes tatouages terminés',
+                          onTap: () => _navigateToPage(context, const HistoriqueFlashsPage()),
+                        ),
+                      ],
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      showDevelopmentMessage(context, 'Recherche tatoueurs');
-                    },
-                    icon: const Icon(Icons.search, size: 16),
-                    label: const Text('Chercher', style: TextStyle(fontSize: 12)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.purple,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    */
+                    
+                    const SizedBox(height: 15),
+                    
+                    // Section Aide & Support
+                    _buildMenuSection(
+                      'Aide & Support',
+                      [
+                        _MenuItemData(
+                          icon: Icons.smart_toy,
+                          title: 'Assistant Kipik',
+                          subtitle: 'Conseils personnalisés',
+                          onTap: () => _openAIAssistant(context),
+                        ),
+                        _MenuItemData(
+                          icon: Icons.menu_book,
+                          title: 'Guide du tatouage',
+                          subtitle: 'Tout savoir sur les tatouages',
+                          onTap: () => _navigateToPage(context, const GuideTatouagePage()),
+                        ),
+                        _MenuItemData(
+                          icon: Icons.support_agent,
+                          title: 'Support client',
+                          subtitle: 'Besoin d\'aide ?',
+                          onTap: () => _navigateToPage(context, const AideSupportPage()),
+                        ),
+                      ],
                     ),
-                  ),
+                    
+                    const SizedBox(height: 15),
+                    
+                    // Section Compte
+                    _buildMenuSection(
+                      'Mon compte',
+                      [
+                        _MenuItemData(
+                          icon: Icons.person,
+                          title: 'Profil',
+                          subtitle: 'Mes informations',
+                          onTap: () => _navigateToPage(context, const ProfilParticulierPage()),
+                        ),
+                        _MenuItemData(
+                          icon: Icons.settings,
+                          title: 'Paramètres',
+                          subtitle: 'Préférences',
+                          onTap: () => _navigateToPage(context, const ParametresPage()),
+                        ),
+                      ],
+                    ),
+                    
+                    const SizedBox(height: 25),
+                    
+                    // Bouton de déconnexion simplifié
+                    _buildLogoutButton(context),
+                  ],
                 ),
-              ],
-            ),
-          ),
-
-          // Déconnexion sécurisée
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: Color(0xFF1F2937), width: 1)),
-            ),
-            child: _buildSecureMenuItem(
-              context,
-              icon: Icons.logout_outlined,
-              title: 'Se déconnecter',
-              iconColor: KipikTheme.rouge,
-              textColor: KipikTheme.rouge,
-              onTap: () => secureSignOut(context),
+              ),
             ),
           ),
         ],
@@ -421,76 +190,446 @@ class CustomDrawerParticulier extends StatelessWidget with SecureDrawerMixin {
     );
   }
 
-  Widget _buildSecureMenuItem(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    String? subtitle,
-    required VoidCallback onTap,
-    Color? iconColor,
-    Color? textColor,
-  }) {
-    return ListTile(
-      leading: Icon(icon, color: iconColor ?? Colors.white),
-      title: Text(
-        title,
-        style: TextStyle(
-          color: textColor ?? Colors.white,
-          fontSize: 15,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      subtitle: subtitle != null 
-          ? Text(
-              subtitle,
-              style: TextStyle(
-                color: (textColor ?? Colors.white).withOpacity(0.7),
-                fontSize: 12,
-              ),
-            )
-          : null,
-      onTap: () {
+  // ✅ MÉTHODE NAVIGATION SÉCURISÉE CONSERVÉE
+  void _navigateToPage(BuildContext context, Widget page) {
+    try {
+      Navigator.pop(context); // Fermer le drawer d'abord
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => page),
+      );
+    } catch (e) {
+      print('❌ Erreur navigation: $e');
+      // En cas d'erreur, fermer quand même le drawer
+      if (Navigator.canPop(context)) {
         Navigator.pop(context);
-        onTap();
+      }
+    }
+  }
+
+  Widget _buildHeader(dynamic currentUser) {
+    // ✅ Images avec fallback sécurisé
+    final headerImages = [
+      'assets/images/header_tattoo_wallpaper.png',
+      'assets/images/header_tattoo_wallpaper2.png',
+      'assets/images/header_tattoo_wallpaper3.png',
+    ];
+    
+    final randomImage = headerImages[Random().nextInt(headerImages.length)];
+
+    // ✅ ACCÈS SÉCURISÉ aux données utilisateur
+    String displayName = 'Utilisateur';
+    String email = '';
+    String? profileImageUrl;
+
+    try {
+      if (currentUser != null) {
+        Map<String, dynamic> userData;
+        
+        if (currentUser is Map<String, dynamic>) {
+          userData = currentUser;
+        } else {
+          userData = {
+            'displayName': currentUser.displayName,
+            'email': currentUser.email,
+            'photoURL': currentUser.photoURL,
+            'uid': currentUser.uid,
+          };
+        }
+        
+        displayName = userData['displayName']?.toString() ?? 
+                     userData['name']?.toString() ?? 
+                     userData['prenom']?.toString() ?? 
+                     userData['userName']?.toString() ?? 
+                     userData['firstName']?.toString() ?? 
+                     'Utilisateur';
+                     
+        email = userData['email']?.toString() ?? '';
+        
+        profileImageUrl = userData['profileImageUrl']?.toString() ?? 
+                         userData['photoURL']?.toString() ?? 
+                         userData['avatar']?.toString();
+      }
+    } catch (e) {
+      print('❌ Erreur accès données utilisateur: $e');
+      displayName = 'Utilisateur';
+      email = '';
+      profileImageUrl = null;
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screenHeight = MediaQuery.of(context).size.height;
+        final headerHeight = screenHeight * 0.25;
+        final topPadding = MediaQuery.of(context).padding.top;
+        
+        return Container(
+          height: headerHeight,
+          decoration: BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage(randomImage),
+              fit: BoxFit.cover,
+              colorFilter: ColorFilter.mode(
+                Colors.black.withOpacity(0.6),
+                BlendMode.multiply,
+              ),
+              onError: (exception, stackTrace) {
+                // Fallback si l'image ne charge pas
+                print('❌ Erreur chargement image header: $exception');
+              },
+            ),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                KipikTheme.rouge.withOpacity(0.8),
+                KipikTheme.rouge.withOpacity(0.6),
+                Colors.black.withOpacity(0.8),
+              ],
+            ),
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.transparent,
+                  Colors.black.withOpacity(0.2),
+                  Colors.black.withOpacity(0.5),
+                  Colors.black.withOpacity(0.8),
+                ],
+                stops: const [0.0, 0.3, 0.7, 1.0],
+              ),
+            ),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(24, topPadding + 15, 24, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Spacer(),
+                  
+                  // Avatar et infos utilisateur
+                  Row(
+                    children: [
+                      // Avatar avec contour
+                      Container(
+                        width: 85,
+                        height: 85,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: KipikTheme.rouge,
+                            width: 3,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: (profileImageUrl != null && profileImageUrl.isNotEmpty)
+                              ? Image.network(
+                                  profileImageUrl,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return _buildFallbackAvatar();
+                                  },
+                                )
+                              : _buildFallbackAvatar(),
+                        ),
+                      ),
+                      
+                      const SizedBox(width: 20),
+                      
+                      // Infos utilisateur
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              displayName,
+                              style: TextStyle(
+                                color: Colors.grey[300],
+                                fontSize: screenHeight < 700 ? 22 : 26,
+                                fontWeight: FontWeight.w800,
+                                fontFamily: 'Roboto',
+                                letterSpacing: 0.5,
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.black.withOpacity(0.8),
+                                    blurRadius: 4,
+                                    offset: const Offset(2, 2),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            
+                            if (email.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                email,
+                                style: TextStyle(
+                                  color: Colors.grey[400],
+                                  fontSize: screenHeight < 700 ? 14 : 16,
+                                  fontFamily: 'Roboto',
+                                  fontWeight: FontWeight.w500,
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black.withOpacity(0.7),
+                                      blurRadius: 3,
+                                      offset: const Offset(1, 1),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+          ),
+        );
       },
     );
   }
 
-  void _openAIAssistant(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      barrierColor: Colors.black54,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const AIChatBottomSheet(
-        allowImageGeneration: true, // Clients peuvent générer des images pour inspiration
-        contextPage: 'client',
+  Widget _buildFallbackAvatar() {
+    return Image.asset(
+      'assets/avatars/avatar_client.png',
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.grey[200],
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            Icons.person,
+            color: Colors.grey[600],
+            size: 40,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMenuSection(String title, List<_MenuItemData> items) {
+    final headerImages = [
+      'assets/images/header_tattoo_wallpaper.png',
+      'assets/images/header_tattoo_wallpaper2.png',
+      'assets/images/header_tattoo_wallpaper3.png',
+    ];
+    
+    final randomImage = headerImages[Random().nextInt(headerImages.length)];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Titre de section avec fond sécurisé
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            image: DecorationImage(
+              image: AssetImage(randomImage),
+              fit: BoxFit.cover,
+              colorFilter: const ColorFilter.mode(
+                Colors.white70,
+                BlendMode.lighten,
+              ),
+              onError: (exception, stackTrace) {
+                print('❌ Erreur image section: $exception');
+              },
+            ),
+            gradient: LinearGradient(
+              colors: [
+                KipikTheme.rouge.withOpacity(0.1),
+                KipikTheme.rouge.withOpacity(0.3),
+              ],
+            ),
+            border: Border.all(
+              color: KipikTheme.rouge.withOpacity(0.8),
+              width: 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Text(
+            title,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: KipikTheme.rouge,
+              fontFamily: 'PermanentMarker',
+              letterSpacing: 1.2,
+              shadows: [
+                Shadow(
+                  color: Colors.white.withOpacity(0.8),
+                  blurRadius: 2,
+                  offset: const Offset(1, 1),
+                ),
+              ],
+            ),
+          ),
+        ),
+        
+        const SizedBox(height: 8),
+        
+        // Items du menu
+        ...items.map((item) => _buildMenuItem(item)),
+      ],
+    );
+  }
+
+  Widget _buildMenuItem(_MenuItemData item) {
+    return Builder(
+      builder: (context) => Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+        child: ListTile(
+          leading: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: KipikTheme.rouge.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              item.icon,
+              color: KipikTheme.rouge,
+              size: 22,
+            ),
+          ),
+          title: Text(
+            item.title,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 15,
+              color: Colors.black87,
+              fontFamily: 'Roboto',
+            ),
+          ),
+          subtitle: item.subtitle != null
+              ? Text(
+                  item.subtitle!,
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 12,
+                    fontFamily: 'Roboto',
+                  ),
+                )
+              : null,
+          trailing: Icon(
+            Icons.arrow_forward_ios,
+            size: 16,
+            color: Colors.grey[400],
+          ),
+          onTap: item.onTap,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+        ),
       ),
+    );
+  }
+
+  Widget _buildLogoutButton(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: () => _handleLogout(context),
+        icon: const Icon(Icons.logout, color: Colors.white),
+        label: const Text(
+          'Se déconnecter',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+            fontFamily: 'Roboto',
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: KipikTheme.rouge,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 15),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          elevation: 2,
+        ),
+      ),
+    );
+  }
+
+  void _openAIAssistant(BuildContext context) {
+    Navigator.pop(context);
+    ChatHelper.openAIAssistant(
+      context,
+      allowImageGeneration: false,
+      contextPage: 'client',
+    );
+  }
+
+  void _handleLogout(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Déconnexion'),
+          content: const Text('Êtes-vous sûr de vouloir vous déconnecter ?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Annuler'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await SecureAuthService.instance.signOut();
+                if (context.mounted) {
+                  Navigator.of(context).pushReplacementNamed('/login');
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: KipikTheme.rouge),
+              child: const Text('Déconnecter', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
     );
   }
 }
 
-class _SectionHeader extends StatelessWidget {
+class _MenuItemData {
+  final IconData icon;
   final String title;
-  const _SectionHeader(this.title);
+  final String? subtitle;
+  final String? route;
+  final VoidCallback? onTap;
 
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-        child: Text(
-          title.toUpperCase(),
-          style: TextStyle(
-            color: Colors.blue.withOpacity(0.8),
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      );
-}
-
-class _SectionDivider extends StatelessWidget {
-  const _SectionDivider();
-
-  @override
-  Widget build(BuildContext context) => const Divider(color: Color(0xFF1F2937), thickness: 1);
+  _MenuItemData({
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.route,
+    this.onTap,
+  });
 }

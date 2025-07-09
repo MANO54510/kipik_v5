@@ -60,8 +60,9 @@ dependencies:
 
   # Utilitaires
   get_it: ^7.6.0
-  flutter_dotenv: ^5.0.2
+  flutter_dotenv: ^5.2.1
   uuid: ^4.5.1
+  json_annotation: ^4.9.0
 
   # Fichiers & partage
   screenshot: ^3.0.0
@@ -79,6 +80,7 @@ dev_dependencies:
   mockito: ^5.0.0
   build_runner: ^2.0.0
   flutter_launcher_icons: ^0.10.0
+  json_serializable: ^6.7.1
 
 flutter_icons:
   android: true
@@ -131,9 +133,9 @@ flutter:
     - assets/placeholder_image.jpg
     - assets/reference_tatouage.jpg
     - assets/avatars/avatar_assistant_kipik.png
-    - assets/avatars/avatar_neutre.png
-    - assets/avatars/avatar_user_neutre.png
-    - assets/avatars/avatar_user_generic.png
+    - assets/avatars/avatar_client.png
+    - assets/avatars/avatar_tatoueur.png
+    - assets/avatars/avatar_orga.png
     - assets/avatar_zones.png
     - assets/avatars/avatar_profil_pro.jpg
     - assets/flags/

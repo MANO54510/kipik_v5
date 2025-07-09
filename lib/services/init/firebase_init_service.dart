@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:kipik_v5/services/auth/secure_auth_service.dart';
 import 'package:kipik_v5/models/user_role.dart';
+import 'package:kipik_v5/services/firebase_collections_service.dart'; // ← AJOUTER CETTE LIGNE
 
 class FirebaseInitService {
   static FirebaseInitService? _instance;
@@ -34,12 +35,27 @@ class FirebaseInitService {
       await _createDemoData();
       await _initializeAdminStats();
       await _createInitialPromoCodes();
+      
+      // ✨ NOUVELLE LIGNE : Créer les collections business manquantes
+      await _createBusinessCollections();
 
       _isInitialized = true;
       print('🎉 Firebase KIPIK initialisé avec succès !');
     } catch (e) {
       print('❌ Erreur initialisation Firebase: $e');
       rethrow;
+    }
+  }
+
+  // ✨ NOUVELLE MÉTHODE : Créer les collections business
+  Future<void> _createBusinessCollections() async {
+    print('🏗️ Création des collections business KIPIK...');
+    try {
+      await FirebaseCollectionsService().createMissingCollections();
+      print('  ✅ Collections business créées avec succès');
+    } catch (e) {
+      print('  ❌ Erreur création collections business: $e');
+      // Ne pas faire échouer l'initialisation complète pour ça
     }
   }
 
@@ -549,7 +565,13 @@ class FirebaseInitService {
       status['trial_plan_exists']   = (await _firestore.collection('subscription_plans').doc('free_trial').get()).exists;
       status['monthly_plan_exists'] = (await _firestore.collection('subscription_plans').doc('monthly_pro').get()).exists;
       status['yearly_plan_exists']  = (await _firestore.collection('subscription_plans').doc('yearly_pro').get()).exists;
-      status['fully_initialized']   = status.values.every((v) => v == true);
+      
+      // ✨ NOUVEAU : Vérifier les collections business
+      final businessCollections = await FirebaseCollectionsService().getCollectionsStatus();
+      status['business_collections'] = businessCollections;
+      status['business_collections_complete'] = businessCollections.values.every((exists) => exists);
+      
+      status['fully_initialized']   = status.values.where((v) => v is bool).every((v) => v == true);
       status['checked_at']          = DateTime.now().toIso8601String();
       status['strategy']            = 'free_trial_for_all';
       return status;

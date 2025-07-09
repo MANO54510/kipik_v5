@@ -1,9 +1,13 @@
+// lib/pages/shared/inspirations/detail_inspiration_page.dart
+
 import 'package:flutter/material.dart';
-import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_particulier.dart';
-import '../../widgets/common/app_bars/custom_app_bar_particulier.dart'; // Correction de l'import
-import '../../models/inspiration_post.dart';
-import '../../services/inspiration/inspiration_service.dart';
-import '../../models/comment.dart';
+import '../../../widgets/common/app_bars/custom_app_bar_particulier.dart';
+import '../../../models/inspiration_post.dart';
+import '../../../services/inspiration/firebase_inspiration_service.dart';
+import '../../../services/auth/secure_auth_service.dart';
+import '../../../models/user_role.dart';
+import '../../../models/comment.dart';
+import '../../../theme/kipik_theme.dart';
 
 class DetailInspirationPage extends StatefulWidget {
   final InspirationPost post;
@@ -22,12 +26,16 @@ class _DetailInspirationPageState extends State<DetailInspirationPage> {
   List<Comment> _comments = [];
   bool _isLoadingComments = false;
   final TextEditingController _commentController = TextEditingController();
-  final InspirationService _inspirationService = InspirationService();
+  final FirebaseInspirationService _inspirationService = FirebaseInspirationService.instance;
+  
+  // ✅ NOUVEAU : Détection du rôle utilisateur
+  UserRole? _currentUserRole;
   
   @override
   void initState() {
     super.initState();
     _post = widget.post;
+    _initializeUserRole();
     _loadComments();
   }
   
@@ -36,6 +44,12 @@ class _DetailInspirationPageState extends State<DetailInspirationPage> {
     _commentController.dispose();
     super.dispose();
   }
+
+  /// ✅ NOUVEAU : Initialiser le rôle utilisateur
+  void _initializeUserRole() {
+    final currentUser = SecureAuthService.instance.currentUser;
+    _currentUserRole = currentUser?.role;
+  }
   
   Future<void> _loadComments() async {
     setState(() {
@@ -43,27 +57,77 @@ class _DetailInspirationPageState extends State<DetailInspirationPage> {
     });
     
     try {
-      final comments = await _inspirationService.getComments(_post.id);
+      // ✅ NOUVEAU : Utiliser FirebaseInspirationService pour les commentaires
+      // Pour l'instant, on utilise des commentaires de démo
+      // TODO: Implémenter getComments dans FirebaseInspirationService
+      await Future.delayed(const Duration(milliseconds: 500)); // Simuler le chargement
+      
       setState(() {
-        _comments = comments;
+        _comments = _generateDemoComments();
         _isLoadingComments = false;
       });
     } catch (e) {
       setState(() {
         _isLoadingComments = false;
       });
-      // Gérer l'erreur
+      _showErrorSnackBar('Erreur lors du chargement des commentaires');
     }
+  }
+
+  /// ✅ TEMPORAIRE : Générer des commentaires de démo
+  List<Comment> _generateDemoComments() {
+    return [
+      Comment(
+        id: 'demo_comment_1',
+        postId: _post.id,
+        authorId: 'demo_user_1',
+        authorName: 'Alex Martin',
+        authorAvatar: 'https://picsum.photos/seed/user1/100/100',
+        text: 'Magnifique travail ! Le style est vraiment unique.',
+        createdAt: DateTime.now().subtract(const Duration(hours: 2)),
+        updatedAt: DateTime.now().subtract(const Duration(hours: 2)),
+      ),
+      Comment(
+        id: 'demo_comment_2',
+        postId: _post.id,
+        authorId: 'demo_user_2',
+        authorName: 'Sophie Dubois',
+        authorAvatar: 'https://picsum.photos/seed/user2/100/100',
+        text: 'J\'adore les détails, très inspirant pour mon prochain tatouage !',
+        createdAt: DateTime.now().subtract(const Duration(minutes: 30)),
+        updatedAt: DateTime.now().subtract(const Duration(minutes: 30)),
+      ),
+    ];
   }
   
   Future<void> _toggleFavorite() async {
     try {
-      final updatedPost = await _inspirationService.toggleFavorite(_post.id);
+      final currentUser = SecureAuthService.instance.currentUser;
+      if (currentUser == null) {
+        _showErrorSnackBar('Vous devez être connecté pour ajouter aux favoris');
+        return;
+      }
+
+      final newFavoriteStatus = await _inspirationService.toggleFavorite(
+        inspirationId: _post.id,
+        userId: currentUser.uid,
+      );
+      
       setState(() {
-        _post = updatedPost;
+        _post = _post.copyWith(isFavorite: newFavoriteStatus);
       });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(newFavoriteStatus 
+            ? 'Ajouté aux favoris' 
+            : 'Retiré des favoris'),
+          duration: const Duration(seconds: 2),
+          backgroundColor: Colors.black87,
+        ),
+      );
     } catch (e) {
-      // Gérer l'erreur
+      _showErrorSnackBar('Erreur lors de la mise à jour des favoris');
     }
   }
   
@@ -71,18 +135,123 @@ class _DetailInspirationPageState extends State<DetailInspirationPage> {
     if (_commentController.text.trim().isEmpty) return;
     
     try {
-      final newComment = await _inspirationService.addComment(
-        _post.id, 
-        _commentController.text.trim()
+      // ✅ NOUVEAU : Ajouter commentaire avec FirebaseInspirationService
+      // Pour l'instant, on simule l'ajout
+      // TODO: Implémenter addComment dans FirebaseInspirationService
+      
+      final currentUser = SecureAuthService.instance.currentUser;
+      if (currentUser == null) {
+        _showErrorSnackBar('Vous devez être connecté pour commenter');
+        return;
+      }
+
+      final newComment = Comment(
+        id: 'demo_comment_${DateTime.now().millisecondsSinceEpoch}',
+        postId: _post.id,
+        authorId: currentUser.uid,
+        authorName: currentUser.name ?? 'Utilisateur',
+        authorAvatar: 'https://picsum.photos/seed/${currentUser.uid}/100/100',
+        text: _commentController.text.trim(),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
       );
       
       setState(() {
         _comments.add(newComment);
         _commentController.clear();
       });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Commentaire ajouté !'),
+          duration: Duration(seconds: 2),
+          backgroundColor: Colors.green,
+        ),
+      );
     } catch (e) {
-      // Gérer l'erreur
+      _showErrorSnackBar('Erreur lors de l\'ajout du commentaire');
     }
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  /// ✅ NOUVEAU : Actions spécifiques selon le rôle
+  void _handleRoleSpecificAction() {
+    if (_currentUserRole == UserRole.tatoueur) {
+      // Action pour tatoueur : Contacter pour collaboration, voir profil, etc.
+      _showContactDialog();
+    } else {
+      // Action pour particulier : Réserver si c'est un flash, voir portfolio, etc.
+      _showBookingDialog();
+    }
+  }
+
+  void _showContactDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Contacter l\'artiste'),
+        content: const Text('Voulez-vous contacter cet artiste pour une collaboration ou des informations ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              // TODO: Implémenter contact entre tatoueurs
+              _showInfoSnackBar('Contact artiste - Bientôt disponible');
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: KipikTheme.rouge),
+            child: const Text('Contacter', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showBookingDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Réserver ce tatouage'),
+        content: const Text('Cette œuvre vous inspire ? Contactez l\'artiste pour réaliser un tatouage similaire.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              // TODO: Implémenter système de réservation
+              _showInfoSnackBar('Réservation - Bientôt disponible');
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: KipikTheme.rouge),
+            child: const Text('Réserver', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showInfoSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: KipikTheme.rouge,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
   
   @override
@@ -153,14 +322,14 @@ class _DetailInspirationPageState extends State<DetailInspirationPage> {
                                               Icon(
                                                 Icons.verified,
                                                 size: 14,
-                                                color: Theme.of(context).colorScheme.primary,
+                                                color: KipikTheme.rouge,
                                               ),
                                               const SizedBox(width: 4),
                                               Text(
                                                 'Professionnel',
                                                 style: TextStyle(
                                                   fontSize: 12,
-                                                  color: Theme.of(context).colorScheme.primary,
+                                                  color: KipikTheme.rouge,
                                                 ),
                                               ),
                                             ],
@@ -172,12 +341,13 @@ class _DetailInspirationPageState extends State<DetailInspirationPage> {
                                     onPressed: _toggleFavorite,
                                     icon: Icon(
                                       _post.isFavorite ? Icons.favorite : Icons.favorite_border,
-                                      color: _post.isFavorite ? Colors.red : Colors.grey,
+                                      color: _post.isFavorite ? KipikTheme.rouge : Colors.grey,
                                     ),
                                   ),
                                   IconButton(
                                     onPressed: () {
-                                      // Partager le post
+                                      // TODO: Implémenter partage
+                                      _showInfoSnackBar('Partage - Bientôt disponible');
                                     },
                                     icon: const Icon(Icons.share, color: Colors.grey),
                                   ),
@@ -190,26 +360,25 @@ class _DetailInspirationPageState extends State<DetailInspirationPage> {
                               if (_post.description.isNotEmpty)
                                 Text(
                                   _post.description,
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                  ),
+                                  style: const TextStyle(fontSize: 15),
                                 ),
                               
                               const SizedBox(height: 8),
                               
                               // Hashtags
-                              Wrap(
-                                spacing: 8,
-                                children: _post.tags.map((tag) {
-                                  return Text(
-                                    '#$tag',
-                                    style: TextStyle(
-                                      color: Theme.of(context).colorScheme.primary,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  );
-                                }).toList(),
-                              ),
+                              if (_post.tags.isNotEmpty)
+                                Wrap(
+                                  spacing: 8,
+                                  children: _post.tags.map((tag) {
+                                    return Text(
+                                      '#$tag',
+                                      style: TextStyle(
+                                        color: KipikTheme.rouge,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
                               
                               const SizedBox(height: 16),
                               
@@ -259,6 +428,31 @@ class _DetailInspirationPageState extends State<DetailInspirationPage> {
                                     ],
                                   ),
                                 ),
+
+                              // ✅ NOUVEAU : Bouton d'action selon le rôle
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  onPressed: _handleRoleSpecificAction,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: KipikTheme.rouge,
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    _currentUserRole == UserRole.tatoueur 
+                                      ? 'Contacter l\'artiste' 
+                                      : 'Réserver ce style',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -288,7 +482,9 @@ class _DetailInspirationPageState extends State<DetailInspirationPage> {
                               
                               if (_isLoadingComments)
                                 const Center(
-                                  child: CircularProgressIndicator(),
+                                  child: CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(KipikTheme.rouge),
+                                  ),
                                 )
                               else if (_comments.isEmpty)
                                 const Center(
@@ -385,7 +581,7 @@ class _DetailInspirationPageState extends State<DetailInspirationPage> {
                         onPressed: _addComment,
                         icon: Icon(
                           Icons.send,
-                          color: Theme.of(context).colorScheme.primary,
+                          color: KipikTheme.rouge,
                         ),
                       ),
                     ],
