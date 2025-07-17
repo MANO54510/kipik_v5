@@ -716,7 +716,7 @@ class RecommendationEngine {
   }
 }
 
-/// ✅ MODÈLES DE DONNÉES
+/// ✅ MODÈLES DE DONNÉES SPÉCIFIQUES AU RECOMMENDATION ENGINE
 
 class ScoredFlash {
   final Flash flash;
@@ -758,118 +758,6 @@ class UserInteraction {
     flashId: map['flashId'],
     value: map['value']?.toDouble(),
     metadata: map['metadata'],
-  );
-}
-
-class UserAction {
-  final UserActionType type;
-  final String? flashId;
-  final double? value;
-  final Map<String, dynamic>? metadata;
-  
-  UserAction({
-    required this.type,
-    this.flashId,
-    this.value,
-    this.metadata,
-  });
-  
-  Map<String, dynamic> toMap() => {
-    'type': type.name,
-    'flashId': flashId,
-    'value': value,
-    'metadata': metadata,
-  };
-  
-  static UserAction fromMap(Map<String, dynamic> map) => UserAction(
-    type: UserActionType.values.byName(map['type']),
-    flashId: map['flashId'],
-    value: map['value']?.toDouble(),
-    metadata: map['metadata'],
-  );
-}
-
-enum UserActionType {
-  view,
-  like,
-  save,
-  share,
-  book,
-  skip,
-  report,
-}
-
-class UserProfile {
-  final String userId;
-  final List<String> preferredStyles;
-  final double? priceRangeMin;
-  final double? priceRangeMax;
-  final String? preferredLocation;
-  final List<String> preferredTimeSlots;
-  final List<String> favoriteArtists;
-  final DateTime lastAnalyzed;
-  final DateTime? lastInteraction;
-  final int interactionCount;
-  
-  UserProfile({
-    required this.userId,
-    required this.preferredStyles,
-    this.priceRangeMin,
-    this.priceRangeMax,
-    this.preferredLocation,
-    required this.preferredTimeSlots,
-    required this.favoriteArtists,
-    required this.lastAnalyzed,
-    this.lastInteraction,
-    required this.interactionCount,
-  });
-  
-  Map<String, dynamic> toMap() => {
-    'preferredStyles': preferredStyles,
-    'priceRangeMin': priceRangeMin,
-    'priceRangeMax': priceRangeMax,
-    'preferredLocation': preferredLocation,
-    'preferredTimeSlots': preferredTimeSlots,
-    'favoriteArtists': favoriteArtists,
-    'lastAnalyzed': Timestamp.fromDate(lastAnalyzed),
-    'lastInteraction': lastInteraction != null ? Timestamp.fromDate(lastInteraction!) : null,
-    'interactionCount': interactionCount,
-  };
-  
-  static UserProfile fromMap(Map<String, dynamic> map, String userId) => UserProfile(
-    userId: userId,
-    preferredStyles: List<String>.from(map['preferredStyles'] ?? []),
-    priceRangeMin: map['priceRangeMin']?.toDouble(),
-    priceRangeMax: map['priceRangeMax']?.toDouble(),
-    preferredLocation: map['preferredLocation'],
-    preferredTimeSlots: List<String>.from(map['preferredTimeSlots'] ?? []),
-    favoriteArtists: List<String>.from(map['favoriteArtists'] ?? []),
-    lastAnalyzed: (map['lastAnalyzed'] as Timestamp).toDate(),
-    lastInteraction: map['lastInteraction'] != null ? (map['lastInteraction'] as Timestamp).toDate() : null,
-    interactionCount: map['interactionCount'] ?? 0,
-  );
-  
-  UserProfile copyWith({
-    List<String>? preferredStyles,
-    double? priceRangeMin,
-    double? priceRangeMax,
-    String? preferredLocation,
-    List<String>? preferredTimeSlots,
-    List<String>? favoriteArtists,
-    DateTime? lastAnalyzed,
-    DateTime? lastInteraction,
-    int? interactionCount,
-  }) => UserProfile(
-    userId: userId,
-    preferredStyles: preferredStyles ?? this.preferredStyles,
-    priceRangeMin: priceRangeMin ?? this.priceRangeMin,
-    priceRangeMax: priceRangeMax ?? this.priceRangeMax,
-    preferredLocation: preferredLocation ?? this.preferredLocation,
-    preferredTimeSlots: preferredTimeSlots ?? this.preferredTimeSlots,
-    favoriteArtists: favoriteArtists ?? this.favoriteArtists,
-    lastAnalyzed: lastAnalyzed ?? this.lastAnalyzed,
-    lastInteraction: lastInteraction ?? this.lastInteraction,
-    interactionCount: interactionCount ?? this.interactionCount,
   );
 }
 

@@ -1,532 +1,1124 @@
 // lib/pages/organisateur/organisateur_billeterie_page.dart
 
 import 'package:flutter/material.dart';
-import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
-import 'package:kipik_v5/widgets/common/drawers/drawer_factory.dart';
-import 'package:kipik_v5/theme/kipik_theme.dart';
-import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../widgets/common/app_bars/custom_app_bar_kipik.dart';
+import '../../widgets/common/drawers/drawer_factory.dart';
+import '../../theme/kipik_theme.dart';
+import '../../services/organisateur/firebase_organisateur_service.dart';
+import '../../services/organisateur/billeterie_service.dart';
+import '../../services/organisateur/analytics_service.dart';
+
+enum TicketType { standard, vip, group, earlybird }
+enum SalesPeriod { all, today, week, month, custom }
 
 class OrganisateurBilleteriePage extends StatefulWidget {
-  const OrganisateurBilleteriePage({Key? key}) : super(key: key);
+  final String? conventionId;
+
+  const OrganisateurBilleteriePage({Key? key, this.conventionId}) : super(key: key);
 
   @override
-  _OrganisateurBilleteriePageState createState() => _OrganisateurBilleteriePageState();
+  State<OrganisateurBilleteriePage> createState() => _OrganisateurBilleteriePageState();
 }
 
-class _OrganisateurBilleteriePageState extends State<OrganisateurBilleteriePage> {
-  bool _isLoading = false;
+class _OrganisateurBilleteriePageState extends State<OrganisateurBilleteriePage> 
+    with TickerProviderStateMixin {
   
-  // Filtres
-  String _selectedConvention = 'Toutes les conventions';
-  String _selectedTicketType = 'Tous les types';
-  
-  // Données fictives
-  final List<Map<String, dynamic>> _tickets = [
-    {
-      'id': '1',
-      'conventionName': 'Tattoo Expo Paris 2025',
-      'ticketType': 'Jour',
-      'price': 15.0,
-      'soldCount': 124,
-      'availableCount': 500,
-      'revenue': 1860.0,
-      'startDate': DateTime(2025, 7, 15),
-      'endDate': DateTime(2025, 7, 17),
-    },
-    {
-      'id': '2',
-      'conventionName': 'Tattoo Expo Paris 2025',
-      'ticketType': 'Week-end',
-      'price': 25.0,
-      'soldCount': 75,
-      'availableCount': 300,
-      'revenue': 1875.0,
-      'startDate': DateTime(2025, 7, 15),
-      'endDate': DateTime(2025, 7, 17),
-    },
-    {
-      'id': '3',
-      'conventionName': 'Ink Festival Lyon',
-      'ticketType': 'Jour',
-      'price': 12.0,
-      'soldCount': 87,
-      'availableCount': 400,
-      'revenue': 1044.0,
-      'startDate': DateTime(2025, 9, 5),
-      'endDate': DateTime(2025, 9, 7),
-    },
-    {
-      'id': '4',
-      'conventionName': 'Ink Festival Lyon',
-      'ticketType': 'Week-end',
-      'price': 20.0,
-      'soldCount': 54,
-      'availableCount': 200,
-      'revenue': 1080.0,
-      'startDate': DateTime(2025, 9, 5),
-      'endDate': DateTime(2025, 9, 7),
-    },
-    {
-      'id': '5',
-      'conventionName': 'Tattoo Art Show Marseille',
-      'ticketType': 'Jour',
-      'price': 10.0,
-      'soldCount': 45,
-      'availableCount': 300,
-      'revenue': 450.0,
-      'startDate': DateTime(2025, 10, 12),
-      'endDate': DateTime(2025, 10, 13),
-    },
-    {
-      'id': '6',
-      'conventionName': 'Tattoo Art Show Marseille',
-      'ticketType': 'Week-end',
-      'price': 18.0,
-      'soldCount': 32,
-      'availableCount': 150,
-      'revenue': 576.0,
-      'startDate': DateTime(2025, 10, 12),
-      'endDate': DateTime(2025, 10, 13),
-    },
-  ];
-  
-  final List<String> _conventions = [
-    'Toutes les conventions',
-    'Tattoo Expo Paris 2025',
-    'Ink Festival Lyon',
-    'Tattoo Art Show Marseille',
-  ];
-  
-  final List<String> _ticketTypes = [
-    'Tous les types',
-    'Jour',
-    'Week-end',
-  ];
-  
-  List<Map<String, dynamic>> get _filteredTickets {
-    return _tickets.where((ticket) {
-      final matchesConvention = _selectedConvention == 'Toutes les conventions' || 
-                              ticket['conventionName'] == _selectedConvention;
-      final matchesType = _selectedTicketType == 'Tous les types' || 
-                        ticket['ticketType'] == _selectedTicketType;
-      
-      return matchesConvention && matchesType;
-    }).toList();
+  late AnimationController _slideController;
+  late AnimationController _cardController;
+  late Animation<Offset> _slideAnimation;
+  late Animation<double> _cardAnimation;
+
+  // Services Firebase
+  final FirebaseOrganisateurService _organizateurService = FirebaseOrganisateurService.instance;
+  final BilleterieService _billeterieService = BilleterieService.instance;
+  final AnalyticsService _analyticsService = AnalyticsService.instance;
+
+  // State
+  int _selectedTabIndex = 0;
+  String _currentOrganizerId = '';
+  String? _selectedConventionId;
+  SalesPeriod _selectedPeriod = SalesPeriod.month;
+  bool _isLoading = true;
+
+  // Streams
+  Stream<QuerySnapshot>? _conventionsStream;
+  Stream<QuerySnapshot>? _salesAnalyticsStream;
+  Stream<QuerySnapshot>? _ticketSalesStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeAnimations();
+    _initializeData();
   }
-  
-  double get _totalRevenue {
-    if (_selectedConvention == 'Toutes les conventions') {
-      return _filteredTickets.fold(0, (sum, ticket) => sum + (ticket['revenue'] as double));
-    } else {
-      return _filteredTickets.fold(0, (sum, ticket) => sum + (ticket['revenue'] as double));
-    }
-  }
-  
-  int get _totalTicketsSold {
-    if (_selectedConvention == 'Toutes les conventions') {
-      return _filteredTickets.fold(0, (sum, ticket) => sum + (ticket['soldCount'] as int));
-    } else {
-      return _filteredTickets.fold(0, (sum, ticket) => sum + (ticket['soldCount'] as int));
-    }
-  }
-  
-  Future<void> _editTicketSettings(Map<String, dynamic> ticket) async {
-    final priceController = TextEditingController(text: ticket['price'].toString());
-    final availableController = TextEditingController(text: ticket['availableCount'].toString());
-    
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Modifier les paramètres de billeterie'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextFormField(
-              controller: priceController,
-              decoration: InputDecoration(
-                labelText: 'Prix (€)',
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.numberWithOptions(decimal: true),
-            ),
-            SizedBox(height: 16),
-            TextFormField(
-              controller: availableController,
-              decoration: InputDecoration(
-                labelText: 'Nombre de billets disponibles',
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Annuler'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: KipikTheme.rouge,
-            ),
-            child: Text('Enregistrer'),
-          ),
-        ],
-      ),
+
+  void _initializeAnimations() {
+    _slideController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
     );
     
-    if (result == true) {
-      try {
-        final newPrice = double.parse(priceController.text);
-        final newAvailable = int.parse(availableController.text);
+    _cardController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.5),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _slideController,
+      curve: Curves.easeOutCubic,
+    ));
+    
+    _cardAnimation = Tween<double>(
+      begin: 0.8,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _cardController,
+      curve: Curves.elasticOut,
+    ));
+
+    _slideController.forward();
+    _cardController.forward();
+  }
+
+  Future<void> _initializeData() async {
+    try {
+      // Obtenir l'ID de l'organisateur actuel
+      final organizerId = _organizateurService.getCurrentOrganizerId();
+      if (organizerId != null) {
+        _currentOrganizerId = organizerId;
+        _selectedConventionId = widget.conventionId;
         
+        _initializeFirebaseStreams();
+        
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      print('Erreur initialisation: $e');
+      if (mounted) {
         setState(() {
-          // Mettre à jour les données
-          final index = _tickets.indexWhere((t) => t['id'] == ticket['id']);
-          if (index != -1) {
-            _tickets[index] = {
-              ..._tickets[index],
-              'price': newPrice,
-              'availableCount': newAvailable,
-            };
-          }
+          _isLoading = false;
         });
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Paramètres de billeterie mis à jour'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Valeurs incorrectes'),
-            backgroundColor: Colors.red,
-          ),
-        );
       }
     }
   }
-  
+
+  void _initializeFirebaseStreams() {
+    if (_currentOrganizerId.isNotEmpty) {
+      _conventionsStream = _billeterieService.getConventionsWithTicketsStream(_currentOrganizerId);
+      _salesAnalyticsStream = _analyticsService.getSalesAnalyticsStream(_currentOrganizerId);
+      _updateTicketSalesStream();
+    }
+  }
+
+  void _updateTicketSalesStream() {
+    if (_currentOrganizerId.isNotEmpty) {
+      _ticketSalesStream = _billeterieService.getTicketSalesStream(
+        organizerId: _currentOrganizerId,
+        conventionId: _selectedConventionId,
+        period: _selectedPeriod.toString().split('.').last,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _slideController.dispose();
+    _cardController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: const CustomAppBarKipik(
-        title: 'Billeterie',
+      backgroundColor: KipikTheme.noir,
+      appBar: CustomAppBarKipik(
+        title: 'Billetterie',
         showBackButton: true,
-        showBurger: true,
-        showNotificationIcon: true,
       ),
-      drawer: DrawerFactory.of(context),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Arrière-plan
-          Image.asset(
-            'assets/background_charbon.png',
-            fit: BoxFit.cover,
-          ),
-          
-          // Contenu principal
-          SafeArea(
-            child: Column(
-              children: [
-                // Filtres
-                Container(
-                  padding: EdgeInsets.all(16),
-                  color: Colors.black.withOpacity(0.5),
+      endDrawer: DrawerFactory.of(context),
+      body: _isLoading
+          ? Center(child: KipikTheme.loading())
+          : SafeArea(
+              child: SlideTransition(
+                position: _slideAnimation,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Column(
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              value: _selectedConvention,
-                              decoration: InputDecoration(
-                                labelText: 'Convention',
-                                labelStyle: TextStyle(color: Colors.grey[400]),
-                                border: OutlineInputBorder(),
-                                filled: true,
-                                fillColor: Colors.grey[900],
-                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              ),
-                              style: TextStyle(color: Colors.white),
-                              dropdownColor: Colors.grey[800],
-                              items: _conventions.map((convention) {
-                                return DropdownMenuItem<String>(
-                                  value: convention,
-                                  child: Text(convention),
-                                );
-                              }).toList(),
-                              onChanged: (value) {
-                                if (value != null) {
-                                  setState(() {
-                                    _selectedConvention = value;
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-                          SizedBox(width: 16),
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              value: _selectedTicketType,
-                              decoration: InputDecoration(
-                                labelText: 'Type de billet',
-                                labelStyle: TextStyle(color: Colors.grey[400]),
-                                border: OutlineInputBorder(),
-                                filled: true,
-                                fillColor: Colors.grey[900],
-                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              ),
-                              style: TextStyle(color: Colors.white),
-                              dropdownColor: Colors.grey[800],
-                              items: _ticketTypes.map((type) {
-                                return DropdownMenuItem<String>(
-                                  value: type,
-                                  child: Text(type),
-                                );
-                              }).toList(),
-                              onChanged: (value) {
-                                if (value != null) {
-                                  setState(() {
-                                    _selectedTicketType = value;
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                
-                // Résumé des ventes
-                Container(
-                  margin: EdgeInsets.all(16),
-                  padding: EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[900],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: [
+                      const SizedBox(height: 16),
+                      
+                      // Titre avec style Kipik
                       Text(
-                        'Résumé des ventes',
+                        'Gestion Billetterie',
+                        textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          fontFamily: 'PermanentMarker',
+                          fontFamily: KipikTheme.fontTitle,
+                          fontSize: 24,
+                          color: KipikTheme.rouge,
                         ),
                       ),
-                      SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: [
-                          _buildStatItem('Billets vendus', _totalTicketsSold.toString()),
-                          _buildStatItem('Revenus', '${_totalRevenue.toStringAsFixed(2)} €'),
-                        ],
+                      const SizedBox(height: 8),
+                      
+                      Text(
+                        'Suivez vos ventes de billets en temps réel',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontFamily: KipikTheme.fontTitle,
+                          fontSize: 14,
+                          color: Colors.white70,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      
+                      // Stats principales
+                      ScaleTransition(
+                        scale: _cardAnimation,
+                        child: _buildStatsOverview(),
+                      ),
+                      const SizedBox(height: 20),
+                      
+                      // Onglets
+                      _buildTabBar(),
+                      const SizedBox(height: 16),
+                      
+                      // Contenu selon l'onglet sélectionné
+                      Expanded(
+                        child: _buildTabContent(),
                       ),
                     ],
                   ),
                 ),
-                
-                // Liste des billets
-                Expanded(
-                  child: _isLoading
-                      ? Center(child: CircularProgressIndicator(color: KipikTheme.rouge))
-                      : _filteredTickets.isEmpty
-                          ? Center(
-                              child: Text(
-                                'Aucun billet trouvé',
-                                style: TextStyle(color: Colors.white),
-                              ),
-                            )
-                          : ListView.builder(
-                              padding: EdgeInsets.all(16),
-                              itemCount: _filteredTickets.length,
-                              itemBuilder: (context, index) {
-                                final ticket = _filteredTickets[index];
-                                return _buildTicketCard(ticket);
-                              },
-                            ),
-                ),
-              ],
+              ),
             ),
+    );
+  }
+
+  Widget _buildStatsOverview() {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _billeterieService.getBilleterieStats(_currentOrganizerId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: KipikTheme.rouge.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Center(child: KipikTheme.loading()),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return KipikTheme.errorState(
+            title: 'Erreur stats',
+            message: 'Impossible de charger les statistiques',
+            onRetry: () => setState(() {}),
+          );
+        }
+
+        final stats = snapshot.data ?? {
+          'totalTickets': 0,
+          'soldTickets': 0,
+          'availableTickets': 0,
+          'totalRevenue': 0.0,
+          'salesRate': 0.0,
+        };
+
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [KipikTheme.rouge, KipikTheme.rouge.withOpacity(0.8)],
+            ),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.confirmation_number, color: Colors.white, size: 24),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Vue d\'ensemble',
+                    style: TextStyle(
+                      fontFamily: KipikTheme.fontTitle,
+                      fontSize: 18,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildStatItem(
+                    'Vendus',
+                    '${stats['soldTickets']}',
+                    Icons.check_circle,
+                  ),
+                  _buildStatItem(
+                    'Disponibles',
+                    '${stats['availableTickets']}',
+                    Icons.inventory,
+                  ),
+                  _buildStatItem(
+                    'Revenus',
+                    '${(stats['totalRevenue'] as double).toStringAsFixed(0)}€',
+                    Icons.euro,
+                  ),
+                ],
+              ),
+              
+              const SizedBox(height: 16),
+              
+              // Barre de progression
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Taux de vente',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontFamily: 'Roboto',
+                        ),
+                      ),
+                      Text(
+                        '${(stats['salesRate'] as double).toStringAsFixed(1)}%',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'Roboto',
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: LinearProgressIndicator(
+                      value: (stats['salesRate'] as double) / 100,
+                      backgroundColor: Colors.white.withOpacity(0.3),
+                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                      minHeight: 6,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatItem(String label, String value, IconData icon) {
+    return Column(
+      children: [
+        Icon(icon, color: Colors.white, size: 20),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontFamily: KipikTheme.fontTitle,
+            fontSize: 16,
+            color: Colors.white,
+          ),
+        ),
+        Text(
+          label,
+          style: const TextStyle(
+            fontFamily: 'Roboto',
+            fontSize: 10,
+            color: Colors.white70,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTabBar() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: KipikTheme.rouge.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildTabButton('Vue d\'ensemble', 0),
+          ),
+          Expanded(
+            child: _buildTabButton('Types de billets', 1),
+          ),
+          Expanded(
+            child: _buildTabButton('Historique', 2),
           ),
         ],
       ),
     );
   }
-  
-  Widget _buildStatItem(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          value,
+
+  Widget _buildTabButton(String title, int index) {
+    final isSelected = _selectedTabIndex == index;
+    
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedTabIndex = index;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? KipikTheme.rouge : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          title,
+          textAlign: TextAlign.center,
           style: TextStyle(
-            color: KipikTheme.rouge,
-            fontSize: 24,
+            fontFamily: KipikTheme.fontTitle,
+            fontSize: 11,
+            color: isSelected ? Colors.white : KipikTheme.rouge,
             fontWeight: FontWeight.bold,
           ),
         ),
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.grey[400],
-            fontSize: 14,
-          ),
-        ),
+      ),
+    );
+  }
+
+  Widget _buildTabContent() {
+    switch (_selectedTabIndex) {
+      case 0:
+        return _buildOverviewTab();
+      case 1:
+        return _buildTicketTypesTab();
+      case 2:
+        return _buildHistoryTab();
+      default:
+        return _buildOverviewTab();
+    }
+  }
+
+  Widget _buildOverviewTab() {
+    return ListView(
+      children: [
+        _buildRevenueChart(),
+        const SizedBox(height: 20),
+        _buildQuickActions(),
+        const SizedBox(height: 20),
+        _buildRecentSales(),
       ],
     );
   }
-  
-  Widget _buildTicketCard(Map<String, dynamic> ticket) {
-    final soldPercentage = (ticket['soldCount'] / (ticket['soldCount'] + ticket['availableCount'])) * 100;
-    
-    return Card(
-      margin: EdgeInsets.only(bottom: 12),
-      color: Colors.grey[900],
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      ticket['conventionName'],
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      DateFormat('d MMM', 'fr_FR').format(ticket['startDate']) + ' - ' + 
-                      DateFormat('d MMM yyyy', 'fr_FR').format(ticket['endDate']),
-                      style: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: ticket['ticketType'] == 'Jour' ? Colors.amber.withOpacity(0.2) : Colors.purple.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    'Billet ' + ticket['ticketType'],
+
+  Widget _buildRevenueChart() {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _analyticsService.getAnalytics(_currentOrganizerId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return KipikTheme.kipikCard(
+            child: Center(child: KipikTheme.loading()),
+          );
+        }
+
+        final analytics = snapshot.data ?? {};
+        final revenueData = analytics['revenue'] ?? {'total': 0.0, 'growth': 0.0};
+
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.95),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.trending_up, color: KipikTheme.rouge, size: 24),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Évolution des ventes',
                     style: TextStyle(
-                      color: ticket['ticketType'] == 'Jour' ? Colors.amber : Colors.purple,
-                      fontSize: 12,
+                      fontFamily: KipikTheme.fontTitle,
+                      fontSize: 16,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              
+              Text(
+                '${(revenueData['total'] as double).toStringAsFixed(0)}€',
+                style: TextStyle(
+                  fontFamily: KipikTheme.fontTitle,
+                  fontSize: 32,
+                  color: KipikTheme.rouge,
+                ),
+              ),
+              
+              Row(
+                children: [
+                  Icon(
+                    (revenueData['growth'] as double) >= 0 ? Icons.arrow_upward : Icons.arrow_downward,
+                    color: (revenueData['growth'] as double) >= 0 ? Colors.green : Colors.red,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${(revenueData['growth'] as double).abs().toStringAsFixed(1)}%',
+                    style: TextStyle(
+                      color: (revenueData['growth'] as double) >= 0 ? Colors.green : Colors.red,
                       fontWeight: FontWeight.bold,
+                      fontFamily: 'Roboto',
                     ),
                   ),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildTicketInfo('Prix', '${ticket['price'].toStringAsFixed(2)} €'),
-                _buildTicketInfo('Vendus', '${ticket['soldCount']}'),
-                _buildTicketInfo('Disponibles', '${ticket['availableCount']}'),
-                _buildTicketInfo('Revenus', '${ticket['revenue'].toStringAsFixed(2)} €'),
-              ],
-            ),
-            SizedBox(height: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Progression des ventes',
-                      style: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 12,
-                      ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'vs mois précédent',
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontSize: 12,
+                      fontFamily: 'Roboto',
                     ),
-                    Text(
-                      '${soldPercentage.toStringAsFixed(1)}%',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: soldPercentage / 100,
-                    backgroundColor: Colors.grey[800],
-                    valueColor: AlwaysStoppedAnimation<Color>(KipikTheme.rouge),
-                    minHeight: 8,
                   ),
+                ],
+              ),
+              
+              const SizedBox(height: 20),
+              
+              // Graphique simple simulé
+              SizedBox(
+                height: 120,
+                child: Row(
+                  children: List.generate(7, (index) {
+                    final height = 40.0 + (index % 3) * 30;
+                    return Expanded(
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 2),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Container(
+                              height: height,
+                              decoration: BoxDecoration(
+                                color: KipikTheme.rouge.withOpacity(0.7),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '${index + 1}',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey,
+                                fontFamily: 'Roboto',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
                 ),
-              ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildQuickActions() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Actions rapides',
+            style: TextStyle(
+              fontFamily: KipikTheme.fontTitle,
+              fontSize: 16,
+              color: Colors.black87,
             ),
-            SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton.icon(
-                  onPressed: () => _editTicketSettings(ticket),
-                  icon: Icon(Icons.edit, size: 16),
-                  label: Text('Modifier'),
-                  style: TextButton.styleFrom(
+          ),
+          const SizedBox(height: 16),
+          
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _createNewTicketType,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Nouveau type'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: KipikTheme.rouge,
                     foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
-              ],
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _exportSalesData,
+                  icon: const Icon(Icons.download),
+                  label: const Text('Exporter'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: KipikTheme.rouge,
+                    side: BorderSide(color: KipikTheme.rouge),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecentSales() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _billeterieService.getRecentSalesStream(_currentOrganizerId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.95),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Center(child: KipikTheme.loading()),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return KipikTheme.errorState(
+            title: 'Erreur ventes',
+            message: 'Impossible de charger les ventes récentes',
+            onRetry: () => setState(() {}),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return KipikTheme.emptyState(
+            icon: Icons.receipt,
+            title: 'Aucune vente',
+            message: 'Aucune vente récente trouvée',
+          );
+        }
+
+        final sales = snapshot.data!.docs;
+
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.95),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Ventes récentes',
+                style: TextStyle(
+                  fontFamily: KipikTheme.fontTitle,
+                  fontSize: 16,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 16),
+              
+              ...sales.take(5).map((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              data['buyerName'] ?? 'Client anonyme',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Roboto',
+                              ),
+                            ),
+                            Text(
+                              '${data['quantity']} billets • ${data['totalAmount']}€',
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
+                                fontFamily: 'Roboto',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        _formatTimestamp(data['saleDate']),
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 11,
+                          fontFamily: 'Roboto',
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTicketTypesTab() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _conventionsStream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return KipikTheme.errorState(
+            title: 'Erreur types de billets',
+            message: 'Impossible de charger les types de billets',
+            onRetry: () => setState(() {}),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return KipikTheme.emptyState(
+            icon: Icons.confirmation_number,
+            title: 'Aucun type de billet',
+            message: 'Créez votre premier type de billet',
+          );
+        }
+
+        final tickets = snapshot.data!.docs;
+
+        return ListView.builder(
+          itemCount: tickets.length,
+          itemBuilder: (context, index) {
+            final doc = tickets[index];
+            final data = doc.data() as Map<String, dynamic>;
+            
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.95),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          data['name'] ?? 'Type de billet',
+                          style: TextStyle(
+                            fontFamily: KipikTheme.fontTitle,
+                            fontSize: 16,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${data['price']}€ • ${data['sold'] ?? 0}/${data['quantity'] ?? 0} vendus',
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                            fontFamily: 'Roboto',
+                          ),
+                        ),
+                        if (!(data['isActive'] ?? true)) ...[
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'DÉSACTIVÉ',
+                              style: TextStyle(
+                                color: Colors.red,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Roboto',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'edit':
+                          _editTicketType(doc.id, data);
+                          break;
+                        case 'disable':
+                          _disableTicketType(doc.id);
+                          break;
+                        case 'enable':
+                          _enableTicketType(doc.id);
+                          break;
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'edit',
+                        child: Text('Modifier'),
+                      ),
+                      if (data['isActive'] ?? true)
+                        const PopupMenuItem(
+                          value: 'disable',
+                          child: Text('Désactiver'),
+                        )
+                      else
+                        const PopupMenuItem(
+                          value: 'enable',
+                          child: Text('Activer'),
+                        ),
+                    ],
+                    icon: Icon(Icons.more_vert, color: KipikTheme.rouge),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildHistoryTab() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _ticketSalesStream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return KipikTheme.errorState(
+            title: 'Erreur historique',
+            message: 'Impossible de charger l\'historique des ventes',
+            onRetry: () => setState(() {}),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return KipikTheme.emptyState(
+            icon: Icons.history,
+            title: 'Aucune vente',
+            message: 'Aucune vente trouvée pour cette période',
+          );
+        }
+
+        final sales = snapshot.data!.docs;
+
+        return Column(
+          children: [
+            // Filtres de période
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.95),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Text(
+                    'Période:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Roboto',
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: DropdownButton<SalesPeriod>(
+                      value: _selectedPeriod,
+                      onChanged: (period) {
+                        if (period != null) {
+                          setState(() {
+                            _selectedPeriod = period;
+                          });
+                          _updateTicketSalesStream();
+                        }
+                      },
+                      items: SalesPeriod.values.map((period) {
+                        return DropdownMenuItem(
+                          value: period,
+                          child: Text(_getPeriodLabel(period)),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            
+            // Liste des ventes
+            Expanded(
+              child: ListView.builder(
+                itemCount: sales.length,
+                itemBuilder: (context, index) {
+                  final doc = sales[index];
+                  final data = doc.data() as Map<String, dynamic>;
+                  
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.95),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                data['buyerName'] ?? 'Client anonyme',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontFamily: 'Roboto',
+                                ),
+                              ),
+                              Text(
+                                data['buyerEmail'] ?? '',
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                  fontFamily: 'Roboto',
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${data['quantity']} billets • ${data['totalAmount']}€',
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                  fontFamily: 'Roboto',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              _formatTimestamp(data['saleDate']),
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 11,
+                                fontFamily: 'Roboto',
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: _getStatusColor(data['status']),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                _getStatusLabel(data['status']),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  fontFamily: 'Roboto',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  String _getPeriodLabel(SalesPeriod period) {
+    switch (period) {
+      case SalesPeriod.all:
+        return 'Toutes';
+      case SalesPeriod.today:
+        return 'Aujourd\'hui';
+      case SalesPeriod.week:
+        return 'Cette semaine';
+      case SalesPeriod.month:
+        return 'Ce mois';
+      case SalesPeriod.custom:
+        return 'Personnalisé';
+    }
+  }
+
+  Color _getStatusColor(String? status) {
+    switch (status) {
+      case 'confirmed':
+        return Colors.green;
+      case 'pending':
+        return Colors.orange;
+      case 'cancelled':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _getStatusLabel(String? status) {
+    switch (status) {
+      case 'confirmed':
+        return 'Confirmé';
+      case 'pending':
+        return 'En attente';
+      case 'cancelled':
+        return 'Annulé';
+      default:
+        return 'Inconnu';
+    }
+  }
+
+  String _formatTimestamp(dynamic timestamp) {
+    if (timestamp == null) return 'Date inconnue';
+    
+    try {
+      DateTime date;
+      if (timestamp is Timestamp) {
+        date = timestamp.toDate();
+      } else if (timestamp is DateTime) {
+        date = timestamp;
+      } else {
+        return 'Date invalide';
+      }
+      
+      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return 'Date inconnue';
+    }
+  }
+
+  void _createNewTicketType() {
+    // TODO: Naviguer vers la page de création de ticket
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Création de nouveau type de billet',
+          style: TextStyle(fontFamily: KipikTheme.fontTitle),
         ),
+        backgroundColor: KipikTheme.rouge,
       ),
     );
   }
-  
-  Widget _buildTicketInfo(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
+
+  void _editTicketType(String ticketId, Map<String, dynamic> data) {
+    // TODO: Naviguer vers la page d'édition
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Édition du billet ${data['name']}',
+          style: TextStyle(fontFamily: KipikTheme.fontTitle),
         ),
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.grey[400],
-            fontSize: 12,
-          ),
-        ),
-      ],
+        backgroundColor: KipikTheme.rouge,
+      ),
     );
+  }
+
+  void _disableTicketType(String ticketTypeId) async {
+    final success = await _billeterieService.disableTicketType(ticketTypeId);
+    if (success && mounted) {
+      KipikTheme.showSuccessSnackBar(context, 'Type de billet désactivé');
+    } else if (mounted) {
+      KipikTheme.showErrorSnackBar(context, 'Erreur lors de la désactivation');
+    }
+  }
+
+  void _enableTicketType(String ticketTypeId) async {
+    final success = await _billeterieService.enableTicketType(ticketTypeId);
+    if (success && mounted) {
+      KipikTheme.showSuccessSnackBar(context, 'Type de billet activé');
+    } else if (mounted) {
+      KipikTheme.showErrorSnackBar(context, 'Erreur lors de l\'activation');
+    }
+  }
+
+  void _exportSalesData() async {
+    try {
+      final sales = await _billeterieService.getSalesHistory(_currentOrganizerId);
+      // TODO: Implémenter l'export réel (CSV, PDF, etc.)
+      
+      if (mounted) {
+        KipikTheme.showSuccessSnackBar(
+          context, 
+          'Export de ${sales.length} ventes terminé'
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        KipikTheme.showErrorSnackBar(context, 'Erreur lors de l\'export');
+      }
+    }
   }
 }

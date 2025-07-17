@@ -1,0 +1,221 @@
+// lib/screens/subscription/widgets/break_even_calculator.dart
+
+import 'package:flutter/material.dart';
+import '../../../models/user_subscription.dart';
+
+class BreakEvenCalculator extends StatefulWidget {
+  final SubscriptionType currentType;
+  final SubscriptionType targetType;
+  final VoidCallback? onUpgradeRecommended;
+
+  const BreakEvenCalculator({
+    super.key,
+    required this.currentType,
+    required this.targetType,
+    this.onUpgradeRecommended,
+  });
+
+  @override
+  State<BreakEvenCalculator> createState() => _BreakEvenCalculatorState();
+}
+
+class _BreakEvenCalculatorState extends State<BreakEvenCalculator> {
+  double _monthlyCA = 5000.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final priceDiff = widget.targetType.monthlyPrice - widget.currentType.monthlyPrice;
+    final commissionDiff = widget.currentType.commissionRate - widget.targetType.commissionRate;
+    final breakEven = priceDiff / commissionDiff;
+    final monthlySavings = (_monthlyCA * commissionDiff) - priceDiff;
+    final isRecommended = _monthlyCA > breakEven;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A2E),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isRecommended ? Colors.green.withOpacity(0.5) : Colors.orange.withOpacity(0.5),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                '🧮 Calculateur Standard → Premium',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const Spacer(),
+              if (isRecommended)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'RENTABLE',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          
+          // Explication
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              'Premium coûte +50€/mois mais économise 1% de commission (2% → 1%)',
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey[400],
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 20),
+          
+          // Slider CA mensuel
+          Text(
+            'Votre CA mensuel estimé: ${_monthlyCA.toStringAsFixed(0)}€',
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 10),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: widget.targetType.subscriptionColor,
+              thumbColor: widget.targetType.subscriptionColor,
+              overlayColor: widget.targetType.subscriptionColor.withOpacity(0.2),
+            ),
+            child: Slider(
+              value: _monthlyCA,
+              min: 1000,
+              max: 20000,
+              divisions: 19,
+              onChanged: (value) => setState(() => _monthlyCA = value),
+            ),
+          ),
+          
+          const SizedBox(height: 20),
+          
+          // Calculs détaillés
+          _buildCalculationRow('Break-even', '${breakEven.toStringAsFixed(0)}€ CA/mois'),
+          _buildCalculationRow('Commission Standard (2%)', '${(_monthlyCA * 0.02).toStringAsFixed(0)}€/mois'),
+          _buildCalculationRow('Commission Premium (1%)', '${(_monthlyCA * 0.01).toStringAsFixed(0)}€/mois'),
+          _buildCalculationRow('Économie commission', '+${(_monthlyCA * commissionDiff).toStringAsFixed(0)}€/mois'),
+          _buildCalculationRow('Coût Premium supplémentaire', '-50€/mois'),
+          const Divider(color: Colors.grey),
+          _buildCalculationRow('Économie NETTE mensuelle', 
+              '${monthlySavings > 0 ? "+" : ""}${monthlySavings.toStringAsFixed(0)}€', 
+              isTotal: true),
+          _buildCalculationRow('Économie NETTE annuelle', 
+              '${monthlySavings > 0 ? "+" : ""}${(monthlySavings * 12).toStringAsFixed(0)}€', 
+              isTotal: true),
+          
+          const SizedBox(height: 20),
+          
+          // Recommandation
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isRecommended ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isRecommended ? Icons.trending_up : Icons.info_outline,
+                  color: isRecommended ? Colors.green : Colors.orange,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    isRecommended 
+                        ? '✅ Premium RENTABLE ! Vous économisez ${monthlySavings.toStringAsFixed(0)}€/mois'
+                        : '⚠️ Premium rentable à partir de ${breakEven.toStringAsFixed(0)}€ CA/mois',
+                    style: TextStyle(
+                      color: isRecommended ? Colors.green : Colors.orange,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                if (isRecommended && widget.onUpgradeRecommended != null)
+                  TextButton(
+                    onPressed: widget.onUpgradeRecommended,
+                    child: const Text(
+                      'Choisir Premium',
+                      style: TextStyle(color: Colors.green),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCalculationRow(String label, String value, {bool isTotal = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: isTotal ? Colors.white : Colors.grey[400],
+              fontSize: isTotal ? 15 : 14,
+              fontWeight: isTotal ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: isTotal ? Colors.white : Colors.white,
+              fontSize: isTotal ? 15 : 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Extension pour obtenir les couleurs (répétée pour éviter les imports)
+extension SubscriptionTypeColors on SubscriptionType {
+  Color get primaryColor {
+    switch (this) {
+      case SubscriptionType.free:
+        return Colors.grey;
+      case SubscriptionType.standard:
+        return const Color(0xFF10B981);
+      case SubscriptionType.premium:
+        return const Color(0xFF6366F1);
+      case SubscriptionType.enterprise:
+        return const Color(0xFF8B5CF6);
+    }
+  }
+}

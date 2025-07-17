@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_core/firebase_core.dart'; // ✅ Ajouté pour Firebase.app()
+import 'package:firebase_core/firebase_core.dart';
 import 'package:crypto/crypto.dart';
 import 'package:kipik_v5/services/auth/captcha_manager.dart';
 import 'package:kipik_v5/models/user_role.dart';
@@ -74,6 +74,11 @@ class SecureAuthService extends ChangeNotifier {
     return _validateAuthentication();
   }
   
+  // ✅ NOUVEAU : GETTER POUR COMPATIBILITÉ DEMANDE_DEVIS_PAGE
+  Map<String, dynamic>? get userProfile {
+    return _cachedUserProfile;
+  }
+  
   // ✅ Vérifier si c'est un super admin (vous)
   bool get isSuperAdmin {
     return _cachedUserId != null && 
@@ -102,6 +107,14 @@ class SecureAuthService extends ChangeNotifier {
       'isSuperAdmin': _cachedUserProfile!['isSuperAdmin'] ?? false,
       'createdAt': _cachedUserProfile!['createdAt'],
       'updatedAt': _cachedUserProfile!['updatedAt'],
+      // ✅ CHAMPS PROFIL COMPLET POUR DEMANDE_DEVIS_PAGE
+      'phone': _cachedUserProfile!['phone'],
+      'address': _cachedUserProfile!['address'],
+      'dateOfBirth': _cachedUserProfile!['dateOfBirth'],
+      'preferredStyles': _cachedUserProfile!['preferredStyles'],
+      'allergies': _cachedUserProfile!['allergies'],
+      'previousTattoos': _cachedUserProfile!['previousTattoos'],
+      'preferredBudget': _cachedUserProfile!['preferredBudget'],
     };
   }
   
@@ -308,6 +321,14 @@ class SecureAuthService extends ChangeNotifier {
         'updatedAt': FieldValue.serverTimestamp(),
         'isActive': true,
         'isSuperAdmin': false, // ✅ Jamais super admin par défaut
+        // ✅ CHAMPS PROFIL COMPLET INITIALISÉS
+        'phone': '',
+        'address': '',
+        'dateOfBirth': null,
+        'preferredStyles': [],
+        'allergies': '',
+        'previousTattoos': 0,
+        'preferredBudget': '',
       };
       
       // ✅ Log de sécurité reCAPTCHA
@@ -383,6 +404,14 @@ class SecureAuthService extends ChangeNotifier {
         'adminLevel': 'super', // ✅ Niveau le plus élevé
         'signupCaptchaScore': captchaResult.score,
         'signupCaptchaTimestamp': DateTime.now().toIso8601String(),
+        // ✅ CHAMPS PROFIL COMPLET POUR ADMIN
+        'phone': '',
+        'address': '',
+        'dateOfBirth': null,
+        'preferredStyles': [],
+        'allergies': '',
+        'previousTattoos': 0,
+        'preferredBudget': '',
       };
       
       await _firestore
@@ -559,6 +588,40 @@ class SecureAuthService extends ChangeNotifier {
     }
   }
 
+  /// ✅ MÉTHODE POUR RÉCUPÉRER LE PROFIL COMPLET
+  Future<Map<String, dynamic>?> getCurrentUserProfile() async {
+    try {
+      if (_cachedUserId == null) return null;
+      
+      // Si on a déjà le profil en cache et qu'il est récent
+      if (_cachedUserProfile != null && _isRecentlyValidated()) {
+        return _cachedUserProfile;
+      }
+      
+      // Sinon, récupérer depuis Firestore
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(_cachedUserId!)
+          .get();
+      
+      if (userDoc.exists) {
+        final userData = userDoc.data()!;
+        userData['id'] = userDoc.id;
+        
+        // Mettre à jour le cache
+        _cachedUserProfile = userData;
+        _lastValidation = DateTime.now();
+        
+        return userData;
+      }
+      
+      return null;
+    } catch (e) {
+      print('❌ Erreur récupération profil complet: $e');
+      return _cachedUserProfile; // Retourner le cache en cas d'erreur
+    }
+  }
+
   /// Créer un objet User compatible depuis le profil Firestore
   dynamic _createUserFromProfile(Map<String, dynamic> userData) {
     return {
@@ -575,6 +638,14 @@ class SecureAuthService extends ChangeNotifier {
       'permissions': userData['permissions'] ?? ['basic'],
       'createdAt': userData['createdAt'],
       'updatedAt': userData['updatedAt'],
+      // ✅ CHAMPS PROFIL COMPLET
+      'phone': userData['phone'],
+      'address': userData['address'],
+      'dateOfBirth': userData['dateOfBirth'],
+      'preferredStyles': userData['preferredStyles'],
+      'allergies': userData['allergies'],
+      'previousTattoos': userData['previousTattoos'],
+      'preferredBudget': userData['preferredBudget'],
     };
   }
 
@@ -626,6 +697,13 @@ class SecureAuthService extends ChangeNotifier {
   Future<bool> updateUserProfile({
     String? displayName,
     String? profileImageUrl,
+    String? phone,
+    String? address,
+    String? dateOfBirth,
+    List<String>? preferredStyles,
+    String? allergies,
+    int? previousTattoos,
+    String? preferredBudget,
     Map<String, dynamic>? additionalData,
   }) async {
     try {
@@ -641,9 +719,14 @@ class SecureAuthService extends ChangeNotifier {
         await _auth.currentUser?.updateDisplayName(displayName);
       }
       
-      if (profileImageUrl != null) {
-        updateData['profileImageUrl'] = profileImageUrl;
-      }
+      if (profileImageUrl != null) updateData['profileImageUrl'] = profileImageUrl;
+      if (phone != null) updateData['phone'] = phone;
+      if (address != null) updateData['address'] = address;
+      if (dateOfBirth != null) updateData['dateOfBirth'] = dateOfBirth;
+      if (preferredStyles != null) updateData['preferredStyles'] = preferredStyles;
+      if (allergies != null) updateData['allergies'] = allergies;
+      if (previousTattoos != null) updateData['previousTattoos'] = previousTattoos;
+      if (preferredBudget != null) updateData['preferredBudget'] = preferredBudget;
       
       if (additionalData != null) {
         updateData.addAll(additionalData);
@@ -659,6 +742,29 @@ class SecureAuthService extends ChangeNotifier {
       return true;
     } catch (e) {
       print('❌ Erreur mise à jour profil: $e');
+      return false;
+    }
+  }
+
+  /// ✅ MÉTHODE POUR METTRE À JOUR DES CHAMPS SPÉCIFIQUES DU PROFIL
+  Future<bool> updateProfileField(String field, dynamic value) async {
+    try {
+      if (_cachedUserId == null) return false;
+      
+      await _firestore.collection('users').doc(_cachedUserId!).update({
+        field: value,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      
+      // Mettre à jour le cache local
+      if (_cachedUserProfile != null) {
+        _cachedUserProfile![field] = value;
+        notifyListeners();
+      }
+      
+      return true;
+    } catch (e) {
+      print('❌ Erreur mise à jour champ profil: $e');
       return false;
     }
   }

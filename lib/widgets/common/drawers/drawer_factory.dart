@@ -1,32 +1,31 @@
-// lib/widgets/drawer_factory.dart
+// lib/widgets/common/drawers/drawer_factory.dart
 
 import 'package:flutter/material.dart';
-import 'package:kipik_v5/services/auth/secure_auth_service.dart';
-import 'package:kipik_v5/models/user_role.dart';
-import 'package:kipik_v5/widgets/common/drawers/custom_drawer_kipik.dart';
-import 'package:kipik_v5/widgets/common/drawers/custom_drawer_organizer.dart';
-import 'package:kipik_v5/widgets/common/drawers/custom_drawer_admin.dart';
-import 'package:kipik_v5/widgets/common/drawers/custom_drawer_particulier.dart';
-import 'package:kipik_v5/widgets/common/drawers/secure_drawer_components.dart';
+import '../../../services/auth/secure_auth_service.dart';
+import '../../../models/user_role.dart';
+import 'custom_drawer_kipik.dart';
+import 'custom_drawer_organizer.dart';
+import 'custom_drawer_admin.dart';
+import 'custom_drawer_particulier.dart';
+import 'secure_drawer_components.dart';
 
+/// 🚪 Factory optimisé pour les drawers
+/// Détection automatique du rôle + fallbacks sécurisés
 class DrawerFactory {
-  // Ne pas instancier, on utilise uniquement la méthode statique
-  DrawerFactory._();
+  DrawerFactory._(); // Pas d'instanciation
 
+  /// ✅ MÉTHODE PRINCIPALE - Détection automatique
   static Widget of(BuildContext context) {
-    // ✅ Utiliser le SecureAuthService en priorité
     if (!SecureAuthService.instance.isAuthenticated) {
-      return _UnauthenticatedDrawer();
+      return const _UnauthenticatedDrawer();
     }
 
     final currentRole = SecureAuthService.instance.currentUserRole;
     
-    // ✅ Vérifier que le rôle est défini
     if (currentRole == null) {
       return SecureDrawerFactory.buildFallbackDrawer();
     }
 
-    // ✅ Retourner le drawer approprié selon le rôle
     switch (currentRole) {
       case UserRole.admin:
         return const CustomDrawerAdmin();
@@ -41,7 +40,7 @@ class DrawerFactory {
     }
   }
 
-  /// Méthode pour débugger le drawer affiché
+  /// 🐛 Debug helper
   static String getDrawerTypeDebug() {
     if (!SecureAuthService.instance.isAuthenticated) {
       return 'Unauthenticated';
@@ -51,21 +50,19 @@ class DrawerFactory {
     return role?.name ?? 'Unknown';
   }
 
-  /// Méthode pour forcer le refresh du drawer
+  /// 🔄 Refresh drawer
   static void refreshDrawer(BuildContext context) {
-    // Fermer le drawer actuel
     if (Scaffold.of(context).isDrawerOpen) {
       Navigator.of(context).pop();
     }
     
-    // Attendre un frame puis rouvrir
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Scaffold.of(context).openDrawer();
     });
   }
 }
 
-/// ✅ Drawer pour utilisateur non connecté (classe séparée)
+/// 🚫 Drawer pour utilisateurs non connectés
 class _UnauthenticatedDrawer extends StatelessWidget {
   const _UnauthenticatedDrawer();
 
@@ -78,7 +75,7 @@ class _UnauthenticatedDrawer extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Logo ou icône principale
+            // 🚪 Icône d'état
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -94,7 +91,7 @@ class _UnauthenticatedDrawer extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             
-            // Titre principal
+            // 📝 Titre principal
             const Text(
               'Non connecté',
               style: TextStyle(
@@ -106,7 +103,7 @@ class _UnauthenticatedDrawer extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             
-            // Description
+            // 💡 Description
             const Text(
               'Connectez-vous pour accéder à votre espace personnalisé et découvrir toutes les fonctionnalités de Kipik.',
               textAlign: TextAlign.center,
@@ -118,13 +115,11 @@ class _UnauthenticatedDrawer extends StatelessWidget {
             ),
             const SizedBox(height: 32),
             
-            // Bouton de connexion principal
+            // 🔑 Bouton de connexion
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).pushNamed('/login');
-                },
+                onPressed: () => Navigator.of(context).pushNamed('/login'),
                 icon: const Icon(Icons.login, color: Colors.white),
                 label: const Text(
                   'Se connecter',
@@ -145,13 +140,11 @@ class _UnauthenticatedDrawer extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             
-            // Bouton d'inscription
+            // ➕ Bouton d'inscription
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).pushNamed('/register');
-                },
+                onPressed: () => Navigator.of(context).pushNamed('/register'),
                 icon: const Icon(Icons.person_add, color: Colors.white70),
                 label: const Text(
                   'Créer un compte',
@@ -171,7 +164,7 @@ class _UnauthenticatedDrawer extends StatelessWidget {
             ),
             const SizedBox(height: 32),
             
-            // Divider avec texte
+            // ➖ Séparateur
             Row(
               children: [
                 Expanded(child: Container(height: 1, color: Colors.grey.withOpacity(0.3))),
@@ -191,32 +184,26 @@ class _UnauthenticatedDrawer extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             
-            // Actions de navigation publique
+            // 🌍 Navigation publique
             _PublicMenuItem(
               icon: Icons.map_outlined,
               title: 'Carte des conventions',
               subtitle: 'Découvrir les événements tatouage',
-              onTap: () {
-                Navigator.of(context).pushNamed('/conventions/public');
-              },
+              onTap: () => Navigator.of(context).pushNamed('/conventions/public'),
             ),
             const SizedBox(height: 12),
             _PublicMenuItem(
               icon: Icons.search_outlined,
               title: 'Trouver un tatoueur',
               subtitle: 'Rechercher des professionnels',
-              onTap: () {
-                Navigator.of(context).pushNamed('/search/tattooers');
-              },
+              onTap: () => Navigator.of(context).pushNamed('/search/tattooers'),
             ),
             const SizedBox(height: 12),
             _PublicMenuItem(
               icon: Icons.info_outline,
               title: 'À propos de Kipik',
               subtitle: 'Découvrir la plateforme',
-              onTap: () {
-                Navigator.of(context).pushNamed('/about');
-              },
+              onTap: () => Navigator.of(context).pushNamed('/about'),
             ),
           ],
         ),
@@ -225,7 +212,7 @@ class _UnauthenticatedDrawer extends StatelessWidget {
   }
 }
 
-/// ✅ Widget pour les éléments de menu public
+/// 🔗 Widget pour les éléments de menu public
 class _PublicMenuItem extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -259,11 +246,7 @@ class _PublicMenuItem extends StatelessWidget {
                 color: Colors.blue.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(
-                icon,
-                color: Colors.blue,
-                size: 20,
-              ),
+              child: Icon(icon, color: Colors.blue, size: 20),
             ),
             const SizedBox(width: 16),
             Expanded(

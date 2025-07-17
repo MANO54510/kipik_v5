@@ -1,0 +1,362 @@
+// lib/screens/subscription/widgets/subscription_card.dart
+
+import 'package:flutter/material.dart';
+import 'package:kipik_v5/models/user_subscription.dart';
+
+class SubscriptionCard extends StatelessWidget {
+  final SubscriptionType type;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final bool isRecommended;
+
+  const SubscriptionCard({
+    super.key,
+    required this.type,
+    required this.isSelected,
+    required this.onTap,
+    this.isRecommended = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: isSelected ? type.subscriptionColor.withOpacity(0.1) : const Color(0xFF1A1A2E),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isSelected ? type.subscriptionColor : Colors.grey.withOpacity(0.3),
+              width: isSelected ? 2 : 1,
+            ),
+            boxShadow: isSelected ? [
+              BoxShadow(
+                color: type.subscriptionColor.withOpacity(0.3),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ] : null,
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(),
+                    const SizedBox(height: 20),
+                    _buildPrice(),
+                    const SizedBox(height: 20),
+                    _buildCommission(),
+                    const SizedBox(height: 20),
+                    _buildFeatures(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        
+        // Badge recommandé
+        if (isRecommended)
+          Positioned(
+            top: -5,
+            right: 20,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFF6B6B), Color(0xFFFFE66D)],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFFF6B6B).withOpacity(0.3),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: const Text(
+                '⭐ RECOMMANDÉ',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        
+        // Icône sélection
+        if (isSelected)
+          Positioned(
+            top: 15,
+            right: 15,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: type.subscriptionColor,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.check,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildHeader() {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: type.subscriptionColor.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            _getTypeIcon(),
+            color: type.subscriptionColor,
+            size: 24,
+          ),
+        ),
+        const SizedBox(width: 15),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                type.displayName,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              Text(
+                type.description,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[400],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPrice() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: type.subscriptionColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: type.subscriptionColor.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${type.monthlyPrice.toStringAsFixed(0)}€',
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const Text(
+                    '/mois',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+              if (type == SubscriptionType.premium)
+                Text(
+                  'Économise 1% de commission vs Standard',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: type.subscriptionColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              const SizedBox(height: 5),
+              Text(
+                'Facturation mensuelle via SEPA',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[400],
+                ),
+              ),
+            ],
+          ),
+          const Spacer(),
+          const Text('💳', style: TextStyle(fontSize: 24)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommission() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.percent,
+            color: type.subscriptionColor,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Commission sur TOUS vos paiements',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[400],
+                  ),
+                ),
+                Text(
+                  '${(type.commissionRate * 100).toStringAsFixed(1)}%',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: type.subscriptionColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (type == SubscriptionType.premium)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'RÉDUITE',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeatures() {
+    final features = _getDisplayFeatures();
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Fonctionnalités incluses:',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey[300],
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...features.map((feature) => Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(
+            children: [
+              Icon(
+                Icons.check_circle,
+                color: type.subscriptionColor,
+                size: 16,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  feature,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey[300],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        )).toList(),
+      ],
+    );
+  }
+
+  IconData _getTypeIcon() {
+    switch (type) {
+      case SubscriptionType.free:
+        return Icons.star_outline;
+      case SubscriptionType.standard:
+        return Icons.business;
+      case SubscriptionType.premium:
+        return Icons.diamond;
+      case SubscriptionType.enterprise:
+        return Icons.corporate_fare;
+    }
+  }
+
+  List<String> _getDisplayFeatures() {
+    switch (type) {
+      case SubscriptionType.free:
+        return [
+          '30 jours d\'essai gratuit complet',
+          'Toutes les fonctionnalités',
+          'Support communauté',
+          'Aucun engagement',
+        ];
+      case SubscriptionType.standard:
+        return [
+          'Agenda professionnel synchronisé',
+          'Paiement fractionné pour clients',
+          'Gestion clients avancée',
+          'Analytics de base',
+          'Commission 2% sur paiements',
+        ];
+      case SubscriptionType.premium:
+        return [
+          'Toutes fonctionnalités Standard',
+          'Conventions & événements tattoo',
+          'Système Guest (candidatures)',
+          'Flash Minute (créneaux libres)',
+          'Commission réduite 1%',
+          'Support prioritaire',
+        ];
+      case SubscriptionType.enterprise:
+        return [];
+    }
+  }
+}

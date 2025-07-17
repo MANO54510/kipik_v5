@@ -1,11 +1,16 @@
 // lib/pages/pro/agenda/pro_agenda_home_page.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:kipik_v5/widgets/common/drawers/custom_drawer_kipik.dart';
+import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
+import 'package:kipik_v5/widgets/common/buttons/tattoo_assistant_button.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
 import 'package:kipik_v5/pages/pro/home_page_pro.dart';
+import 'package:table_calendar/table_calendar.dart';
+import 'dart:async';
 
-enum EventType { consultation, session, retouche, suivi, personnel }
+enum EventType { consultation, session, retouche, suivi, personnel, flashMinute }
 enum ViewType { day, week, month }
 enum LocationType { shop, guest, convention }
 
@@ -22,6 +27,10 @@ class AgendaEvent {
   final bool isConfirmed;
   final String? phoneNumber;
   final String? email;
+  final double? price;
+  final bool isFlashMinute;
+  final int? flashMinuteDiscount;
+  final DateTime? flashMinuteExpiry;
 
   AgendaEvent({
     required this.id,
@@ -36,6 +45,10 @@ class AgendaEvent {
     this.isConfirmed = false,
     this.phoneNumber,
     this.email,
+    this.price,
+    this.isFlashMinute = false,
+    this.flashMinuteDiscount,
+    this.flashMinuteExpiry,
   });
 
   Duration get duration => endTime.difference(startTime);
@@ -47,21 +60,25 @@ class AgendaEvent {
   }
   
   Color get eventColor {
+    if (isFlashMinute) return Colors.orange;
     switch (type) {
       case EventType.consultation:
         return KipikTheme.rouge;
       case EventType.session:
-        return const Color(0xFF000000); // Noir pur
+        return const Color(0xFF2E7D32);
       case EventType.retouche:
-        return const Color(0xFF1A1A1A); // Noir très foncé
+        return const Color(0xFF1565C0);
       case EventType.suivi:
-        return const Color(0xFF2D2D2D); // Gris très foncé
+        return const Color(0xFF7B1FA2);
       case EventType.personnel:
-        return const Color(0xFF404040); // Gris foncé
+        return const Color(0xFF424242);
+      case EventType.flashMinute:
+        return Colors.orange;
     }
   }
 
   String get typeLabel {
+    if (isFlashMinute) return 'Flash Minute';
     switch (type) {
       case EventType.consultation:
         return 'Consultation';
@@ -73,6 +90,8 @@ class AgendaEvent {
         return 'Suivi';
       case EventType.personnel:
         return 'Personnel';
+      case EventType.flashMinute:
+        return 'Flash Minute';
     }
   }
 
@@ -97,6 +116,14 @@ class AgendaEvent {
         return Icons.event;
     }
   }
+
+  bool get canActivateFlashMinute {
+    return isConfirmed && 
+           !isFlashMinute && 
+           startTime.isAfter(DateTime.now()) &&
+           startTime.difference(DateTime.now()).inHours >= 1 &&
+           startTime.difference(DateTime.now()).inDays <= 1;
+  }
 }
 
 class ProAgendaHomePage extends StatefulWidget {
@@ -106,20 +133,36 @@ class ProAgendaHomePage extends StatefulWidget {
   State<ProAgendaHomePage> createState() => _ProAgendaHomePageState();
 }
 
-class _ProAgendaHomePageState extends State<ProAgendaHomePage> {
+class _ProAgendaHomePageState extends State<ProAgendaHomePage> 
+    with TickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   late DateTime _selectedDate;
   ViewType _currentView = ViewType.day;
   late List<AgendaEvent> _events;
   final ScrollController _dayScrollController = ScrollController();
+  
+  // Animation controllers
+  late AnimationController _fadeController;
+  late AnimationController _slideController;
+  late AnimationController _flashController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+  late Animation<double> _flashAnimation;
+  
+  // État
+  bool _showFlashMinuteBar = false;
+  int _activeFlashMinutes = 0;
+  Timer? _refreshTimer;
+  CalendarFormat _calendarFormat = CalendarFormat.month;
 
   @override
   void initState() {
     super.initState();
     _selectedDate = DateTime.now();
+    _initializeAnimations();
     _initializeEvents();
+    _startRefreshTimer();
     
-    // Scroll vers l'heure actuelle au démarrage
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_currentView == ViewType.day) {
         _scrollToCurrentHour();
@@ -127,20 +170,78 @@ class _ProAgendaHomePageState extends State<ProAgendaHomePage> {
     });
   }
 
+  void _initializeAnimations() {
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    
+    _slideController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+    
+    _flashController = AnimationController(
+      duration: const Duration(milliseconds: 1000),
+      vsync: this,
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut),
+    );
+    
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, -1),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.elasticOut));
+    
+    _flashAnimation = Tween<double>(begin: 0.8, end: 1.2).animate(
+      CurvedAnimation(parent: _flashController, curve: Curves.elasticInOut),
+    );
+
+    _fadeController.forward();
+    _slideController.forward();
+    _flashController.repeat(reverse: true);
+  }
+
   @override
   void dispose() {
     _dayScrollController.dispose();
+    _fadeController.dispose();
+    _slideController.dispose();
+    _flashController.dispose();
+    _refreshTimer?.cancel();
     super.dispose();
+  }
+
+  void _startRefreshTimer() {
+    _refreshTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          _updateFlashMinuteStatus();
+        });
+      }
+    });
+  }
+
+  void _updateFlashMinuteStatus() {
+    _activeFlashMinutes = _events.where((e) => 
+      e.isFlashMinute && 
+      e.flashMinuteExpiry != null &&
+      e.flashMinuteExpiry!.isAfter(DateTime.now())
+    ).length;
+    
+    _showFlashMinuteBar = _activeFlashMinutes > 0;
   }
 
   void _scrollToCurrentHour() {
     final hour = DateTime.now().hour;
-    final targetOffset = (hour - 2) * 60.0; // 60px par heure, décalé de 2h
+    final targetOffset = (hour - 2) * 80.0;
     if (_dayScrollController.hasClients && targetOffset > 0) {
       _dayScrollController.animateTo(
         targetOffset,
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeOut,
+        duration: const Duration(milliseconds: 800),
+        curve: Curves.easeInOutCubic,
       );
     }
   }
@@ -148,67 +249,103 @@ class _ProAgendaHomePageState extends State<ProAgendaHomePage> {
   void _initializeEvents() {
     final now = DateTime.now();
     _events = [
-      // Événement long de 3h
       AgendaEvent(
         id: '1',
-        title: 'Séance Tribal Bras Complet',
+        title: 'Séance Dragon Oriental',
         clientName: 'Jean Martin',
         startTime: DateTime(now.year, now.month, now.day, 14, 0),
         endTime: DateTime(now.year, now.month, now.day, 17, 0),
         type: EventType.session,
-        description: 'Session 2/3 - Finalisation du tribal sur le bras',
+        description: 'Session 2/3 - Finalisation du dragon',
         location: 'Salon principal',
         locationType: LocationType.shop,
         isConfirmed: true,
+        phoneNumber: '+33 6 12 34 56 78',
+        email: 'jean.martin@email.com',
+        price: 450.0,
       ),
-      // Consultation courte
+      
       AgendaEvent(
         id: '2',
-        title: 'Consultation Rose',
+        title: 'Consultation Rose Minimaliste',
         clientName: 'Marie Dubois',
         startTime: DateTime(now.year, now.month, now.day, 9, 0),
         endTime: DateTime(now.year, now.month, now.day, 10, 0),
         type: EventType.consultation,
-        description: 'Première consultation',
+        description: 'Première consultation pour tatouage poignet',
         location: 'Bureau consultation',
         locationType: LocationType.shop,
         isConfirmed: true,
+        phoneNumber: '+33 6 98 76 54 32',
+        email: 'marie.dubois@email.com',
+        price: 80.0,
       ),
-      // Convention (weekend)
+      
       AgendaEvent(
         id: '3',
-        title: 'Convention Ink Masters',
-        startTime: DateTime(now.year, now.month, now.day + 5, 10, 0),
-        endTime: DateTime(now.year, now.month, now.day + 5, 18, 0),
+        title: 'Flash Minute - Tribal',
+        clientName: 'Alex Rodriguez',
+        startTime: DateTime(now.year, now.month, now.day, 11, 30),
+        endTime: DateTime(now.year, now.month, now.day, 13, 0),
+        type: EventType.flashMinute,
+        description: 'Flash réservé via Flash Minute - Tribal moderne',
+        location: 'Salon principal',
+        locationType: LocationType.shop,
+        isConfirmed: true,
+        phoneNumber: '+33 6 55 44 33 22',
+        email: 'alex.rodriguez@email.com',
+        price: 120.0,
+        isFlashMinute: true,
+        flashMinuteDiscount: 25,
+        flashMinuteExpiry: DateTime.now().add(const Duration(hours: 6)),
+      ),
+      
+      AgendaEvent(
+        id: '4',
+        title: 'Session Biomécanique',
+        clientName: 'Tom Wilson',
+        startTime: DateTime(now.year, now.month, now.day + 1, 15, 0),
+        endTime: DateTime(now.year, now.month, now.day + 1, 18, 0),
         type: EventType.session,
-        description: 'Stand Convention Paris',
-        location: 'Parc des Expositions - Paris',
+        description: 'Session complète bras - Art biomécanique',
+        location: 'Salon principal',
+        locationType: LocationType.shop,
+        isConfirmed: true,
+        phoneNumber: '+33 6 11 22 33 44',
+        email: 'tom.wilson@email.com',
+        price: 600.0,
+      ),
+      
+      AgendaEvent(
+        id: '5',
+        title: 'Retouche Phoenix',
+        clientName: 'Sophie Chen',
+        startTime: DateTime(now.year, now.month, now.day + 2, 10, 0),
+        endTime: DateTime(now.year, now.month, now.day + 2, 11, 30),
+        type: EventType.retouche,
+        description: 'Retouche couleurs phoenix dos',
+        location: 'Salon principal',
+        locationType: LocationType.shop,
+        isConfirmed: true,
+        phoneNumber: '+33 6 77 88 99 00',
+        email: 'sophie.chen@email.com',
+        price: 150.0,
+      ),
+      
+      AgendaEvent(
+        id: '6',
+        title: 'Convention Tattoo Paris',
+        startTime: DateTime(now.year, now.month, now.day + 3, 10, 0),
+        endTime: DateTime(now.year, now.month, now.day + 3, 18, 0),
+        type: EventType.personnel,
+        description: 'Participation convention Paris Expo',
+        location: 'Paris Expo Porte de Versailles',
         locationType: LocationType.convention,
         isConfirmed: true,
       ),
-      // Guest spot
-      AgendaEvent(
-        id: '4',
-        title: 'Guest Spot Lyon',
-        startTime: DateTime(now.year, now.month, now.day + 7, 13, 0),
-        endTime: DateTime(now.year, now.month, now.day + 7, 19, 0),
-        type: EventType.session,
-        description: 'Guest dans salon partenaire',
-        location: 'Tattoo Shop Lyon',
-        locationType: LocationType.guest,
-        isConfirmed: true,
-      ),
-      // Pause
-      AgendaEvent(
-        id: '5',
-        title: 'Pause déjeuner',
-        startTime: DateTime(now.year, now.month, now.day, 12, 0),
-        endTime: DateTime(now.year, now.month, now.day, 13, 30),
-        type: EventType.personnel,
-        description: 'Pause déjeuner',
-        locationType: LocationType.shop,
-      ),
     ];
+    
+    _updateFlashMinuteStatus();
   }
 
   List<AgendaEvent> _getEventsForDay(DateTime day) {
@@ -216,17 +353,42 @@ class _ProAgendaHomePageState extends State<ProAgendaHomePage> {
       ..sort((a, b) => a.startTime.compareTo(b.startTime));
   }
 
-  List<AgendaEvent> _getEventsForWeek(DateTime startOfWeek) {
-    final endOfWeek = startOfWeek.add(const Duration(days: 6));
-    return _events.where((event) {
-      return event.startTime.isAfter(startOfWeek.subtract(const Duration(days: 1))) &&
-             event.startTime.isBefore(endOfWeek.add(const Duration(days: 1)));
-    }).toList();
-  }
-
-  DateTime _getStartOfWeek(DateTime date) {
-    final weekday = date.weekday;
-    return date.subtract(Duration(days: weekday - 1));
+  List<AgendaEvent> _getFreeSlots(DateTime day) {
+    final dayEvents = _getEventsForDay(day)
+        .where((e) => e.isConfirmed && e.type != EventType.personnel)
+        .toList();
+    
+    List<AgendaEvent> freeSlots = [];
+    final startHour = 9;
+    final endHour = 20;
+    
+    DateTime currentTime = DateTime(day.year, day.month, day.day, startHour, 0);
+    final endTime = DateTime(day.year, day.month, day.day, endHour, 0);
+    
+    while (currentTime.isBefore(endTime)) {
+      final slotEnd = currentTime.add(const Duration(hours: 2));
+      
+      bool isFree = !dayEvents.any((event) =>
+        (currentTime.isBefore(event.endTime) && slotEnd.isAfter(event.startTime))
+      );
+      
+      if (isFree && slotEnd.isBefore(endTime)) {
+        freeSlots.add(AgendaEvent(
+          id: 'free_${currentTime.hour}',
+          title: 'Créneau libre',
+          startTime: currentTime,
+          endTime: slotEnd,
+          type: EventType.personnel,
+          description: 'Disponible pour Flash Minute',
+          locationType: LocationType.shop,
+          isConfirmed: false,
+        ));
+      }
+      
+      currentTime = currentTime.add(const Duration(minutes: 30));
+    }
+    
+    return freeSlots;
   }
 
   @override
@@ -241,266 +403,326 @@ class _ProAgendaHomePageState extends State<ProAgendaHomePage> {
       },
       child: Scaffold(
         key: _scaffoldKey,
-        backgroundColor: const Color(0xFF000000), // Noir profond
         endDrawer: const CustomDrawerKipik(),
-        body: SafeArea(
-          child: Column(
-            children: [
-              _buildTopBar(),
-              _buildNavigationHeader(),
-              Expanded(child: _buildCurrentView()),
-            ],
-          ),
+        appBar: CustomAppBarKipik(
+          title: 'Agenda Pro',
+          showBackButton: true,
+          useProStyle: true,
+          actions: [
+            // ✅ BOUTONS D'ACTIONS DANS L'APPBAR
+            IconButton(
+              icon: const Icon(Icons.sync_rounded, color: Colors.white, size: 24),
+              onPressed: _syncCalendar,
+              tooltip: 'Synchroniser calendriers',
+            ),
+            IconButton(
+              icon: const Icon(Icons.settings_rounded, color: Colors.white, size: 24),
+              onPressed: _showSettings,
+              tooltip: 'Paramètres',
+            ),
+          ],
         ),
-        floatingActionButton: _buildFloatingActionButton(),
+        floatingActionButton: _buildSmartFAB(),
+        body: Stack(
+          children: [
+            // ✅ BACKGROUND CHARBON COMME TES AUTRES PAGES
+            Image.asset(
+              'assets/background_charbon.png',
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+            ),
+            
+            // ✅ CONTENU AVEC STRUCTURE KIPIK
+            SafeArea(
+              child: FadeTransition(
+                opacity: _fadeAnimation,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 8),
+                      
+                      // ✅ BARRE FLASH MINUTE SI ACTIVE
+                      if (_showFlashMinuteBar) _buildFlashMinuteBar(),
+                      
+                      // ✅ CONTRÔLES DE VUE AVANCÉS
+                      _buildAdvancedViewControls(),
+                      
+                      const SizedBox(height: 16),
+                      
+                      // ✅ CONTENU PRINCIPAL
+                      Expanded(child: _buildCurrentView()),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildTopBar() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            const Color(0xFF000000), // Noir pur
-            const Color(0xFF1A1A1A), // Noir légèrement plus clair
+  Widget _buildFlashMinuteBar() {
+    return SlideTransition(
+      position: _slideAnimation,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Colors.orange.withOpacity(0.9),
+              Colors.orange.withOpacity(0.7),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.orange.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            AnimatedBuilder(
+              animation: _flashAnimation,
+              builder: (context, child) {
+                return Transform.scale(
+                  scale: _flashAnimation.value,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.flash_on, color: Colors.white, size: 20),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Flash Minute Actif',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'PermanentMarker',
+                    ),
+                  ),
+                  Text(
+                    '$_activeFlashMinutes flash(s) en promotion',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      fontFamily: 'Roboto',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            OutlinedButton(
+              onPressed: _goToFlashMinuteDashboard,
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Colors.white),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'Gérer',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'Roboto',
+                ),
+              ),
+            ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildAdvancedViewControls() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Column(
         children: [
-          // Première ligne : Menu + Titre + Date + Paramètres
-          Container(
-            height: 64,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.menu, size: 24, color: Colors.white),
-                  onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-                ),
-                
-                const SizedBox(width: 8),
-                
-                const Text(
-                  'Agenda',
-                  style: TextStyle(
-                    fontFamily: 'PermanentMarker',
-                    fontSize: 20,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w400,
+          // ✅ PREMIÈRE LIGNE : SÉLECTEUR DE VUE + DATE
+          Row(
+            children: [
+              // Sélecteur de vue
+              Expanded(
+                flex: 2,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: ViewType.values.map((view) {
+                      final isSelected = _currentView == view;
+                      return Expanded(
+                        child: GestureDetector(
+                          onTap: () => _changeView(view),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: isSelected ? KipikTheme.rouge : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              _getViewLabel(view),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontFamily: 'PermanentMarker',
+                                fontSize: 14,
+                                color: isSelected ? Colors.white : Colors.black87,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
                   ),
                 ),
-                
-                const Spacer(),
-                
-                // Date picker
-                GestureDetector(
-                  onTap: _showDatePicker,
+              ),
+              
+              const SizedBox(width: 16),
+              
+              // Sélecteur de date
+              Expanded(
+                flex: 3,
+                child: GestureDetector(
+                  onTap: _showPremiumDatePicker,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          const Color(0xFF2A2A2A),
-                          const Color(0xFF1A1A1A),
+                          KipikTheme.rouge.withOpacity(0.1),
+                          KipikTheme.rouge.withOpacity(0.05),
                         ],
                       ),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFF444444)),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: KipikTheme.rouge.withOpacity(0.3)),
                     ),
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          _getDateText(),
-                          style: const TextStyle(
-                            fontFamily: 'Roboto',
-                            fontSize: 13,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w500,
+                        Icon(Icons.calendar_today, size: 16, color: KipikTheme.rouge),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _getFormattedDateRange(),
+                            style: TextStyle(
+                              fontFamily: 'Roboto',
+                              fontSize: 14,
+                              color: KipikTheme.rouge,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.arrow_drop_down,
-                          size: 18,
-                          color: Colors.white70,
-                        ),
+                        Icon(Icons.expand_more, size: 16, color: KipikTheme.rouge),
                       ],
                     ),
                   ),
                 ),
-                
-                const SizedBox(width: 8),
-                
-                // Bouton paramètres
-                IconButton(
-                  icon: const Icon(Icons.settings_outlined, size: 20, color: Colors.white),
-                  onPressed: _showSettings,
-                  padding: const EdgeInsets.all(8),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
           
-          // Deuxième ligne : Navigation (Flèches + Aujourd'hui)
-          Container(
-            height: 48,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: const BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: Color(0xFF333333), width: 1),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.chevron_left, size: 24, color: Colors.white),
-                  onPressed: _goToPrevious,
-                  padding: const EdgeInsets.all(8),
-                ),
-                
-                const SizedBox(width: 16),
-                
-                TextButton(
-                  onPressed: _goToToday,
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                    backgroundColor: Colors.transparent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          const Color(0xFF2A2A2A),
-                          const Color(0xFF1A1A1A),
-                        ],
+          const SizedBox(height: 12),
+          
+          // ✅ SECONDE LIGNE : NAVIGATION + STATISTIQUES
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Navigation
+              Row(
+                children: [
+                  _buildNavButton(Icons.chevron_left, _goToPrevious),
+                  const SizedBox(width: 12),
+                  TextButton(
+                    onPressed: _goToToday,
+                    style: TextButton.styleFrom(
+                      backgroundColor: KipikTheme.rouge.withOpacity(0.1),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: const Color(0xFF444444)),
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    child: const Text(
-                      'Aujourd\'hui',
+                    child: Text(
+                      "Aujourd'hui",
                       style: TextStyle(
                         fontFamily: 'Roboto',
-                        fontSize: 14,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w500,
+                        fontSize: 12,
+                        color: KipikTheme.rouge,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
+                  const SizedBox(width: 12),
+                  _buildNavButton(Icons.chevron_right, _goToNext),
+                ],
+              ),
+              
+              // Statistiques période
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                
-                const SizedBox(width: 16),
-                
-                IconButton(
-                  icon: const Icon(Icons.chevron_right, size: 24, color: Colors.white),
-                  onPressed: _goToNext,
-                  padding: const EdgeInsets.all(8),
+                child: Text(
+                  _getPeriodInfo(),
+                  style: const TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 12,
+                    color: Colors.black54,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildNavigationHeader() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            const Color(0xFF1A1A1A),
-            const Color(0xFF000000),
-          ],
+  Widget _buildNavButton(IconData icon, VoidCallback onPressed) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: KipikTheme.rouge.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: KipikTheme.rouge.withOpacity(0.3)),
         ),
-        border: const Border(
-          bottom: BorderSide(color: Color(0xFF333333), width: 1),
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  const Color(0xFF2A2A2A),
-                  const Color(0xFF1A1A1A),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFF444444)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: ViewType.values.map((view) {
-                final isSelected = _currentView == view;
-                return GestureDetector(
-                  onTap: () {
-                    setState(() => _currentView = view);
-                    if (view == ViewType.day) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        _scrollToCurrentHour();
-                      });
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      gradient: isSelected ? LinearGradient(
-                        colors: [
-                          KipikTheme.rouge.withOpacity(0.8),
-                          KipikTheme.rouge,
-                        ],
-                      ) : null,
-                      borderRadius: BorderRadius.circular(6),
-                      boxShadow: isSelected ? [
-                        BoxShadow(
-                          color: KipikTheme.rouge.withOpacity(0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ] : null,
-                    ),
-                    child: Text(
-                      _getViewLabel(view),
-                      style: TextStyle(
-                        fontFamily: 'Roboto',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: isSelected ? Colors.white : const Color(0xFFBBBBBB),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          
-          const Spacer(),
-          
-          Text(
-            _getPeriodInfo(),
-            style: const TextStyle(
-              fontFamily: 'Roboto',
-              fontSize: 14,
-              color: Colors.white70,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
+        child: Icon(icon, size: 20, color: KipikTheme.rouge),
       ),
     );
   }
@@ -508,130 +730,38 @@ class _ProAgendaHomePageState extends State<ProAgendaHomePage> {
   Widget _buildCurrentView() {
     switch (_currentView) {
       case ViewType.day:
-        return Column(
-          children: [
-            Expanded(child: _buildDayView()),
-            _buildEventLegend(),
-          ],
-        );
+        return _buildPremiumDayView();
       case ViewType.week:
-        return Column(
-          children: [
-            Expanded(child: _buildWeekView()),
-            _buildEventLegend(),
-          ],
-        );
+        return _buildPremiumWeekView();
       case ViewType.month:
-        return Column(
-          children: [
-            Expanded(child: _buildMonthView()),
-            _buildEventLegend(),
-          ],
-        );
+        return _buildPremiumMonthView();
     }
   }
 
-  Widget _buildEventLegend() {
+  Widget _buildPremiumDayView() {
+    final events = _getEventsForDay(_selectedDate);
+    final freeSlots = _getFreeSlots(_selectedDate);
+    
     return Container(
-      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            const Color(0xFF000000),
-            const Color(0xFF1A1A1A),
-          ],
-        ),
-        border: const Border(
-          top: BorderSide(color: Color(0xFF333333), width: 1),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text(
-            'Types d\'événements',
-            style: TextStyle(
-              fontFamily: 'Roboto',
-              fontSize: 11,
-              color: Colors.white70,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: EventType.values.map((type) {
-                final event = AgendaEvent(
-                  id: '', 
-                  title: '', 
-                  startTime: DateTime.now(), 
-                  endTime: DateTime.now(),
-                  type: type,
-                );
-                return Container(
-                  margin: const EdgeInsets.only(right: 12),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          gradient: event.type == EventType.consultation
-                              ? LinearGradient(
-                                  colors: [
-                                    KipikTheme.rouge.withOpacity(0.8),
-                                    KipikTheme.rouge,
-                                  ],
-                                )
-                              : null,
-                          color: event.type != EventType.consultation ? event.eventColor : null,
-                          borderRadius: BorderRadius.circular(2),
-                          border: Border.all(
-                            color: Colors.white24,
-                            width: 0.5,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        event.typeLabel,
-                        style: const TextStyle(
-                          fontFamily: 'Roboto',
-                          fontSize: 9,
-                          color: Colors.white,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
+        color: Colors.white.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildDayView() {
-    final events = _getEventsForDay(_selectedDate);
-    
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF000000),
-      ),
       child: Column(
         children: [
-          _buildDayHeader(_selectedDate),
+          _buildDayHeader(),
           Expanded(
             child: SingleChildScrollView(
               controller: _dayScrollController,
-              child: _buildDayGrid(events, _selectedDate),
+              physics: const BouncingScrollPhysics(),
+              child: _buildDayTimeline(events, freeSlots),
             ),
           ),
         ],
@@ -639,60 +769,91 @@ class _ProAgendaHomePageState extends State<ProAgendaHomePage> {
     );
   }
 
-  Widget _buildDayHeader(DateTime date) {
+  Widget _buildDayHeader() {
+    final isToday = _isToday(_selectedDate);
+    final events = _getEventsForDay(_selectedDate);
+    final totalRevenue = events.where((e) => e.price != null).fold<double>(
+      0, (sum, e) => sum + e.price!
+    );
+    
     return Container(
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFF1A1A1A),
-            const Color(0xFF000000),
+            KipikTheme.rouge.withOpacity(0.9),
+            KipikTheme.rouge.withOpacity(0.7),
           ],
         ),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      padding: const EdgeInsets.symmetric(vertical: 16),
       child: Row(
         children: [
-          const SizedBox(width: 80),
-          Expanded(
+          // ✅ DATE COMME TES CARDS
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: isToday ? Colors.white : Colors.white.withOpacity(0.9),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: isToday ? [
+                BoxShadow(
+                  color: Colors.white.withOpacity(0.5),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ] : null,
+            ),
             child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  _getDayAbbreviation(date),
-                  style: const TextStyle(
+                  _getDayAbbreviation(_selectedDate),
+                  style: TextStyle(
                     fontFamily: 'Roboto',
-                    fontSize: 12,
-                    color: Colors.white70,
+                    fontSize: 10,
+                    color: isToday ? KipikTheme.rouge : Colors.black87,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    gradient: _isToday(date) ? LinearGradient(
-                      colors: [
-                        KipikTheme.rouge.withOpacity(0.8),
-                        KipikTheme.rouge,
-                      ],
-                    ) : null,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: _isToday(date) ? Colors.transparent : Colors.white24,
-                      width: 1,
-                    ),
+                Text(
+                  '${_selectedDate.day}',
+                  style: TextStyle(
+                    fontFamily: 'PermanentMarker',
+                    fontSize: 20,
+                    fontWeight: FontWeight.w400,
+                    color: isToday ? KipikTheme.rouge : Colors.black87,
                   ),
-                  child: Center(
-                    child: Text(
-                      '${date.day}',
-                      style: TextStyle(
-                        fontFamily: 'Roboto',
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
+                ),
+              ],
+            ),
+          ),
+          
+          const SizedBox(width: 20),
+          
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _getFullDateString(_selectedDate),
+                  style: const TextStyle(
+                    fontFamily: 'PermanentMarker',
+                    fontSize: 18,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w400,
                   ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    _buildDayStatChip('${events.length} RDV', Icons.event, Colors.blue),
+                    _buildDayStatChip('${totalRevenue.toInt()}€', Icons.euro, Colors.green),
+                    if (_getFreeSlots(_selectedDate).isNotEmpty)
+                      _buildDayStatChip('${_getFreeSlots(_selectedDate).length} créneaux libres', Icons.schedule, Colors.orange),
+                  ],
                 ),
               ],
             ),
@@ -702,628 +863,468 @@ class _ProAgendaHomePageState extends State<ProAgendaHomePage> {
     );
   }
 
-  Widget _buildDayGrid(List<AgendaEvent> events, DateTime date) {
+  Widget _buildDayStatChip(String text, IconData icon, Color color) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF000000),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withOpacity(0.3)),
       ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: Colors.white),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: const TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 11,
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDayTimeline(List<AgendaEvent> events, List<AgendaEvent> freeSlots) {
+    return Container(
+      padding: const EdgeInsets.all(20),
       child: Column(
         children: List.generate(24, (hour) {
-          return Container(
-            height: 60,
-            decoration: const BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: Color(0xFF222222), width: 1),
-              ),
-            ),
-            child: Row(
-              children: [
-                // Colonne heure
-                Container(
-                  width: 80,
-                  padding: const EdgeInsets.only(right: 16),
-                  child: Text(
-                    '${hour.toString().padLeft(2, '0')}:00',
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                      fontFamily: 'Roboto',
-                      fontSize: 12,
-                      color: Colors.white70,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                
-                // Zone événements
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Stack(
-                      children: _buildEventsForHour(events, hour, date),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
+          return _buildHourSlot(hour, events, freeSlots);
         }),
       ),
     );
   }
 
-  List<Widget> _buildEventsForHour(List<AgendaEvent> events, int hour, DateTime date) {
-    List<Widget> widgets = [];
+  Widget _buildHourSlot(int hour, List<AgendaEvent> events, List<AgendaEvent> freeSlots) {
+    final hourEvents = events.where((e) => e.startTime.hour == hour).toList();
+    final hourFreeSlots = freeSlots.where((e) => e.startTime.hour == hour).toList();
+    final isCurrentHour = DateTime.now().hour == hour && _isToday(_selectedDate);
     
-    for (AgendaEvent event in events) {
-      // Vérifier si l'événement commence dans cette heure
-      if (event.startTime.hour == hour) {
-        
-        // Calculer la hauteur totale de l'événement en minutes
-        final totalMinutes = event.duration.inMinutes;
-        final pixelsPerMinute = 1.0; // 1 pixel par minute
-        final eventHeight = (totalMinutes * pixelsPerMinute).clamp(40.0, 300.0); // Hauteur minimum 40px, maximum 300px
-        
-        // Position de départ basée sur les minutes
-        final startMinutes = event.startTime.minute;
-        final top = startMinutes * pixelsPerMinute;
-        
-        widgets.add(
-          Positioned(
-            top: top,
-            left: 0,
-            right: 8,
-            height: eventHeight,
-            child: GestureDetector(
-              onTap: () => _showEventDetails(event),
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 2),
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  gradient: event.type == EventType.consultation
-                      ? LinearGradient(
-                          colors: [
-                            KipikTheme.rouge.withOpacity(0.9),
-                            KipikTheme.rouge,
-                          ],
-                        )
-                      : null,
-                  color: event.type != EventType.consultation ? event.eventColor : null,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: Colors.white24,
-                    width: 0.5,
+    return Container(
+      height: 80,
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: isCurrentHour ? KipikTheme.rouge.withOpacity(0.3) : Colors.grey.withOpacity(0.2),
+            width: isCurrentHour ? 2 : 1,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          // ✅ HEURE STYLE KIPIK AVEC INDICATEUR ACTUEL
+          SizedBox(
+            width: 80,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '${hour.toString().padLeft(2, '0')}:00',
+                  style: TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 14,
+                    color: isCurrentHour ? KipikTheme.rouge : Colors.black54,
+                    fontWeight: isCurrentHour ? FontWeight.bold : FontWeight.w500,
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: event.type == EventType.consultation 
-                          ? KipikTheme.rouge.withOpacity(0.3)
-                          : Colors.black.withOpacity(0.5),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
                 ),
+                if (isCurrentHour)
+                  Container(
+                    width: 4,
+                    height: 4,
+                    margin: const EdgeInsets.only(top: 4),
+                    decoration: BoxDecoration(
+                      color: KipikTheme.rouge,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          
+          // ✅ ÉVÉNEMENTS AVEC POSITIONNEMENT DYNAMIQUE
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Stack(
+                children: [
+                  ...hourEvents.map((event) => _buildEventCard(event)),
+                  ...hourFreeSlots.map((slot) => _buildFreeSlotCard(slot)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEventCard(AgendaEvent event) {
+    final duration = event.duration.inMinutes;
+    final height = (duration * 0.8).clamp(40.0, 200.0);
+    
+    return Positioned(
+      top: event.startTime.minute * 0.8,
+      left: 0,
+      right: 0,
+      height: height,
+      child: GestureDetector(
+        onTap: () => _showEventDetails(event),
+        onLongPress: event.canActivateFlashMinute ? () => _showFlashMinuteDialog(event) : null,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 4),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                event.eventColor,
+                event.eventColor.withOpacity(0.8),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: event.eventColor.withOpacity(0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Titre toujours affiché
                     Row(
                       children: [
                         Expanded(
                           child: Text(
                             event.title,
                             style: const TextStyle(
-                              fontFamily: 'Roboto',
-                              fontSize: 12,
+                              fontFamily: 'PermanentMarker',
+                              fontSize: 14,
                               color: Colors.white,
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w400,
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        Icon(
-                          event.locationIcon,
-                          size: 12,
-                          color: Colors.white70,
-                        ),
-                      ],
-                    ),
-                    
-                    // Client si hauteur > 50
-                    if (event.clientName != null && eventHeight > 50) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        event.clientName!,
-                        style: const TextStyle(
-                          fontFamily: 'Roboto',
-                          fontSize: 10,
-                          color: Colors.white70,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                    
-                    // Horaires si hauteur > 70
-                    if (eventHeight > 70) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        '${event.startTime.hour.toString().padLeft(2, '0')}:${event.startTime.minute.toString().padLeft(2, '0')} - ${event.endTime.hour.toString().padLeft(2, '0')}:${event.endTime.minute.toString().padLeft(2, '0')}',
-                        style: const TextStyle(
-                          fontFamily: 'Roboto',
-                          fontSize: 9,
-                          color: Colors.white60,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      }
-    }
-    
-    return widgets;
-  }
-
-  Widget _buildWeekView() {
-    final startOfWeek = _getStartOfWeek(_selectedDate);
-    
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF000000),
-      ),
-      child: Column(
-        children: [
-          _buildWeekHeader(startOfWeek),
-          Expanded(
-            child: SingleChildScrollView(
-              child: _buildWeekGrid(startOfWeek),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWeekHeader(DateTime startOfWeek) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFF1A1A1A),
-            const Color(0xFF000000),
-          ],
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Row(
-        children: [
-          const SizedBox(width: 50), // Correspondre à la nouvelle largeur
-          ...List.generate(7, (index) {
-            final day = startOfWeek.add(Duration(days: index));
-            final isToday = _isToday(day);
-            final dayEvents = _getEventsForDay(day);
-            
-            return Expanded(
-              child: Column(
-                children: [
-                  Text(
-                    _getDayAbbreviation(day),
-                    style: const TextStyle(
-                      fontFamily: 'Roboto',
-                      fontSize: 11, // Police légèrement plus petite
-                      color: Colors.white70,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
-                    width: 28, // Légèrement plus petit
-                    height: 28,
-                    decoration: BoxDecoration(
-                      gradient: isToday 
-                          ? LinearGradient(
-                              colors: [
-                                KipikTheme.rouge.withOpacity(0.8),
-                                KipikTheme.rouge,
-                              ],
-                            )
-                          : dayEvents.isNotEmpty
-                              ? LinearGradient(
-                                  colors: [
-                                    KipikTheme.rouge.withOpacity(0.3),
-                                    KipikTheme.rouge.withOpacity(0.5),
-                                  ],
-                                )
-                              : null,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: isToday || dayEvents.isNotEmpty 
-                            ? Colors.transparent 
-                            : Colors.white24,
-                        width: 1,
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        '${day.day}',
-                        style: const TextStyle(
-                          fontFamily: 'Roboto',
-                          fontSize: 13, // Police légèrement plus petite
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWeekGrid(DateTime startOfWeek) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF000000),
-      ),
-      child: Column(
-        children: List.generate(24, (hour) {
-          return Container(
-            height: 60,
-            decoration: const BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: Color(0xFF222222), width: 1),
-              ),
-            ),
-            child: Row(
-              children: [
-                // Colonne heure plus petite en vue semaine
-                Container(
-                  width: 50, // Réduit de 80 à 50
-                  padding: const EdgeInsets.only(right: 8),
-                  child: Text(
-                    '${hour.toString().padLeft(2, '0')}:00',
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                      fontFamily: 'Roboto',
-                      fontSize: 10, // Police plus petite
-                      color: Colors.white70,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                
-                // Colonnes jours
-                ...List.generate(7, (dayIndex) {
-                  final day = startOfWeek.add(Duration(days: dayIndex));
-                  final dayEvents = _getEventsForDay(day);
-                  
-                  return Expanded(
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        border: Border(
-                          right: BorderSide(color: Color(0xFF222222), width: 1),
-                        ),
-                      ),
-                      child: Stack(
-                        children: _buildEventsForHourWeek(dayEvents, hour, day),
-                      ),
-                    ),
-                  );
-                }),
-              ],
-            ),
-          );
-        }),
-      ),
-    );
-  }
-
-  List<Widget> _buildEventsForHourWeek(List<AgendaEvent> events, int hour, DateTime date) {
-    List<Widget> widgets = [];
-    
-    for (AgendaEvent event in events) {
-      // Vérifier si l'événement commence dans cette heure
-      if (event.startTime.hour == hour) {
-        
-        // Calculer la hauteur totale de l'événement en minutes
-        final totalMinutes = event.duration.inMinutes;
-        final pixelsPerMinute = 1.0;
-        final eventHeight = (totalMinutes * pixelsPerMinute).clamp(20.0, 180.0); // Plus petit pour la vue semaine
-        
-        // Position de départ basée sur les minutes
-        final startMinutes = event.startTime.minute;
-        final top = startMinutes * pixelsPerMinute;
-        
-        widgets.add(
-          Positioned(
-            top: top,
-            left: 2,
-            right: 2,
-            height: eventHeight,
-            child: GestureDetector(
-              onTap: () => _showEventDetails(event),
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 1),
-                padding: const EdgeInsets.all(4), // Padding encore plus réduit
-                decoration: BoxDecoration(
-                  gradient: event.type == EventType.consultation
-                      ? LinearGradient(
-                          colors: [
-                            KipikTheme.rouge.withOpacity(0.9),
-                            KipikTheme.rouge,
-                          ],
-                        )
-                      : null,
-                  color: event.type != EventType.consultation ? event.eventColor : null,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                    color: Colors.white24,
-                    width: 0.5,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Titre seulement
-                    Text(
-                      event.title,
-                      style: const TextStyle(
-                        fontFamily: 'Roboto',
-                        fontSize: 9, // Police très petite pour la vue semaine
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    
-                    // Client si hauteur > 30
-                    if (event.clientName != null && eventHeight > 30) ...[
-                      Text(
-                        event.clientName!,
-                        style: const TextStyle(
-                          fontFamily: 'Roboto',
-                          fontSize: 8,
-                          color: Colors.white70,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      }
-    }
-    
-    return widgets;
-  }
-
-  Widget _buildMonthView() {
-    final firstDayOfMonth = DateTime(_selectedDate.year, _selectedDate.month, 1);
-    final lastDayOfMonth = DateTime(_selectedDate.year, _selectedDate.month + 1, 0);
-    final startDate = firstDayOfMonth.subtract(Duration(days: firstDayOfMonth.weekday - 1));
-    
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF000000),
-      ),
-      child: Column(
-        children: [
-          // En-tête des jours de la semaine
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  const Color(0xFF1A1A1A),
-                  const Color(0xFF000000),
-                ],
-              ),
-              border: const Border(
-                bottom: BorderSide(color: Color(0xFF333333), width: 1),
-              ),
-            ),
-            child: Row(
-              children: ['LUN', 'MAR', 'MER', 'JEU', 'VEN', 'SAM', 'DIM'].map((day) =>
-                Expanded(
-                  child: Text(
-                    day,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontFamily: 'Roboto',
-                      fontSize: 12,
-                      color: Colors.white70,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ).toList(),
-            ),
-          ),
-          
-          // Grille du mois
-          Expanded(
-            child: GridView.builder(
-              padding: const EdgeInsets.all(1),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 7,
-                childAspectRatio: 0.8,
-              ),
-              itemCount: 42, // 6 semaines * 7 jours
-              itemBuilder: (context, index) {
-                final date = startDate.add(Duration(days: index));
-                final isCurrentMonth = date.month == _selectedDate.month;
-                final isToday = _isToday(date);
-                final isSelected = _isSameDay(date, _selectedDate);
-                final dayEvents = _getEventsForDay(date);
-                
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _selectedDate = date;
-                      _currentView = ViewType.day;
-                    });
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.all(1),
-                    decoration: BoxDecoration(
-                      gradient: isSelected 
-                          ? LinearGradient(
-                              colors: [
-                                KipikTheme.rouge.withOpacity(0.3),
-                                KipikTheme.rouge.withOpacity(0.5),
-                              ],
-                            )
-                          : null,
-                      color: !isSelected ? const Color(0xFF000000) : null,
-                      border: Border.all(
-                        color: isSelected 
-                            ? KipikTheme.rouge 
-                            : const Color(0xFF222222),
-                        width: isSelected ? 2 : 1,
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 8),
-                        Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(
-                            gradient: isToday ? LinearGradient(
-                              colors: [
-                                KipikTheme.rouge.withOpacity(0.8),
-                                KipikTheme.rouge,
-                              ],
-                            ) : null,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: isToday ? Colors.transparent : Colors.white24,
-                              width: 1,
+                        if (event.isFlashMinute)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.orange,
+                              borderRadius: BorderRadius.circular(4),
                             ),
-                          ),
-                          child: Center(
-                            child: Text(
-                              '${date.day}',
+                            child: const Text(
+                              'FLASH',
                               style: TextStyle(
-                                fontFamily: 'Roboto',
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: isCurrentMonth 
-                                    ? Colors.white
-                                    : const Color(0xFF666666),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Expanded(
-                          child: Column(
-                            children: dayEvents.take(2).map((event) => // Limité à 2 événements pour éviter l'overflow
-                              Container(
-                                width: double.infinity,
-                                height: 8, // Hauteur réduite
-                                margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 0.5),
-                                decoration: BoxDecoration(
-                                  gradient: event.type == EventType.consultation
-                                      ? LinearGradient(
-                                          colors: [
-                                            KipikTheme.rouge.withOpacity(0.8),
-                                            KipikTheme.rouge,
-                                          ],
-                                        )
-                                      : null,
-                                  color: event.type != EventType.consultation ? event.eventColor : null,
-                                  borderRadius: BorderRadius.circular(1),
-                                ),
-                                child: event.locationType != LocationType.shop
-                                    ? Icon(
-                                        event.locationIcon,
-                                        size: 6, // Icône plus petite
-                                        color: Colors.white,
-                                      )
-                                    : null,
-                              ),
-                            ).toList(),
-                          ),
-                        ),
-                        if (dayEvents.length > 2) // Changé de 3 à 2
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 2),
-                            child: Text(
-                              '+${dayEvents.length - 2}',
-                              style: const TextStyle(
-                                fontSize: 7, // Police plus petite
-                                color: Colors.white70,
-                                fontWeight: FontWeight.w500,
+                                color: Colors.white,
+                                fontSize: 8,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
                           ),
                       ],
                     ),
+                    
+                    if (event.clientName != null && height > 60) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        event.clientName!,
+                        style: const TextStyle(
+                          fontFamily: 'Roboto',
+                          fontSize: 12,
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    
+                    if (height > 80) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(event.locationIcon, size: 12, color: Colors.white60),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              '${event.startTime.hour.toString().padLeft(2, '0')}:${event.startTime.minute.toString().padLeft(2, '0')} - ${event.endTime.hour.toString().padLeft(2, '0')}:${event.endTime.minute.toString().padLeft(2, '0')}',
+                              style: const TextStyle(
+                                fontFamily: 'Roboto',
+                                fontSize: 10,
+                                color: Colors.white60,
+                              ),
+                            ),
+                          ),
+                          if (event.price != null) ...[
+                            Text(
+                              '${event.price!.toInt()}€',
+                              style: const TextStyle(
+                                fontFamily: 'Roboto',
+                                fontSize: 12,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              
+              if (event.canActivateFlashMinute)
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: Colors.orange,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.orange.withOpacity(0.5),
+                          blurRadius: 4,
+                        ),
+                      ],
+                    ),
                   ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFloatingActionButton() {
-    return FloatingActionButton(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      onPressed: _showAddEventDialog,
-      child: Container(
-        width: 56,
-        height: 56,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              KipikTheme.rouge.withOpacity(0.8),
-              KipikTheme.rouge,
+                ),
             ],
           ),
-          borderRadius: BorderRadius.circular(28),
-          boxShadow: [
-            BoxShadow(
-              color: KipikTheme.rouge.withOpacity(0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: const Icon(
-          Icons.add,
-          color: Colors.white,
-          size: 28,
         ),
       ),
     );
   }
 
-  // Méthodes utilitaires
-  String _getDateText() {
+  Widget _buildFreeSlotCard(AgendaEvent slot) {
+    return Positioned(
+      top: slot.startTime.minute * 0.8,
+      left: 0,
+      right: 0,
+      height: 60,
+      child: GestureDetector(
+        onTap: () => _showFlashMinuteCreation(slot),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 4),
+          decoration: BoxDecoration(
+            color: Colors.orange.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Colors.orange.withOpacity(0.3),
+              style: BorderStyle.solid,
+            ),
+          ),
+          child: const Padding(
+            padding: EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Icon(Icons.flash_on_rounded, size: 20, color: Colors.orange),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Créneau libre',
+                        style: TextStyle(
+                          fontFamily: 'Roboto',
+                          fontSize: 12,
+                          color: Colors.black87,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        'Tap pour Flash Minute',
+                        style: TextStyle(
+                          fontFamily: 'Roboto',
+                          fontSize: 10,
+                          color: Colors.orange,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.add_rounded, size: 16, color: Colors.orange),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPremiumWeekView() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.view_week_outlined, size: 64, color: Colors.grey[400]),
+          const SizedBox(height: 16),
+          const Text(
+            'Vue Semaine Premium',
+            style: TextStyle(
+              fontFamily: 'PermanentMarker',
+              fontSize: 20,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Interface avancée avec planning semaine\n(à implémenter)',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 14,
+              color: Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: () => _showInfoSnackBar('Vue Semaine - Prochainement disponible'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: KipikTheme.rouge,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text('Prochainement'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPremiumMonthView() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: TableCalendar<AgendaEvent>(
+        firstDay: DateTime.utc(2020, 1, 1),
+        lastDay: DateTime.utc(2030, 12, 31),
+        focusedDay: _selectedDate,
+        calendarFormat: _calendarFormat,
+        eventLoader: (day) => _getEventsForDay(day),
+        startingDayOfWeek: StartingDayOfWeek.monday,
+        calendarStyle: CalendarStyle(
+          outsideDaysVisible: false,
+          weekendTextStyle: const TextStyle(color: Colors.black54),
+          holidayTextStyle: const TextStyle(color: Colors.black54),
+          defaultTextStyle: const TextStyle(color: Colors.black87),
+          todayDecoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [KipikTheme.rouge, KipikTheme.rouge.withOpacity(0.8)],
+            ),
+            shape: BoxShape.circle,
+          ),
+          selectedDecoration: BoxDecoration(
+            color: KipikTheme.rouge.withOpacity(0.5),
+            shape: BoxShape.circle,
+          ),
+          markerDecoration: const BoxDecoration(
+            color: Colors.orange,
+            shape: BoxShape.circle,
+          ),
+        ),
+        headerStyle: const HeaderStyle(
+          formatButtonVisible: false,
+          titleCentered: true,
+          titleTextStyle: TextStyle(
+            fontFamily: 'PermanentMarker',
+            color: Colors.black87,
+            fontSize: 18,
+            fontWeight: FontWeight.w400,
+          ),
+          leftChevronIcon: Icon(Icons.chevron_left, color: Colors.black87),
+          rightChevronIcon: Icon(Icons.chevron_right, color: Colors.black87),
+        ),
+        daysOfWeekStyle: const DaysOfWeekStyle(
+          weekendStyle: TextStyle(color: Colors.black54, fontFamily: 'Roboto'),
+          weekdayStyle: TextStyle(color: Colors.black87, fontFamily: 'Roboto'),
+        ),
+        selectedDayPredicate: (day) => isSameDay(_selectedDate, day),
+        onDaySelected: (selectedDay, focusedDay) {
+          setState(() {
+            _selectedDate = selectedDay;
+            _currentView = ViewType.day;
+          });
+        },
+      ),
+    );
+  }
+
+  Widget _buildSmartFAB() {
+    final hasFreeSlots = _getFreeSlots(_selectedDate).isNotEmpty;
+    
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (hasFreeSlots)
+          Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            child: FloatingActionButton(
+              heroTag: 'flash_minute',
+              backgroundColor: Colors.orange,
+              onPressed: () => _showFlashMinuteCreation(null),
+              child: const Icon(Icons.flash_on_rounded, color: Colors.white),
+            ),
+          ),
+        
+        const TattooAssistantButton(),
+      ],
+    );
+  }
+
+  // ✅ MÉTHODES UTILITAIRES COMPLÈTES
+  void _changeView(ViewType view) {
+    setState(() {
+      _currentView = view;
+    });
+    
+    if (view == ViewType.day) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToCurrentHour();
+      });
+    }
+  }
+
+  String _getFormattedDateRange() {
     switch (_currentView) {
       case ViewType.day:
         return '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}';
@@ -1336,11 +1337,23 @@ class _ProAgendaHomePageState extends State<ProAgendaHomePage> {
     }
   }
 
+  String _getFullDateString(DateTime date) {
+    const monthNames = [
+      'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+      'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+    ];
+    const dayNames = [
+      'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'
+    ];
+    
+    return '${dayNames[date.weekday - 1]} ${date.day} ${monthNames[date.month - 1]}';
+  }
+
   String _getPeriodInfo() {
     final eventsCount = _getCurrentViewEventsCount();
-    return eventsCount == 0 
-        ? 'Aucun rendez-vous'
-        : '$eventsCount rendez-vous';
+    final revenue = _getCurrentViewRevenue();
+    
+    return '$eventsCount RDV • ${revenue.toInt()}€';
   }
 
   int _getCurrentViewEventsCount() {
@@ -1357,6 +1370,40 @@ class _ProAgendaHomePageState extends State<ProAgendaHomePage> {
           event.startTime.isBefore(lastDay.add(const Duration(days: 1)))
         ).length;
     }
+  }
+
+  double _getCurrentViewRevenue() {
+    switch (_currentView) {
+      case ViewType.day:
+        return _getEventsForDay(_selectedDate)
+            .where((e) => e.price != null)
+            .fold<double>(0, (sum, e) => sum + e.price!);
+      case ViewType.week:
+        return _getEventsForWeek(_getStartOfWeek(_selectedDate))
+            .where((e) => e.price != null)
+            .fold<double>(0, (sum, e) => sum + e.price!);
+      case ViewType.month:
+        final firstDay = DateTime(_selectedDate.year, _selectedDate.month, 1);
+        final lastDay = DateTime(_selectedDate.year, _selectedDate.month + 1, 0);
+        return _events.where((event) => 
+          event.startTime.isAfter(firstDay.subtract(const Duration(days: 1))) &&
+          event.startTime.isBefore(lastDay.add(const Duration(days: 1))) &&
+          event.price != null
+        ).fold<double>(0, (sum, e) => sum + e.price!);
+    }
+  }
+
+  List<AgendaEvent> _getEventsForWeek(DateTime startOfWeek) {
+    final endOfWeek = startOfWeek.add(const Duration(days: 6));
+    return _events.where((event) {
+      return event.startTime.isAfter(startOfWeek.subtract(const Duration(days: 1))) &&
+             event.startTime.isBefore(endOfWeek.add(const Duration(days: 1)));
+    }).toList();
+  }
+
+  DateTime _getStartOfWeek(DateTime date) {
+    final weekday = date.weekday;
+    return date.subtract(Duration(days: weekday - 1));
   }
 
   String _getViewLabel(ViewType view) {
@@ -1377,8 +1424,8 @@ class _ProAgendaHomePageState extends State<ProAgendaHomePage> {
 
   String _getMonthName(DateTime date) {
     const months = [
-      'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun',
-      'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'
+      'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+      'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
     ];
     return months[date.month - 1];
   }
@@ -1388,11 +1435,11 @@ class _ProAgendaHomePageState extends State<ProAgendaHomePage> {
     return date.year == now.year && date.month == now.month && date.day == now.day;
   }
 
-  bool _isSameDay(DateTime a, DateTime b) {
+  bool isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
-  // Actions de navigation
+  // ✅ ACTIONS DE NAVIGATION
   void _goToPrevious() {
     setState(() {
       switch (_currentView) {
@@ -1436,7 +1483,7 @@ class _ProAgendaHomePageState extends State<ProAgendaHomePage> {
     }
   }
 
-  void _showDatePicker() {
+  void _showPremiumDatePicker() {
     showDatePicker(
       context: context,
       initialDate: _selectedDate,
@@ -1445,22 +1492,17 @@ class _ProAgendaHomePageState extends State<ProAgendaHomePage> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: KipikTheme.rouge, // Rouge Kipik
+            colorScheme: ColorScheme.light(
+              primary: KipikTheme.rouge,
               onPrimary: Colors.white,
-              surface: Color(0xFF1A1A1A), // Noir
-              onSurface: Colors.white,
-              background: Color(0xFF000000), // Noir profond
-              onBackground: Colors.white,
+              surface: Colors.white,
+              onSurface: Colors.black87,
+              background: Colors.white,
+              onBackground: Colors.black87,
               secondary: KipikTheme.rouge,
               onSecondary: Colors.white,
             ),
-            dialogBackgroundColor: const Color(0xFF1A1A1A),
-            textTheme: const TextTheme(
-              bodyLarge: TextStyle(color: Colors.white),
-              bodyMedium: TextStyle(color: Colors.white),
-              titleLarge: TextStyle(color: Colors.white),
-            ),
+            dialogBackgroundColor: Colors.white,
           ),
           child: child!,
         );
@@ -1474,87 +1516,145 @@ class _ProAgendaHomePageState extends State<ProAgendaHomePage> {
     });
   }
 
-  void _syncWithExternalCalendar() {
+  void _syncCalendar() {
+    _showSyncDialog();
+  }
+
+  void _showSyncDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: const Text(
-          'Synchronisation',
-          style: TextStyle(
-            fontFamily: 'PermanentMarker',
-            fontSize: 18,
-            color: Colors.white,
-          ),
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildSyncOption('Google Calendar', Icons.calendar_today),
-              const SizedBox(height: 16),
-              _buildSyncOption('Apple Calendar', Icons.calendar_month),
-              const SizedBox(height: 16),
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text(
-                  'Fermer',
-                  style: TextStyle(color: Colors.white),
-                ),
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.sync_rounded, color: KipikTheme.rouge),
+            const SizedBox(width: 8),
+            const Text(
+              'Synchronisation Calendriers',
+              style: TextStyle(
+                fontFamily: 'PermanentMarker',
+                color: Colors.black87,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Connectez vos calendriers externes pour synchroniser automatiquement vos rendez-vous',
+              style: TextStyle(fontFamily: 'Roboto'),
+            ),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: const Icon(Icons.calendar_today, color: Colors.blue),
+              title: const Text(
+                'Google Calendar',
+                style: TextStyle(fontFamily: 'Roboto', fontWeight: FontWeight.w600),
+              ),
+              subtitle: const Text(
+                'Synchronisation bidirectionnelle',
+                style: TextStyle(fontFamily: 'Roboto', fontSize: 12),
+              ),
+              trailing: const Icon(Icons.link, color: Colors.grey),
+              onTap: _connectGoogleCalendar,
+            ),
+            ListTile(
+              leading: const Icon(Icons.calendar_month, color: Colors.grey),
+              title: const Text(
+                'Apple Calendar',
+                style: TextStyle(fontFamily: 'Roboto', fontWeight: FontWeight.w600),
+              ),
+              subtitle: const Text(
+                'Import/Export automatique',
+                style: TextStyle(fontFamily: 'Roboto', fontSize: 12),
+              ),
+              trailing: const Icon(Icons.link, color: Colors.grey),
+              onTap: _connectAppleCalendar,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'Fermer',
+              style: TextStyle(fontFamily: 'Roboto'),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildSyncOption(String name, IconData icon) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Synchronisation avec $name en cours...'),
-            backgroundColor: KipikTheme.rouge,
-          ),
-        );
-      },
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              const Color(0xFF2A2A2A),
-              const Color(0xFF1A1A1A),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFF444444)),
-        ),
-        child: Row(
+  void _connectGoogleCalendar() {
+    Navigator.pop(context);
+    _showSuccessSnackBar('Google Calendar - Connexion en cours...');
+  }
+
+  void _connectAppleCalendar() {
+    Navigator.pop(context);
+    _showSuccessSnackBar('Apple Calendar - Connexion en cours...');
+  }
+
+  void _showSettings() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                name,
-                style: const TextStyle(
-                  fontFamily: 'Roboto',
-                  fontSize: 16,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w500,
-                ),
+            const Text(
+              'Paramètres Agenda',
+              style: TextStyle(
+                fontFamily: 'PermanentMarker',
+                color: Colors.black87,
+                fontSize: 20,
               ),
             ),
-            Icon(
-              Icons.sync,
-              color: Colors.white,
-              size: 20,
+            const SizedBox(height: 20),
+            ListTile(
+              leading: const Icon(Icons.sync_rounded, color: Colors.blue),
+              title: const Text(
+                'Synchronisation',
+                style: TextStyle(fontFamily: 'Roboto', fontWeight: FontWeight.w600),
+              ),
+              subtitle: const Text(
+                'Gérer les calendriers connectés',
+                style: TextStyle(fontFamily: 'Roboto', fontSize: 12),
+              ),
+              onTap: _syncCalendar,
+            ),
+            ListTile(
+              leading: const Icon(Icons.flash_on_rounded, color: Colors.orange),
+              title: const Text(
+                'Flash Minute',
+                style: TextStyle(fontFamily: 'Roboto', fontWeight: FontWeight.w600),
+              ),
+              subtitle: const Text(
+                'Paramètres et gestion Flash Minute',
+                style: TextStyle(fontFamily: 'Roboto', fontSize: 12),
+              ),
+              onTap: _goToFlashMinuteDashboard,
+            ),
+            ListTile(
+              leading: Icon(Icons.notifications_outlined, color: KipikTheme.rouge),
+              title: const Text(
+                'Notifications',
+                style: TextStyle(fontFamily: 'Roboto', fontWeight: FontWeight.w600),
+              ),
+              subtitle: const Text(
+                'Rappels et alertes',
+                style: TextStyle(fontFamily: 'Roboto', fontSize: 12),
+              ),
+              onTap: () => _showInfoSnackBar('Notifications - À implémenter'),
             ),
           ],
         ),
@@ -1562,294 +1662,8 @@ class _ProAgendaHomePageState extends State<ProAgendaHomePage> {
     );
   }
 
-  void _showSettings() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1A1A1A),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Paramètres de l\'agenda',
-                style: TextStyle(
-                  fontFamily: 'PermanentMarker',
-                  fontSize: 18,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 20),
-              _buildSettingOption('Synchronisation', Icons.sync),
-              _buildSettingOption('Notifications', Icons.notifications_outlined),
-              _buildSettingOption('Géolocalisation', Icons.location_on_outlined),
-              _buildSettingOption('Préférences', Icons.tune),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSettingOption(String title, IconData icon) {
-    return ListTile(
-      leading: Icon(icon, color: Colors.white),
-      title: Text(
-        title,
-        style: const TextStyle(
-          fontFamily: 'Roboto',
-          fontSize: 16,
-          color: Colors.white,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      trailing: const Icon(Icons.chevron_right, color: Colors.white70),
-      onTap: () {
-        Navigator.pop(context);
-        if (title == 'Synchronisation') {
-          _syncWithExternalCalendar();
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('$title : À implémenter'),
-              backgroundColor: KipikTheme.rouge,
-            ),
-          );
-        }
-      },
-    );
-  }
-
-  void _showAddEventDialog() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1A1A1A),
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Container(
-        padding: EdgeInsets.only(
-          left: 24,
-          right: 24,
-          top: 24,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Nouveau rendez-vous',
-                style: TextStyle(
-                  fontFamily: 'PermanentMarker',
-                  fontSize: 18,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 20),
-              TextField(
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: 'Titre',
-                  labelStyle: const TextStyle(color: Colors.white70),
-                  filled: true,
-                  fillColor: const Color(0xFF2A2A2A),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFF444444)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFF444444)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: KipikTheme.rouge),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: 'Date',
-                        labelStyle: const TextStyle(color: Colors.white70),
-                        filled: true,
-                        fillColor: const Color(0xFF2A2A2A),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Color(0xFF444444)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Color(0xFF444444)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: KipikTheme.rouge),
-                        ),
-                        suffixIcon: const Icon(Icons.calendar_today, color: Colors.white70),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: TextField(
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: 'Heure',
-                        labelStyle: const TextStyle(color: Colors.white70),
-                        filled: true,
-                        fillColor: const Color(0xFF2A2A2A),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Color(0xFF444444)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Color(0xFF444444)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: KipikTheme.rouge),
-                        ),
-                        suffixIcon: const Icon(Icons.access_time, color: Colors.white70),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<LocationType>(
-                dropdownColor: const Color(0xFF2A2A2A),
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: 'Lieu',
-                  labelStyle: const TextStyle(color: Colors.white70),
-                  filled: true,
-                  fillColor: const Color(0xFF2A2A2A),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFF444444)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFF444444)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: KipikTheme.rouge),
-                  ),
-                ),
-                items: LocationType.values.map((location) =>
-                  DropdownMenuItem(
-                    value: location,
-                    child: Row(
-                      children: [
-                        Icon(_getLocationIcon(location), color: Colors.white),
-                        const SizedBox(width: 8),
-                        Text(_getLocationLabel(location)),
-                      ],
-                    ),
-                  ),
-                ).toList(),
-                onChanged: (value) {},
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Colors.white70),
-                      ),
-                      child: const Text(
-                        'Annuler',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      onPressed: () {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: const Text('Rendez-vous ajouté !'),
-                            backgroundColor: KipikTheme.rouge,
-                          ),
-                        );
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              KipikTheme.rouge.withOpacity(0.8),
-                              KipikTheme.rouge,
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: const Text(
-                          'Ajouter',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  IconData _getLocationIcon(LocationType type) {
-    switch (type) {
-      case LocationType.shop:
-        return Icons.home_work;
-      case LocationType.guest:
-        return Icons.flight;
-      case LocationType.convention:
-        return Icons.event;
-    }
-  }
-
-  String _getLocationLabel(LocationType type) {
-    switch (type) {
-      case LocationType.shop:
-        return 'Salon';
-      case LocationType.guest:
-        return 'Guest Spot';
-      case LocationType.convention:
-        return 'Convention';
-    }
+  void _goToFlashMinuteDashboard() {
+    Navigator.pushNamed(context, '/flash/minute/dashboard');
   }
 
   void _showEventDetails(AgendaEvent event) {
@@ -1860,209 +1674,191 @@ class _ProAgendaHomePageState extends State<ProAgendaHomePage> {
         child: Container(
           constraints: const BoxConstraints(maxWidth: 400),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                const Color(0xFF1A1A1A),
-                const Color(0xFF000000),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(16),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // En-tête coloré
               Container(
-                width: double.infinity,
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  gradient: event.type == EventType.consultation
-                      ? LinearGradient(
-                          colors: [
-                            KipikTheme.rouge.withOpacity(0.3),
-                            KipikTheme.rouge.withOpacity(0.5),
-                          ],
-                        )
-                      : LinearGradient(
-                          colors: [
-                            event.eventColor.withOpacity(0.3),
-                            event.eventColor.withOpacity(0.5),
-                          ],
-                        ),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  gradient: LinearGradient(
+                    colors: [
+                      event.eventColor.withOpacity(0.1),
+                      event.eventColor.withOpacity(0.05),
+                    ],
+                  ),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            gradient: event.type == EventType.consultation
-                                ? LinearGradient(
-                                    colors: [
-                                      KipikTheme.rouge.withOpacity(0.8),
-                                      KipikTheme.rouge,
-                                    ],
-                                  )
-                                : null,
-                            color: event.type != EventType.consultation ? event.eventColor : null,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            event.typeLabel,
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: event.eventColor,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        event.isFlashMinute ? Icons.flash_on_rounded : Icons.event_rounded,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            event.title,
                             style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontFamily: 'Roboto',
-                              fontWeight: FontWeight.w600,
+                              fontFamily: 'PermanentMarker',
+                              color: Colors.black87,
+                              fontSize: 18,
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.black87,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                event.locationIcon,
-                                size: 12,
-                                color: Colors.white,
+                          if (event.clientName != null)
+                            Text(
+                              event.clientName!,
+                              style: const TextStyle(
+                                fontFamily: 'Roboto',
+                                color: Colors.black54,
+                                fontSize: 14,
                               ),
-                              const SizedBox(width: 4),
-                              Text(
-                                event.locationLabel,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11,
-                                  fontFamily: 'Roboto',
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.close, color: Colors.white),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      event.title,
-                      style: const TextStyle(
-                        fontFamily: 'PermanentMarker',
-                        fontSize: 18,
-                        color: Colors.white,
+                            ),
+                        ],
                       ),
                     ),
-                    if (event.clientName != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        event.clientName!,
-                        style: const TextStyle(
-                          fontFamily: 'Roboto',
-                          fontSize: 16,
-                          color: Colors.white70,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close_rounded, color: Colors.black54),
+                    ),
                   ],
                 ),
               ),
               
-              // Contenu des détails
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   children: [
                     _buildDetailRow(
-                      Icons.access_time,
+                      Icons.schedule_rounded,
                       'Horaire',
                       '${event.startTime.hour.toString().padLeft(2, '0')}:${event.startTime.minute.toString().padLeft(2, '0')} - ${event.endTime.hour.toString().padLeft(2, '0')}:${event.endTime.minute.toString().padLeft(2, '0')}',
                     ),
                     _buildDetailRow(
-                      Icons.schedule,
+                      Icons.timer_rounded,
                       'Durée',
                       '${event.duration.inHours}h ${event.duration.inMinutes % 60}min',
                     ),
+                    _buildDetailRow(
+                      Icons.category_rounded,
+                      'Type',
+                      event.typeLabel,
+                    ),
+                    if (event.price != null)
+                      _buildDetailRow(
+                        Icons.euro_rounded,
+                        'Prix',
+                        '${event.price!.toInt()}€',
+                      ),
                     if (event.location != null)
                       _buildDetailRow(
-                        Icons.location_on,
+                        event.locationIcon,
                         'Lieu',
-                        event.location!,
+                        '${event.location} (${event.locationLabel})',
                       ),
-                    if (event.description != null)
+                    if (event.phoneNumber != null)
                       _buildDetailRow(
-                        Icons.description,
-                        'Description',
-                        event.description!,
+                        Icons.phone_rounded,
+                        'Téléphone',
+                        event.phoneNumber!,
                       ),
+                    if (event.email != null)
+                      _buildDetailRow(
+                        Icons.email_rounded,
+                        'Email',
+                        event.email!,
+                      ),
+                    if (event.description != null) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Description',
+                              style: TextStyle(
+                                fontFamily: 'Roboto',
+                                fontSize: 12,
+                                color: Colors.black54,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              event.description!,
+                              style: const TextStyle(
+                                fontFamily: 'Roboto',
+                                fontSize: 14,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     
                     const SizedBox(height: 20),
                     
-                    // Boutons d'action
                     Row(
                       children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () {
-                              Navigator.pop(context);
-                            },
-                            style: OutlinedButton.styleFrom(
-                              side: BorderSide(color: event.type == EventType.consultation ? KipikTheme.rouge : event.eventColor),
-                            ),
-                            child: Text(
-                              'Modifier',
-                              style: TextStyle(color: event.type == EventType.consultation ? KipikTheme.rouge : event.eventColor),
+                        if (event.canActivateFlashMinute)
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                _showFlashMinuteDialog(event);
+                              },
+                              icon: const Icon(Icons.flash_on_rounded, size: 16),
+                              label: const Text('Flash Minute'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.orange,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
+                        if (event.canActivateFlashMinute) const SizedBox(width: 12),
                         Expanded(
-                          child: ElevatedButton(
+                          child: OutlinedButton.icon(
                             onPressed: () {
                               Navigator.pop(context);
+                              _showEditEventDialog(event);
                             },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.transparent,
-                              elevation: 0,
+                            icon: const Icon(Icons.edit_rounded, size: 16),
+                            label: const Text('Modifier'),
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(color: event.eventColor),
+                              foregroundColor: event.eventColor,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: event.type == EventType.consultation
-                                    ? LinearGradient(
-                                        colors: [
-                                          KipikTheme.rouge.withOpacity(0.8),
-                                          KipikTheme.rouge,
-                                        ],
-                                      )
-                                    : null,
-                                color: event.type != EventType.consultation ? event.eventColor : null,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              child: const Text(
-                                'Contacter',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                textAlign: TextAlign.center,
                               ),
                             ),
                           ),
@@ -2085,7 +1881,7 @@ class _ProAgendaHomePageState extends State<ProAgendaHomePage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 16, color: Colors.white70),
+          Icon(icon, size: 16, color: Colors.black54),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -2096,7 +1892,7 @@ class _ProAgendaHomePageState extends State<ProAgendaHomePage> {
                   style: const TextStyle(
                     fontFamily: 'Roboto',
                     fontSize: 12,
-                    color: Colors.white70,
+                    color: Colors.black54,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -2106,7 +1902,7 @@ class _ProAgendaHomePageState extends State<ProAgendaHomePage> {
                   style: const TextStyle(
                     fontFamily: 'Roboto',
                     fontSize: 14,
-                    color: Colors.white,
+                    color: Colors.black87,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -2114,6 +1910,195 @@ class _ProAgendaHomePageState extends State<ProAgendaHomePage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showFlashMinuteDialog(AgendaEvent event) {
+    HapticFeedback.mediumImpact();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.flash_on_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text(
+              'Activation Flash Minute',
+              style: TextStyle(fontFamily: 'PermanentMarker'),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Le RDV "${event.title}" a été annulé ?',
+              style: const TextStyle(fontFamily: 'Roboto'),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+              ),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.lightbulb_outline, color: Colors.orange, size: 16),
+                      SizedBox(width: 8),
+                      Text(
+                        'Optimisez votre planning !',
+                        style: TextStyle(
+                          fontFamily: 'Roboto',
+                          color: Colors.orange,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Activez Flash Minute pour proposer ce créneau avec remise et remplir votre planning rapidement.',
+                    style: TextStyle(
+                      fontFamily: 'Roboto',
+                      color: Colors.black54,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'Annuler seulement',
+              style: TextStyle(fontFamily: 'Roboto'),
+            ),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              _activateFlashMinute(event);
+            },
+            icon: const Icon(Icons.flash_on, size: 16),
+            label: const Text(
+              'Annuler + Flash Minute',
+              style: TextStyle(fontFamily: 'Roboto'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditEventDialog(AgendaEvent event) {
+    _showInfoSnackBar('Modification RDV "${event.title}" - À implémenter');
+  }
+
+  void _activateFlashMinute(AgendaEvent event) {
+    Navigator.pushNamed(
+      context,
+      '/flash/minute/create',
+      arguments: {
+        'timeSlot': event,
+        'cancelledAppointment': true,
+      },
+    );
+  }
+
+  void _showFlashMinuteCreation(AgendaEvent? freeSlot) {
+    Navigator.pushNamed(
+      context,
+      '/flash/minute/create',
+      arguments: {
+        'timeSlot': freeSlot,
+        'cancelledAppointment': false,
+      },
+    );
+  }
+
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded, color: Colors.white),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(fontFamily: 'Roboto'),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_rounded, color: Colors.white),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(fontFamily: 'Roboto'),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  void _showInfoSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.info_rounded, color: Colors.white),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(fontFamily: 'Roboto'),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: KipikTheme.rouge,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 2),
       ),
     );
   }

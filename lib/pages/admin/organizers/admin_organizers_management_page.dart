@@ -1,740 +1,564 @@
 // lib/pages/admin/organizers/admin_organizers_management_page.dart
-
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:kipik_v5/services/organisateur/firebase_organisateur_service.dart';
 import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
+import 'package:kipik_v5/widgets/common/drawers/custom_drawer_admin.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
+import 'package:kipik_v5/core/database_manager.dart';
 
 class AdminOrganizersManagementPage extends StatefulWidget {
-  const AdminOrganizersManagementPage({Key? key}) : super(key: key);
+  const AdminOrganizersManagementPage({super.key});
 
   @override
   State<AdminOrganizersManagementPage> createState() => _AdminOrganizersManagementPageState();
 }
 
-class _AdminOrganizersManagementPageState extends State<AdminOrganizersManagementPage> with TickerProviderStateMixin {
+class _AdminOrganizersManagementPageState extends State<AdminOrganizersManagementPage> 
+    with TickerProviderStateMixin {
+  final FirebaseOrganisateurService _organizerService = FirebaseOrganisateurService.instance;
+  final TextEditingController _searchController = TextEditingController();
+  
   late TabController _tabController;
-  bool _isLoading = false;
-
-  // Données simulées (à remplacer par de vraies données)
-  List<Map<String, dynamic>> _organizers = [
-    {
-      'name': 'Convention Tattoo Paris',
-      'organizerName': 'Jean-Pierre Moreau',
-      'email': 'jp.moreau@tattoo-paris.com',
-      'phone': '01 42 33 44 55',
-      'company': 'Events & Ink SAS',
-      'siret': '12345678901234',
-      'registrationDate': DateTime(2024, 6, 15),
-      'lastLogin': DateTime(2025, 1, 22),
-      'status': 'active',
-      'eventsCreated': 8,
-      'activeEvents': 2,
-      'upcomingEvents': 3,
-      'totalRevenue': 45200.0,
-      'kipikCommission': 4520.0,
-      'avgEventSize': 65,
-      'avgTicketPrice': 85.0,
-      'bookingRate': 78.5,
-      'cancelationRate': 12.0,
-      'attendeeRating': 4.6,
-      'reportsCount': 0,
-      'specialties': ['Conventions', 'Ateliers', 'Concours'],
-    },
-    {
-      'name': 'Ink Festival Lyon',
-      'organizerName': 'Marie Dubois',
-      'email': 'marie@inkfestival-lyon.fr',
-      'phone': '04 72 11 22 33',
-      'company': 'Lyon Events SARL',
-      'siret': '98765432109876',
-      'registrationDate': DateTime(2024, 9, 22),
-      'lastLogin': DateTime(2025, 1, 20),
-      'status': 'active',
-      'eventsCreated': 3,
-      'activeEvents': 1,
-      'upcomingEvents': 2,
-      'totalRevenue': 18900.0,
-      'kipikCommission': 1890.0,
-      'avgEventSize': 45,
-      'avgTicketPrice': 65.0,
-      'bookingRate': 85.2,
-      'cancelationRate': 8.5,
-      'attendeeRating': 4.8,
-      'reportsCount': 0,
-      'specialties': ['Festivals', 'Expositions'],
-    },
-  ];
-
-  Map<String, dynamic> _organizersStats = {
-    'total': 2,
-    'active': 2,
-    'suspended': 0,
-    'pending': 0,
-    'totalEvents': 11,
-    'activeEvents': 3,
-    'upcomingEvents': 5,
-    'totalRevenue': 64100.0,
-    'totalCommission': 6410.0,
-    'avgEventSize': 55,
-    'avgTicketPrice': 75.0,
-    'totalAttendees': 1820,
-    'avgBookingRate': 81.8,
-    'avgAttendeeRating': 4.7,
-    'monthlyRevenue': 12450.0,
-  };
+  String _searchQuery = '';
+  String _selectedFilter = 'all';
+  bool _isLoading = true;
+  
+  // Statistiques
+  int _totalOrganizers = 0;
+  int _verifiedOrganizers = 0;
+  int _totalConventions = 0;
+  
+  DatabaseManager get _databaseManager => DatabaseManager.instance;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) {
+        setState(() {
+          switch (_tabController.index) {
+            case 0:
+              _selectedFilter = 'pending';
+              break;
+            case 1:
+              _selectedFilter = 'verified';
+              break;
+            case 2:
+              _selectedFilter = 'suspended';
+              break;
+            case 3:
+            default:
+              _selectedFilter = 'all';
+              break;
+          }
+        });
+      }
+    });
+    
+    _loadStats();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadStats() async {
+    try {
+      final metrics = await _organizerService.getActivityMetrics();
+      if (mounted) {
+        setState(() {
+          _totalOrganizers = metrics['total_organizers'] ?? 0;
+          _verifiedOrganizers = metrics['verified_organizers'] ?? 0;
+          _totalConventions = metrics['total_conventions'] ?? 0;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('❌ Erreur chargement stats organisateurs: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _refreshData() async {
+    setState(() {
+      _isLoading = true;
+    });
+    await _loadStats();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const CustomAppBarKipik(
-        title: 'Gestion Organisateurs Événements',
+      backgroundColor: KipikTheme.noir,
+      appBar: CustomAppBarKipik(
+        title: 'Admin Organisateurs',
         showBackButton: true,
-        showBurger: false,
-        showNotificationIcon: true,
       ),
-      body: Column(
-        children: [
-          // Header avec statistiques
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.purple, Colors.purple.withOpacity(0.8)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+      endDrawer: const CustomDrawerAdmin(),
+      body: _isLoading
+          ? Center(child: KipikTheme.loading())
+          : RefreshIndicator(
+              onRefresh: _refreshData,
+              color: KipikTheme.rouge,
+              child: KipikTheme.pageContent(
+                children: [
+                  const SizedBox(height: 16),
+                  
+                  // Titre principal style Kipik
+                  Text(
+                    'Gestion des Organisateurs',
+                    textAlign: TextAlign.center,
+                    style: KipikTheme.titleStyle.copyWith(
+                      color: KipikTheme.rouge,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  // Sous-titre
+                  Text(
+                    'Gérez les demandes et statuts',
+                    textAlign: TextAlign.center,
+                    style: KipikTheme.subtitleStyle.copyWith(
+                      fontSize: 14,
+                      color: Colors.black54,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Indicateur mode démo avec helper
+                  if (_databaseManager.isDemoMode) ...[
+                    KipikTheme.demoBadge(customText: 'MODE DÉMO ADMIN'),
+                    const SizedBox(height: 16),
+                  ],
+                  
+                  // Barre de recherche avec helper
+                  KipikTheme.searchField(
+                    controller: _searchController,
+                    onChanged: (value) {
+                      setState(() {
+                        _searchQuery = value.toLowerCase();
+                      });
+                    },
+                    hintText: 'Rechercher un organisateur...',
+                    backgroundColor: KipikTheme.rouge.withOpacity(0.2),
+                    textColor: KipikTheme.blanc,
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Statistiques style Kipik
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildStatCard(
+                          icon: Icons.business_center,
+                          title: 'Total',
+                          value: '$_totalOrganizers',
+                          color: KipikTheme.rouge,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildStatCard(
+                          icon: Icons.verified,
+                          title: 'Vérifiés',
+                          value: '$_verifiedOrganizers',
+                          color: Colors.green,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildStatCard(
+                          icon: Icons.event,
+                          title: 'Conventions',
+                          value: '$_totalConventions',
+                          color: Colors.blue,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Onglets style Kipik
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: KipikTheme.rouge.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: TabBar(
+                      controller: _tabController,
+                      labelColor: KipikTheme.blanc,
+                      unselectedLabelColor: KipikTheme.rouge,
+                      indicator: BoxDecoration(
+                        color: KipikTheme.rouge,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      labelStyle: TextStyle(
+                        fontFamily: KipikTheme.fontTitle,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      unselectedLabelStyle: TextStyle(
+                        fontFamily: KipikTheme.fontTitle,
+                        fontSize: 12,
+                      ),
+                      tabs: const [
+                        Tab(text: 'Attente'),
+                        Tab(text: 'Vérifiés'),
+                        Tab(text: 'Suspendus'),
+                        Tab(text: 'Tous'),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Liste des organisateurs
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildOrganizersList('pending'),
+                        _buildOrganizersList('verified'),
+                        _buildOrganizersList('suspended'),
+                        _buildOrganizersList('all'),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildStatCard(
-                        'Organisateurs',
-                        '${_organizersStats['total']}',
-                        Icons.business,
-                        Colors.white,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildStatCard(
-                        'Événements actifs',
-                        '${_organizersStats['activeEvents']}',
-                        Icons.event,
-                        Colors.green,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildStatCard(
-                        'À venir',
-                        '${_organizersStats['upcomingEvents']}',
-                        Icons.schedule,
-                        Colors.orange,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildStatCard(
-                        'Participants',
-                        '${_organizersStats['totalAttendees']}',
-                        Icons.people,
-                        Colors.blue,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildStatCard(
-                        'CA Total',
-                        '${_organizersStats['totalRevenue']}€',
-                        Icons.euro,
-                        Colors.amber,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildStatCard(
-                        'Commission Kipik',
-                        '${_organizersStats['totalCommission']}€',
-                        Icons.account_balance,
-                        Colors.green,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildStatCard(
-                        'Taille moy. événement',
-                        '${_organizersStats['avgEventSize']}',
-                        Icons.group,
-                        Colors.blue,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildStatCard(
-                        'Satisfaction',
-                        '${_organizersStats['avgAttendeeRating']}/5',
-                        Icons.star,
-                        Colors.amber,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // Onglets
-          TabBar(
-            controller: _tabController,
-            labelColor: Colors.purple,
-            unselectedLabelColor: Colors.grey,
-            indicatorColor: Colors.purple,
-            isScrollable: true,
-            labelStyle: const TextStyle(fontFamily: 'Roboto'), // AJOUTÉ: Roboto pour les onglets
-            unselectedLabelStyle: const TextStyle(fontFamily: 'Roboto'), // AJOUTÉ: Roboto pour les onglets
-            tabs: const [
-              Tab(text: 'Vue d\'ensemble'),
-              Tab(text: 'Organisateurs'),
-              Tab(text: 'Événements'),
-              Tab(text: 'Finances'),
-              Tab(text: 'Analytics'),
-            ],
-          ),
-
-          // Contenu des onglets
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildOverviewTab(),
-                _buildOrganizersTab(),
-                _buildEventsTab(),
-                _buildFinancesTab(),
-                _buildAnalyticsTab(),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 
-  Widget _buildStatCard(String label, String value, IconData icon, Color color) {
+  Widget _buildStatCard({
+    required IconData icon,
+    required String title,
+    required String value,
+    required Color color,
+  }) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(8),
+        color: color.withOpacity(0.85),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         children: [
-          Icon(icon, color: color, size: 20),
+          Icon(icon, color: KipikTheme.blanc, size: 24),
           const SizedBox(height: 4),
           Text(
             value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'Roboto', // CHANGÉ: Roboto pour les valeurs
+            style: TextStyle(
+              fontFamily: KipikTheme.fontTitle,
+              fontSize: 18,
+              color: KipikTheme.blanc,
             ),
           ),
           Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 9,
-              fontFamily: 'Roboto', // CHANGÉ: Roboto pour les labels
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOverviewTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Actions rapides
-          Row(
-            children: [
-              Expanded(
-                child: _buildQuickActionCard(
-                  'Nouvel organisateur',
-                  'Ajouter un partenaire',
-                  Icons.add_business,
-                  Colors.green,
-                  () {
-                    // Navigation vers ajout organisateur
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildQuickActionCard(
-                  'Validation événements',
-                  'Approuver les nouveaux',
-                  Icons.check_circle,
-                  Colors.blue,
-                  () {
-                    // Navigation vers validation
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildQuickActionCard(
-                  'Rapport financier',
-                  'Commissions & CA',
-                  Icons.assessment,
-                  Colors.purple,
-                  () => _tabController.animateTo(3),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 24),
-
-          // Performance mensuelle
-          _buildMonthlyPerformance(),
-
-          const SizedBox(height: 24),
-
-          // Organisateurs actifs
-          const Text(
-            'Organisateurs partenaires',
+            title,
             style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'PermanentMarker', // GARDÉ: PermanentMarker pour les titres
+              color: KipikTheme.blanc.withOpacity(0.7),
+              fontFamily: KipikTheme.fontTitle,
+              fontSize: 10,
             ),
           ),
-          const SizedBox(height: 12),
-
-          ..._organizers.map((organizer) => _buildOrganizerCard(organizer)).toList(),
-
-          const SizedBox(height: 24),
-
-          // Prochains événements
-          _buildUpcomingEvents(),
         ],
       ),
     );
   }
 
-  Widget _buildQuickActionCard(
-    String title,
-    String subtitle,
-    IconData icon,
-    Color color,
-    VoidCallback onTap,
-  ) {
-    return Card(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Icon(icon, color: color, size: 32),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                  fontFamily: 'Roboto', // CHANGÉ: Roboto pour les actions
-                ),
-                textAlign: TextAlign.center,
-              ),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 11,
-                  fontFamily: 'Roboto', // CHANGÉ: Roboto pour les descriptions
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      ),
+  Widget _buildOrganizersList(String filter) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _getOrganizersStream(filter),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: KipikTheme.loading());
+        }
+
+        if (snapshot.hasError) {
+          return KipikTheme.errorState(
+            title: 'Erreur de chargement',
+            message: 'Impossible de charger les organisateurs',
+            onRetry: () => setState(() {}),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return KipikTheme.emptyState(
+            icon: Icons.business_center_outlined,
+            title: 'Aucun organisateur',
+            message: _getEmptyMessage(filter),
+          );
+        }
+
+        var organizers = snapshot.data!.docs;
+        
+        // Filtrage par recherche
+        if (_searchQuery.isNotEmpty) {
+          organizers = organizers.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final name = (data['name'] ?? '').toString().toLowerCase();
+            final email = (data['email'] ?? '').toString().toLowerCase();
+            final company = (data['company'] ?? '').toString().toLowerCase();
+            
+            return name.contains(_searchQuery) || 
+                   email.contains(_searchQuery) || 
+                   company.contains(_searchQuery);
+          }).toList();
+        }
+
+        return ListView.builder(
+          physics: const AlwaysScrollableScrollPhysics(),
+          itemCount: organizers.length,
+          itemBuilder: (context, index) {
+            final doc = organizers[index];
+            final data = doc.data() as Map<String, dynamic>;
+            return _buildOrganizerCard(doc.id, data);
+          },
+        );
+      },
     );
   }
 
-  Widget _buildMonthlyPerformance() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
+  String _getEmptyMessage(String filter) {
+    switch (filter) {
+      case 'pending':
+        return 'Aucune demande en attente';
+      case 'verified':
+        return 'Aucun organisateur vérifié';
+      case 'suspended':
+        return 'Aucun organisateur suspendu';
+      default:
+        return 'Aucun organisateur inscrit';
+    }
+  }
+
+  Stream<QuerySnapshot> _getOrganizersStream(String filter) {
+    final collection = FirebaseFirestore.instance.collection('organizers');
+    
+    switch (filter) {
+      case 'pending':
+        return collection
+            .where('isVerified', isEqualTo: false)
+            .where('status', isEqualTo: 'pending')
+            .orderBy('createdAt', descending: true)
+            .snapshots();
+      
+      case 'verified':
+        return collection
+            .where('isVerified', isEqualTo: true)
+            .where('status', isEqualTo: 'verified')
+            .orderBy('createdAt', descending: true)
+            .snapshots();
+      
+      case 'suspended':
+        return collection
+            .where('status', isEqualTo: 'suspended')
+            .orderBy('createdAt', descending: true)
+            .snapshots();
+      
+      case 'all':
+      default:
+        return collection
+            .orderBy('createdAt', descending: true)
+            .snapshots();
+    }
+  }
+
+  Widget _buildOrganizerCard(String organizerId, Map<String, dynamic> data) {
+    final status = data['status'] ?? 'pending';
+    final createdAt = data['createdAt'] as Timestamp?;
+    final stats = data['stats'] as Map<String, dynamic>? ?? {};
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: KipikTheme.kipikCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Performance mensuelle',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                fontFamily: 'PermanentMarker', // GARDÉ: PermanentMarker pour les titres
-              ),
-            ),
-            const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(
-                  child: _buildPerformanceMetric(
-                    'CA ce mois',
-                    '${_organizersStats['monthlyRevenue']}€',
-                    Icons.trending_up,
-                    Colors.green,
-                    '+15.2%',
-                  ),
-                ),
-                Expanded(
-                  child: _buildPerformanceMetric(
-                    'Nouveaux événements',
-                    '3',
-                    Icons.event,
-                    Colors.blue,
-                    '+2',
-                  ),
-                ),
-                Expanded(
-                  child: _buildPerformanceMetric(
-                    'Taux de réservation',
-                    '${_organizersStats['avgBookingRate']}%',
-                    Icons.book,
-                    Colors.orange,
-                    '+3.1%',
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPerformanceMetric(
-    String label,
-    String value,
-    IconData icon,
-    Color color,
-    String change,
-  ) {
-    return Container(
-      margin: const EdgeInsets.all(4),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: color,
-              fontFamily: 'Roboto', // CHANGÉ: Roboto pour les valeurs de performance
-            ),
-          ),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontFamily: 'Roboto', // CHANGÉ: Roboto pour les labels
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            change,
-            style: TextStyle(
-              fontSize: 11,
-              color: color,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'Roboto', // CHANGÉ: Roboto pour les variations
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOrganizerCard(Map<String, dynamic> organizer) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: ExpansionTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.purple.withOpacity(0.2),
-          child: Icon(Icons.business, color: Colors.purple),
-        ),
-        title: Text(
-          organizer['name'],
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontFamily: 'Roboto', // CHANGÉ: Roboto pour les noms
-          ),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${organizer['organizerName']} • ${organizer['company']}',
-              style: const TextStyle(fontFamily: 'Roboto'), // CHANGÉ: Roboto
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                _buildChip(
-                  '${organizer['eventsCreated']} événements',
-                  Colors.blue,
-                ),
-                const SizedBox(width: 8),
-                _buildChip(
-                  '${organizer['totalRevenue']}€ CA',
-                  Colors.green,
-                ),
-                const SizedBox(width: 8),
-                _buildChip(
-                  '${organizer['attendeeRating']}/5 ⭐',
-                  Colors.amber,
-                ),
-              ],
-            ),
-          ],
-        ),
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                // Métriques détaillées
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildDetailMetric(
-                        'Commission Kipik',
-                        '${organizer['kipikCommission']}€',
-                        Icons.account_balance,
-                      ),
-                    ),
-                    Expanded(
-                      child: _buildDetailMetric(
-                        'Taille moy. événement',
-                        '${organizer['avgEventSize']} pers.',
-                        Icons.group,
-                      ),
-                    ),
-                    Expanded(
-                      child: _buildDetailMetric(
-                        'Taux réservation',
-                        '${organizer['bookingRate']}%',
-                        Icons.book,
-                      ),
-                    ),
-                    Expanded(
-                      child: _buildDetailMetric(
-                        'Taux annulation',
-                        '${organizer['cancelationRate']}%',
-                        Icons.cancel,
-                      ),
-                    ),
-                  ],
-                ),
-                
-                const SizedBox(height: 12),
-                
-                // Spécialités
+                // Avatar style Kipik
                 Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(8),
+                  width: 48,
+                  height: 48,
                   decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(8),
+                    color: KipikTheme.blanc.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  child: Center(
+                    child: Text(
+                      (data['name'] ?? 'O').toString().substring(0, 1).toUpperCase(),
+                      style: TextStyle(
+                        color: KipikTheme.blanc,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        fontFamily: KipikTheme.fontTitle,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                
+                // Informations
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Spécialités:',
+                      Text(
+                        data['name'] ?? 'Nom non défini',
                         style: TextStyle(
-                          fontSize: 12, 
-                          fontWeight: FontWeight.bold,
-                          fontFamily: 'Roboto', // CHANGÉ: Roboto
+                          fontSize: 16,
+                          fontFamily: KipikTheme.fontTitle,
+                          color: KipikTheme.blanc,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Wrap(
-                        spacing: 4,
-                        children: organizer['specialties']
-                            .map<Widget>((specialty) => _buildChip(specialty, Colors.purple))
-                            .toList(),
+                      if (data['company'] != null) ...[
+                        Text(
+                          data['company'],
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: KipikTheme.blanc.withOpacity(0.7),
+                            fontFamily: 'Roboto',
+                          ),
+                        ),
+                      ],
+                      Text(
+                        data['email'] ?? 'Email non défini',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: KipikTheme.blanc.withOpacity(0.6),
+                          fontFamily: 'Roboto',
+                        ),
                       ),
                     ],
                   ),
                 ),
                 
-                const SizedBox(height: 16),
-                
-                // Actions
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => _viewOrganizerDetails(organizer),
-                        icon: const Icon(Icons.visibility, size: 16),
-                        label: const Text(
-                          'Détails',
-                          style: TextStyle(fontFamily: 'Roboto'), // CHANGÉ: Roboto
-                        ),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => _viewOrganizerEvents(organizer),
-                        icon: const Icon(Icons.event, size: 16),
-                        label: const Text(
-                          'Événements',
-                          style: TextStyle(fontFamily: 'Roboto'), // CHANGÉ: Roboto
-                        ),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => _viewOrganizerFinances(organizer),
-                        icon: const Icon(Icons.euro, size: 16),
-                        label: const Text(
-                          'Finances',
-                          style: TextStyle(fontFamily: 'Roboto'), // CHANGÉ: Roboto
-                        ),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.purple),
-                      ),
-                    ),
-                  ],
+                // Badge statut avec helper
+                KipikTheme.statusBadge(
+                  text: _getStatusText(status),
+                  color: _getStatusColor(status),
+                  icon: _getStatusIcon(status),
                 ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChip(String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: color,
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          fontFamily: 'Roboto', // CHANGÉ: Roboto pour les chips
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDetailMetric(String label, String value, IconData icon) {
-    return Column(
-      children: [
-        Icon(icon, color: Colors.grey[600], size: 20),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontFamily: 'Roboto', // CHANGÉ: Roboto pour les valeurs
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            color: Colors.grey[600],
-            fontFamily: 'Roboto', // CHANGÉ: Roboto pour les labels
-          ),
-          textAlign: TextAlign.center,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildUpcomingEvents() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+            
+            const SizedBox(height: 12),
+            
+            // Statistiques en ligne
             Row(
               children: [
-                const Text(
-                  'Prochains événements',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'PermanentMarker', // GARDÉ: PermanentMarker pour les titres
-                  ),
+                _buildStatChip(
+                  Icons.event,
+                  '${stats['totalConventions'] ?? 0}',
+                  'conventions',
                 ),
-                const Spacer(),
-                TextButton(
-                  onPressed: () => _tabController.animateTo(2),
-                  child: const Text(
-                    'Voir tous',
-                    style: TextStyle(fontFamily: 'Roboto'), // CHANGÉ: Roboto
-                  ),
+                const SizedBox(width: 8),
+                _buildStatChip(
+                  Icons.people,
+                  '${stats['totalTattooers'] ?? 0}',
+                  'tatoueurs',
+                ),
+                const SizedBox(width: 8),
+                _buildStatChip(
+                  Icons.euro,
+                  '${stats['totalRevenue'] ?? 0}',
+                  'revenus',
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              '• Tattoo Convention Paris 2025 - 15-17 Mars 2025\n'
-              '• Ink Festival Lyon - 22-23 Mars 2025\n'
-              '• Workshop Advanced Techniques - 5 Avril 2025',
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontFamily: 'Roboto', // CHANGÉ: Roboto pour les listes
+            
+            if (createdAt != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Inscrit le ${_formatDate(createdAt.toDate())}',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: KipikTheme.blanc.withOpacity(0.6),
+                  fontFamily: 'Roboto',
+                ),
+              ),
+            ],
+            
+            // Actions
+            const SizedBox(height: 12),
+            _buildActionButtons(organizerId, status, data),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Helpers pour les statuts
+  String _getStatusText(String status) {
+    switch (status) {
+      case 'verified': return 'Vérifié';
+      case 'suspended': return 'Suspendu';
+      default: return 'Attente';
+    }
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'verified': return Colors.green;
+      case 'suspended': return Colors.red;
+      default: return Colors.orange;
+    }
+  }
+
+  IconData _getStatusIcon(String status) {
+    switch (status) {
+      case 'verified': return Icons.check_circle;
+      case 'suspended': return Icons.block;
+      default: return Icons.hourglass_empty;
+    }
+  }
+
+  Widget _buildStatChip(IconData icon, String value, String label) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        decoration: BoxDecoration(
+          color: KipikTheme.blanc.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: KipikTheme.blanc),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontFamily: KipikTheme.fontTitle,
+                      color: KipikTheme.blanc,
+                    ),
+                  ),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: KipikTheme.blanc.withOpacity(0.7),
+                      fontFamily: 'Roboto',
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
             ),
           ],
@@ -743,51 +567,344 @@ class _AdminOrganizersManagementPageState extends State<AdminOrganizersManagemen
     );
   }
 
-  Widget _buildOrganizersTab() {
-    return const Center(
-      child: Text(
-        'Liste détaillée de tous les organisateurs partenaires',
-        style: TextStyle(fontFamily: 'Roboto'), // CHANGÉ: Roboto
+  Widget _buildActionButtons(String organizerId, String status, Map<String, dynamic> data) {
+    return Row(
+      children: [
+        if (status == 'pending') ...[
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () => _verifyOrganizer(organizerId),
+              icon: const Icon(Icons.check, size: 14),
+              label: Text(
+                'Vérifier',
+                style: TextStyle(fontFamily: KipikTheme.fontTitle, fontSize: 12),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: KipikTheme.blanc,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => _showSuspendDialog(organizerId),
+              icon: const Icon(Icons.close, size: 14),
+              label: Text(
+                'Refuser',
+                style: TextStyle(fontFamily: KipikTheme.fontTitle, fontSize: 12),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: KipikTheme.blanc,
+                side: BorderSide(color: KipikTheme.blanc),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+        ] else if (status == 'verified') ...[
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => _showSuspendDialog(organizerId),
+              icon: const Icon(Icons.pause, size: 14),
+              label: Text(
+                'Suspendre',
+                style: TextStyle(fontFamily: KipikTheme.fontTitle, fontSize: 12),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: KipikTheme.blanc,
+                side: BorderSide(color: KipikTheme.blanc),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+        ] else if (status == 'suspended') ...[
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () => _verifyOrganizer(organizerId),
+              icon: const Icon(Icons.restore, size: 14),
+              label: Text(
+                'Réactiver',
+                style: TextStyle(fontFamily: KipikTheme.fontTitle, fontSize: 12),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: KipikTheme.blanc,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(width: 8),
+        IconButton(
+          onPressed: () => _showOrganizerDetails(organizerId, data),
+          icon: Icon(Icons.more_vert, color: KipikTheme.blanc),
+          style: IconButton.styleFrom(
+            backgroundColor: KipikTheme.blanc.withOpacity(0.2),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+
+  Future<void> _verifyOrganizer(String organizerId) async {
+    try {
+      await _organizerService.verifyOrganizer(organizerId);
+      
+      if (mounted) {
+        KipikTheme.showSuccessSnackBar(context, 'Organisateur vérifié avec succès');
+      }
+    } catch (e) {
+      if (mounted) {
+        KipikTheme.showErrorSnackBar(context, 'Erreur: $e');
+      }
+    }
+  }
+
+  Future<void> _showSuspendDialog(String organizerId) async {
+    final reasonController = TextEditingController();
+    
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text(
+          'Suspendre l\'organisateur',
+          style: TextStyle(
+            fontFamily: KipikTheme.fontTitle,
+            color: KipikTheme.rouge,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Voulez-vous vraiment suspendre cet organisateur ?',
+              style: TextStyle(fontFamily: 'Roboto'),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: reasonController,
+              decoration: InputDecoration(
+                labelText: 'Raison de la suspension',
+                labelStyle: const TextStyle(fontFamily: 'Roboto'),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: KipikTheme.rouge),
+                ),
+              ),
+              maxLines: 3,
+              style: const TextStyle(fontFamily: 'Roboto'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(
+              'Annuler',
+              style: TextStyle(
+                color: Colors.grey,
+                fontFamily: KipikTheme.fontTitle,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: Text(
+              'Suspendre',
+              style: TextStyle(
+                fontFamily: KipikTheme.fontTitle,
+                color: KipikTheme.blanc,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      try {
+        await _organizerService.suspendOrganizer(
+          organizerId,
+          reasonController.text.isNotEmpty 
+              ? reasonController.text 
+              : 'Suspension administrative',
+        );
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Organisateur suspendu',
+                style: TextStyle(fontFamily: KipikTheme.fontTitle),
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          KipikTheme.showErrorSnackBar(context, 'Erreur: $e');
+        }
+      }
+    }
+    
+    reasonController.dispose();
+  }
+
+  void _showOrganizerDetails(String organizerId, Map<String, dynamic> data) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        maxChildSize: 0.9,
+        minChildSize: 0.5,
+        builder: (context, scrollController) => Container(
+          decoration: BoxDecoration(
+            color: KipikTheme.blanc,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              // Handle style Kipik
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: KipikTheme.rouge,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              
+              Expanded(
+                child: ListView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.all(20),
+                  children: [
+                    Text(
+                      'Détails Organisateur',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontFamily: KipikTheme.fontTitle,
+                        color: KipikTheme.rouge,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    
+                    _buildDetailSection('Informations générales', [
+                      _buildDetailRow('Nom', data['name'] ?? 'Non défini'),
+                      _buildDetailRow('Email', data['email'] ?? 'Non défini'),
+                      _buildDetailRow('Téléphone', data['phone'] ?? 'Non défini'),
+                      _buildDetailRow('Entreprise', data['company'] ?? 'Non défini'),
+                      _buildDetailRow('Statut', data['status'] ?? 'pending'),
+                      _buildDetailRow('Vérifié', (data['isVerified'] ?? false) ? 'Oui' : 'Non'),
+                    ]),
+                    
+                    const SizedBox(height: 20),
+                    
+                    _buildDetailSection('Statistiques', [
+                      _buildDetailRow('Total conventions', '${(data['stats'] ?? {})['totalConventions'] ?? 0}'),
+                      _buildDetailRow('Total tatoueurs', '${(data['stats'] ?? {})['totalTattooers'] ?? 0}'),
+                      _buildDetailRow('Total visiteurs', '${(data['stats'] ?? {})['totalVisitors'] ?? 0}'),
+                      _buildDetailRow('Revenus totaux', '${(data['stats'] ?? {})['totalRevenue'] ?? 0}€'),
+                    ]),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildEventsTab() {
-    return const Center(
-      child: Text(
-        'Calendrier et gestion de tous les événements',
-        style: TextStyle(fontFamily: 'Roboto'), // CHANGÉ: Roboto
-      ),
+  Widget _buildDetailSection(String title, List<Widget> children) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 18,
+            fontFamily: KipikTheme.fontTitle,
+            color: KipikTheme.rouge,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey[300]!),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(children: children),
+        ),
+      ],
     );
   }
 
-  Widget _buildFinancesTab() {
-    return const Center(
-      child: Text(
-        'Rapports financiers, commissions et paiements',
-        style: TextStyle(fontFamily: 'Roboto'), // CHANGÉ: Roboto
+  Widget _buildDetailRow(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: Colors.grey[200]!),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontFamily: KipikTheme.fontTitle,
+                fontSize: 12,
+                color: Colors.black54,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontFamily: 'Roboto',
+                color: Colors.black87,
+              ),
+            ),
+          ),
+        ],
       ),
     );
-  }
-
-  Widget _buildAnalyticsTab() {
-    return const Center(
-      child: Text(
-        'Analytics avancées et insights événements',
-        style: TextStyle(fontFamily: 'Roboto'), // CHANGÉ: Roboto
-      ),
-    );
-  }
-
-  void _viewOrganizerDetails(Map<String, dynamic> organizer) {
-    // Navigation vers la page détaillée de l'organisateur
-  }
-
-  void _viewOrganizerEvents(Map<String, dynamic> organizer) {
-    // Voir tous les événements de l'organisateur
-  }
-
-  void _viewOrganizerFinances(Map<String, dynamic> organizer) {
-    // Voir les finances de l'organisateur
   }
 }

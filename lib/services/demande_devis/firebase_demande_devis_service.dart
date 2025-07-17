@@ -4,11 +4,9 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:path/path.dart' as path;
-import '../photo/firebase_photo_service.dart';
-import '../auth/secure_auth_service.dart'; // ✅ MIGRATION
-import '../auth/captcha_manager.dart'; // ✅ SÉCURITÉ
-import '../../models/user_role.dart'; // ✅ MIGRATION
-import '../../core/firestore_helper.dart'; // ✅ AJOUT après la ligne 2
+import 'package:kipik_v5/services/auth/secure_auth_service.dart';
+import 'package:kipik_v5/models/user_role.dart';
+import 'package:kipik_v5/core/firestore_helper.dart';
 
 class FirebaseDemandeDevisService {
   static FirebaseDemandeDevisService? _instance;
@@ -17,10 +15,9 @@ class FirebaseDemandeDevisService {
   FirebaseDemandeDevisService._();
 
   final FirebaseFirestore _firestore = FirestoreHelper.instance;
-  final FirebasePhotoService _photoService = FirebasePhotoService.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
-  // ✅ MIGRATION: Service sécurisé centralisé
+  // ✅ SERVICE SÉCURISÉ CENTRALISÉ
   SecureAuthService get _authService => SecureAuthService.instance;
 
   // Getters sécurisés
@@ -28,41 +25,39 @@ class FirebaseDemandeDevisService {
   UserRole? get _currentUserRole => _authService.currentUserRole;
   dynamic get _currentUser => _authService.currentUser;
 
-  /// ✅ Vérification d'authentification obligatoire
+  /// ✅ VÉRIFICATION D'AUTHENTIFICATION OBLIGATOIRE
   void _ensureAuthenticated() {
     if (_currentUserId == null) {
       throw Exception('Utilisateur non connecté');
     }
   }
 
+  /// ✅ UPLOAD D'IMAGE SÉCURISÉ
   Future<String?> uploadImage(File file, String storagePath) async {
     try {
       _ensureAuthenticated();
 
-      // ✅ Validation du fichier
+      // Validation du fichier
       if (!file.existsSync()) {
         throw Exception('Fichier inexistant');
       }
 
       final fileSize = await file.length();
       if (fileSize > 10 * 1024 * 1024) {
-        // 10MB max
         throw Exception('Fichier trop volumineux (max 10MB)');
       }
 
-      // ✅ Validation du type de fichier
+      // Validation du type de fichier
       final extension = path.extension(file.path).toLowerCase();
       final allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.pdf'];
       if (!allowedExtensions.contains(extension)) {
         throw Exception('Type de fichier non autorisé');
       }
 
-      // ✅ Chemin sécurisé avec userId
+      // Chemin sécurisé avec userId
       final securePath = 'demandes_devis/$_currentUserId/$storagePath';
 
-      print(
-        '📤 Upload devis - Fichier: ${file.path}, Taille: ${(fileSize / 1024).round()}KB',
-      );
+      print('📤 Upload devis - Fichier: ${file.path}, Taille: ${(fileSize / 1024).round()}KB');
 
       // Upload vers Firebase Storage
       final ref = _storage.ref().child(securePath);
@@ -88,11 +83,8 @@ class FirebaseDemandeDevisService {
     }
   }
 
-  /// ✅ NOUVEAU: Upload multiple optimisé
-  Future<List<String>> uploadMultipleImages(
-    List<File> files,
-    String basePath,
-  ) async {
+  /// ✅ UPLOAD MULTIPLE OPTIMISÉ
+  Future<List<String>> uploadMultipleImages(List<File> files, String basePath) async {
     try {
       _ensureAuthenticated();
 
@@ -104,8 +96,7 @@ class FirebaseDemandeDevisService {
       for (int i = 0; i < files.length; i++) {
         final file = files[i];
         final extension = path.extension(file.path);
-        final fileName =
-            '${DateTime.now().millisecondsSinceEpoch}_$i$extension';
+        final fileName = '${DateTime.now().millisecondsSinceEpoch}_$i$extension';
         final url = await uploadImage(file, '$basePath/$fileName');
         if (url != null) {
           urls.add(url);
@@ -119,24 +110,13 @@ class FirebaseDemandeDevisService {
     }
   }
 
-  Future<void> createDemandeDevis(Map<String, dynamic> data) async {
+  /// ✅ CRÉATION DE DEMANDE DE DEVIS AVEC SÉCURITÉ
+  Future<String> createDemandeDevis(Map<String, dynamic> data) async {
     try {
       _ensureAuthenticated();
 
-      // ✅ SÉCURITÉ: Validation reCAPTCHA pour demandes de devis
-      final captchaResult = await CaptchaManager.instance.validateUserAction(
-        action: 'booking', // Utilise le score de réservation (0.6)
-      );
-
-      if (!captchaResult.isValid) {
-        throw Exception(
-          'Validation de sécurité échouée - Score: ${captchaResult.score.toStringAsFixed(2)}',
-        );
-      }
-
-      // ✅ Validation des données obligatoires
-      if (data['description'] == null ||
-          data['description'].toString().trim().isEmpty) {
+      // Validation des données obligatoires
+      if (data['description'] == null || data['description'].toString().trim().isEmpty) {
         throw Exception('Description du projet requise');
       }
 
@@ -144,13 +124,12 @@ class FirebaseDemandeDevisService {
         throw Exception('Au moins une zone corporelle doit être sélectionnée');
       }
 
-      // ✅ Données sécurisées de la demande
+      // ✅ DONNÉES SÉCURISÉES DE LA DEMANDE
       final demandeData = {
         // Données utilisateur (sécurisées)
         'clientId': _currentUserId!,
         'clientEmail': _currentUser?['email'] ?? '',
-        'clientName':
-            _currentUser?['displayName'] ?? _currentUser?['name'] ?? 'Client',
+        'clientName': _currentUser?['displayName'] ?? _currentUser?['name'] ?? 'Client',
 
         // Données du projet (validées)
         'description': data['description'].toString().trim(),
@@ -163,62 +142,86 @@ class FirebaseDemandeDevisService {
         'fichiersReferenceUrls': data['fichiersReferenceUrls'] ?? [],
         'imagesGenerees': data['imagesGenerees'] ?? [],
 
-        // Métadonnées système
-        'status': 'pending',
-        'priority': 'normal',
-        'source': 'mobile_app',
-        'version': '2.0',
+        // ✅ DONNÉES FLASH SI APPLICABLE
+        'isFlashBooking': data['isFlashBooking'] ?? false,
+        'flashData': data['flashData'],
+        'targetTattooerId': data['targetTattooerId'],
+        'targetTatoueurName': data['targetTatoueurName'],
+        'requestType': data['requestType'] ?? 'custom_design',
+        'isFlashMinute': data['isFlashMinute'] ?? false,
+        'flashMinuteDiscount': data['flashMinuteDiscount'],
+        'urgentUntil': data['urgentUntil'],
 
-        // Sécurité et traçabilité
-        'captchaScore': captchaResult.score,
-        'captchaAction': captchaResult.action,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'createdBy': _currentUserId,
-
-        // Données additionnelles pour matching
+        // Données client enrichies
+        'clientProfile': data['clientProfile'],
         'estimatedBudget': data['estimatedBudget'],
         'urgency': data['urgency'] ?? 'normal',
         'preferredStyle': data['preferredStyle'],
         'colorPreference': data['colorPreference'],
+
+        // Contraintes application
+        'acceptedTerms': data['acceptedTerms'] ?? false,
+        'agreeToAppOnlyContact': data['agreeToAppOnlyContact'] ?? false,
+        'mustUseAppForBooking': data['mustUseAppForBooking'] ?? true,
+        'commissionRate': data['commissionRate'] ?? 0.01,
+
+        // Métadonnées système
+        'status': 'pending',
+        'priority': data['isFlashMinute'] == true ? 'urgent' : 'normal',
+        'source': 'mobile_app',
+        'version': '2.0',
+        'complexity': data['complexity'] ?? 'medium',
+
+        // Sécurité et traçabilité
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'createdBy': _currentUserId,
+
+        // Métadonnées pour matching
+        'totalImages': (data['fichiersReferenceUrls'] as List? ?? []).length + 
+                      (data['imagesGenerees'] as List? ?? []).length,
+        'hasPhotoEmplacement': data['photoEmplacementUrl'] != null,
+        'zonesCount': (data['zones'] as List).length,
+        'descriptionLength': data['description'].toString().trim().length,
+        'submissionTimestamp': DateTime.now().toIso8601String(),
       };
 
-      // ✅ Création de la demande avec ID généré
-      final docRef = await _firestore
-          .collection('demandes_devis')
-          .add(demandeData);
+      // ✅ CRÉATION AVEC ID GÉNÉRÉ
+      final docRef = await _firestore.collection('demandes_devis').add(demandeData);
 
-      // ✅ Log de traçabilité
+      // ✅ LOG DE TRAÇABILITÉ
       await _firestore.collection('devis_logs').add({
         'action': 'demande_created',
         'demandeId': docRef.id,
         'clientId': _currentUserId,
-        'timestamp': FieldValue.serverTimestamp(),
-        'captchaScore': captchaResult.score,
+        'requestType': data['requestType'] ?? 'custom_design',
+        'isFlashBooking': data['isFlashBooking'] ?? false,
+        'isFlashMinute': data['isFlashMinute'] ?? false,
+        'targetTattooerId': data['targetTattooerId'],
         'zonesCount': (data['zones'] as List).length,
         'hasImages': (data['fichiersReferenceUrls'] as List? ?? []).isNotEmpty,
+        'timestamp': FieldValue.serverTimestamp(),
       });
 
-      print(
-        '✅ Demande de devis créée - ID: ${docRef.id}, Score: ${captchaResult.score.toStringAsFixed(2)}',
-      );
+      print('✅ Demande de devis créée - ID: ${docRef.id}, Type: ${data['requestType'] ?? 'custom'}');
+      return docRef.id;
+      
     } catch (e) {
       print('❌ Erreur création demande devis: $e');
       rethrow;
     }
   }
 
-  /// ✅ NOUVEAU: Récupérer les demandes de l'utilisateur
+  /// ✅ RÉCUPÉRER LES DEMANDES DE L'UTILISATEUR
   Future<List<Map<String, dynamic>>> getMesDemandesDevis() async {
     try {
       _ensureAuthenticated();
 
-      final snapshot =
-          await _firestore
-              .collection('demandes_devis')
-              .where('clientId', isEqualTo: _currentUserId)
-              .orderBy('createdAt', descending: true)
-              .get();
+      final snapshot = await _firestore
+          .collection('demandes_devis')
+          .where('clientId', isEqualTo: _currentUserId)
+          .orderBy('createdAt', descending: true)
+          .get();
 
       return snapshot.docs.map((doc) {
         final data = doc.data();
@@ -231,7 +234,7 @@ class FirebaseDemandeDevisService {
     }
   }
 
-  /// ✅ NOUVEAU: Stream des demandes en temps réel
+  /// ✅ STREAM DES DEMANDES EN TEMPS RÉEL
   Stream<List<Map<String, dynamic>>> streamMesDemandesDevis() {
     if (_currentUserId == null) {
       return Stream.value([]);
@@ -242,24 +245,20 @@ class FirebaseDemandeDevisService {
         .where('clientId', isEqualTo: _currentUserId)
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map(
-          (snapshot) =>
-              snapshot.docs.map((doc) {
-                final data = doc.data();
-                data['id'] = doc.id;
-                return data;
-              }).toList(),
-        );
+        .map((snapshot) => snapshot.docs.map((doc) {
+              final data = doc.data();
+              data['id'] = doc.id;
+              return data;
+            }).toList());
   }
 
-  /// ✅ NOUVEAU: Mettre à jour le statut d'une demande
+  /// ✅ METTRE À JOUR LE STATUT D'UNE DEMANDE
   Future<void> updateDemandeStatus(String demandeId, String newStatus) async {
     try {
       _ensureAuthenticated();
 
-      // ✅ Vérifier que la demande appartient à l'utilisateur ou est admin
-      final demandeDoc =
-          await _firestore.collection('demandes_devis').doc(demandeId).get();
+      // Vérifier que la demande appartient à l'utilisateur ou est admin
+      final demandeDoc = await _firestore.collection('demandes_devis').doc(demandeId).get();
 
       if (!demandeDoc.exists) {
         throw Exception('Demande introuvable');
@@ -279,7 +278,7 @@ class FirebaseDemandeDevisService {
         'updatedBy': _currentUserId,
       });
 
-      // ✅ Log de traçabilité
+      // Log de traçabilité
       await _firestore.collection('devis_logs').add({
         'action': 'status_updated',
         'demandeId': demandeId,
@@ -294,13 +293,12 @@ class FirebaseDemandeDevisService {
     }
   }
 
-  /// ✅ NOUVEAU: Supprimer une demande (si en attente)
+  /// ✅ SUPPRIMER UNE DEMANDE (si en attente)
   Future<void> deleteDemandeDevis(String demandeId) async {
     try {
       _ensureAuthenticated();
 
-      final demandeDoc =
-          await _firestore.collection('demandes_devis').doc(demandeId).get();
+      final demandeDoc = await _firestore.collection('demandes_devis').doc(demandeId).get();
 
       if (!demandeDoc.exists) {
         throw Exception('Demande introuvable');
@@ -308,9 +306,8 @@ class FirebaseDemandeDevisService {
 
       final demandeData = demandeDoc.data()!;
 
-      // ✅ Vérifications de sécurité
-      if (demandeData['clientId'] != _currentUserId &&
-          _currentUserRole != UserRole.admin) {
+      // Vérifications de sécurité
+      if (demandeData['clientId'] != _currentUserId && _currentUserRole != UserRole.admin) {
         throw Exception('Permission refusée');
       }
 
@@ -318,13 +315,12 @@ class FirebaseDemandeDevisService {
         throw Exception('Impossible de supprimer une demande déjà traitée');
       }
 
-      // ✅ Supprimer les fichiers associés
-      final urls =
-          [
-            demandeData['zoneImageUrl'],
-            demandeData['photoEmplacementUrl'],
-            ...(demandeData['fichiersReferenceUrls'] as List? ?? []),
-          ].where((url) => url != null).cast<String>();
+      // Supprimer les fichiers associés
+      final urls = [
+        demandeData['zoneImageUrl'],
+        demandeData['photoEmplacementUrl'],
+        ...(demandeData['fichiersReferenceUrls'] as List? ?? []),
+      ].where((url) => url != null).cast<String>();
 
       for (final url in urls) {
         try {
@@ -335,10 +331,10 @@ class FirebaseDemandeDevisService {
         }
       }
 
-      // ✅ Supprimer la demande
+      // Supprimer la demande
       await _firestore.collection('demandes_devis').doc(demandeId).delete();
 
-      // ✅ Log de traçabilité
+      // Log de traçabilité
       await _firestore.collection('devis_logs').add({
         'action': 'demande_deleted',
         'demandeId': demandeId,
@@ -351,22 +347,25 @@ class FirebaseDemandeDevisService {
     }
   }
 
-  /// ✅ NOUVEAU: Obtenir les statistiques des demandes
+  /// ✅ STATISTIQUES DES DEMANDES
   Future<Map<String, dynamic>> getDemandesStats() async {
     try {
       _ensureAuthenticated();
 
-      final snapshot =
-          await _firestore
-              .collection('demandes_devis')
-              .where('clientId', isEqualTo: _currentUserId)
-              .get();
+      final snapshot = await _firestore
+          .collection('demandes_devis')
+          .where('clientId', isEqualTo: _currentUserId)
+          .get();
 
       final total = snapshot.docs.length;
       int pending = 0, accepted = 0, rejected = 0, completed = 0;
+      int flashBookings = 0, flashMinute = 0;
 
       for (final doc in snapshot.docs) {
-        switch (doc.data()['status']) {
+        final data = doc.data();
+        
+        // Compter par statut
+        switch (data['status']) {
           case 'pending':
             pending++;
             break;
@@ -381,6 +380,14 @@ class FirebaseDemandeDevisService {
             completed++;
             break;
         }
+
+        // Compter les réservations flash
+        if (data['isFlashBooking'] == true) {
+          flashBookings++;
+          if (data['isFlashMinute'] == true) {
+            flashMinute++;
+          }
+        }
       }
 
       return {
@@ -389,6 +396,8 @@ class FirebaseDemandeDevisService {
         'accepted': accepted,
         'rejected': rejected,
         'completed': completed,
+        'flashBookings': flashBookings,
+        'flashMinute': flashMinute,
       };
     } catch (e) {
       print('❌ Erreur stats demandes: $e');
@@ -398,11 +407,43 @@ class FirebaseDemandeDevisService {
         'accepted': 0,
         'rejected': 0,
         'completed': 0,
+        'flashBookings': 0,
+        'flashMinute': 0,
       };
     }
   }
 
-  /// ✅ Utilitaire pour déterminer le type MIME
+  /// ✅ RÉCUPÉRER UNE DEMANDE SPÉCIFIQUE
+  Future<Map<String, dynamic>?> getDemandeById(String demandeId) async {
+    try {
+      _ensureAuthenticated();
+
+      final doc = await _firestore.collection('demandes_devis').doc(demandeId).get();
+
+      if (!doc.exists) {
+        return null;
+      }
+
+      final data = doc.data()!;
+      data['id'] = doc.id;
+
+      // Vérifier les permissions
+      final isOwner = data['clientId'] == _currentUserId;
+      final isTargetTatoueur = data['targetTattooerId'] == _currentUserId;
+      final isAdmin = _currentUserRole == UserRole.admin;
+
+      if (!isOwner && !isTargetTatoueur && !isAdmin) {
+        throw Exception('Permission refusée');
+      }
+
+      return data;
+    } catch (e) {
+      print('❌ Erreur récupération demande: $e');
+      return null;
+    }
+  }
+
+  /// ✅ UTILITAIRE POUR DÉTERMINER LE TYPE MIME
   String _getContentType(String extension) {
     switch (extension.toLowerCase()) {
       case '.jpg':
@@ -419,22 +460,26 @@ class FirebaseDemandeDevisService {
     }
   }
 
-  /// ✅ NOUVEAU: Diagnostic du service
+  /// ✅ DIAGNOSTIC DU SERVICE
   Future<void> debugDemandeDevisService() async {
     try {
       print('🔍 Debug FirebaseDemandeDevisService:');
       print('  - Utilisateur connecté: ${_currentUserId != null}');
       print('  - User ID: $_currentUserId');
       print('  - User Role: $_currentUserRole');
+      print('  - Firestore: ${_firestore.app.name}');
 
       if (_currentUserId != null) {
         final stats = await getDemandesStats();
         print('  - Demandes totales: ${stats['total']}');
         print('  - En attente: ${stats['pending']}');
         print('  - Acceptées: ${stats['accepted']}');
-        print('  - Rejetées: ${stats['rejected']}');
-        print('  - Terminées: ${stats['completed']}');
+        print('  - Flash bookings: ${stats['flashBookings']}');
+        print('  - Flash Minute: ${stats['flashMinute']}');
       }
+
+      final connectionOk = await FirestoreHelper.checkConnection();
+      print('  - Connexion Firestore: ${connectionOk ? "OK" : "ERREUR"}');
     } catch (e) {
       print('❌ Erreur debug service: $e');
     }

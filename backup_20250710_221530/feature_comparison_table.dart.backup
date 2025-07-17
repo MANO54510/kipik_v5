@@ -1,0 +1,170 @@
+// lib/screens/subscription/widgets/feature_comparison_table.dart
+
+import 'package:flutter/material.dart';
+import '../../../models/user_subscription.dart';
+
+class FeatureComparisonTable extends StatelessWidget {
+  const FeatureComparisonTable({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A2E),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: const BoxDecoration(
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+              ),
+            ),
+            child: const Text(
+              '📊 Comparaison Standard vs Premium',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          _buildComparisonRows(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComparisonRows() {
+    final features = [
+      {'name': 'Agenda professionnel', 'standard': true, 'premium': true},
+      {'name': 'Paiement fractionné clients', 'standard': true, 'premium': true},
+      {'name': 'Gestion clients avancée', 'standard': true, 'premium': true},
+      {'name': 'Analytics de base', 'standard': true, 'premium': true},
+      {'name': 'Commission sur paiements', 'standard': '2%', 'premium': '1%'},
+      {'name': 'Conventions & événements', 'standard': false, 'premium': true},
+      {'name': 'Système Guest', 'standard': false, 'premium': true},
+      {'name': 'Flash Minute', 'standard': false, 'premium': true},
+      {'name': 'Support prioritaire', 'standard': false, 'premium': true},
+    ];
+
+    return Column(
+      children: [
+        // Header
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          color: const Color(0xFF0F172A),
+          child: Row(
+            children: [
+              const Expanded(
+                flex: 2,
+                child: Text(
+                  'Fonctionnalité',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  'Standard 99€',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: SubscriptionType.standard.subscriptionColor,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  'Premium 149€',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: SubscriptionType.premium.subscriptionColor,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        // Rows
+        ...features.map((feature) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: Colors.grey.withOpacity(0.1)),
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: Text(
+                  feature['name'] as String,
+                  style: TextStyle(
+                    color: Colors.grey[300],
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: _buildFeatureCell(feature['standard']),
+              ),
+              Expanded(
+                child: _buildFeatureCell(feature['premium']),
+              ),
+            ],
+          ),
+        )).toList(),
+      ],
+    );
+  }
+
+  Widget _buildFeatureCell(dynamic value) {
+    if (value is bool) {
+      return Icon(
+        value ? Icons.check : Icons.close,
+        color: value ? Colors.green : Colors.grey,
+        size: 20,
+      );
+    } else if (value is String) {
+      return Text(
+        value,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: value == '1%' ? Colors.green : Colors.orange,
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+}
+
+// Extension pour obtenir les couleurs (répétée pour éviter les imports)
+extension SubscriptionTypeColors on SubscriptionType {
+  Color get primaryColor {
+    switch (this) {
+      case SubscriptionType.free:
+        return Colors.grey;
+      case SubscriptionType.standard:
+        return const Color(0xFF10B981);
+      case SubscriptionType.premium:
+        return const Color(0xFF6366F1);
+      case SubscriptionType.enterprise:
+        return const Color(0xFF8B5CF6);
+    }
+  }
+}

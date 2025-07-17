@@ -3,7 +3,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
-import 'package:kipik_v5/services/auth/secure_auth_service.dart'; // ✅ SEUL SERVICE UTILISÉ
+import 'package:kipik_v5/services/auth/secure_auth_service.dart';
 import 'package:kipik_v5/models/user_role.dart';
 import 'package:kipik_v5/widgets/common/drawers/secure_drawer_components.dart';
 
@@ -21,7 +21,11 @@ import 'package:kipik_v5/pages/admin/conventions/admin_convention_tattooers_page
 import 'package:kipik_v5/pages/admin/conventions/admin_conventions_list_page.dart';
 
 // Flash & Réservations
-import 'package:kipik_v5/pages/admin/flash/admin_flash_reservations_page.dart';
+import 'package:kipik_v5/pages/admin/flashs/admin_flash_reservations_page.dart';
+
+// ✅ NOUVEAUX IMPORTS FLASH ADMIN (Phase 5)
+import 'package:kipik_v5/pages/admin/flashs/moderation_flashs_page.dart';
+import 'package:kipik_v5/pages/admin/flashs/flash_minute_monitoring_page.dart';
 
 // Statistiques
 import 'package:kipik_v5/pages/admin/stats/admin_convention_stats_page.dart';
@@ -150,7 +154,7 @@ class CustomDrawerAdmin extends StatelessWidget with SecureDrawerMixin {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              userName, // ✅ CHANGÉ : Variable extraite
+                              userName,
                               style: const TextStyle(
                                 fontFamily: 'PermanentMarker',
                                 fontSize: 22,
@@ -225,7 +229,7 @@ class CustomDrawerAdmin extends StatelessWidget with SecureDrawerMixin {
                   icon: Icons.support_agent_outlined,
                   title: 'Support Admin',
                   subtitle: 'Questions techniques avancées',
-                  onTap: () => secureNavigate(context, SupportChatPage(userId: userId)), // ✅ CHANGÉ
+                  onTap: () => secureNavigate(context, SupportChatPage(userId: userId)),
                 ),
 
                 const _SectionDivider(),
@@ -294,6 +298,39 @@ class CustomDrawerAdmin extends StatelessWidget with SecureDrawerMixin {
                   title: 'Gestion parrainages',
                   subtitle: 'Suivi des parrainages',
                   onTap: () => secureNavigate(context, const AdminReferralsPage()),
+                ),
+
+                const _SectionDivider(),
+                
+                // ✅ SECTION GESTION FLASHS ADMIN (NOUVELLE - Phase 5)
+                const _SectionHeader('GESTION FLASHS'),
+                _buildSecureMenuItem(
+                  context,
+                  icon: Icons.flash_auto_outlined,
+                  title: 'Modération Flashs',
+                  subtitle: 'Valider/rejeter flashs publiés',
+                  onTap: () => secureNavigate(context, const ModerationFlashsPage()),
+                ),
+                _buildSecureMenuItem(
+                  context,
+                  icon: Icons.speed_outlined,
+                  title: 'Monitoring Flash Minute',
+                  subtitle: 'Surveiller offres urgentes',
+                  onTap: () => secureNavigate(context, const FlashMinuteMonitoringPage()),
+                ),
+                _buildSecureMenuItem(
+                  context,
+                  icon: Icons.analytics_outlined,
+                  title: 'Analytics Flashs Global',
+                  subtitle: 'Statistiques plateforme flashs',
+                  onTap: () => showDevelopmentMessage(context, 'Analytics Flashs Global'),
+                ),
+                _buildSecureMenuItem(
+                  context,
+                  icon: Icons.report_outlined,
+                  title: 'Signalements Flashs',
+                  subtitle: 'Contenus signalés par utilisateurs',
+                  onTap: () => showDevelopmentMessage(context, 'Signalements Flashs'),
                 ),
 
                 const _SectionDivider(),

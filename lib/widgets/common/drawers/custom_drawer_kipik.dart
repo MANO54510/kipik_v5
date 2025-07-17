@@ -8,7 +8,6 @@ import 'package:kipik_v5/models/user_role.dart';
 import 'package:kipik_v5/utils/chat_helper.dart';
 
 // ✅ IMPORTS PAGES EXISTANTES - ORGANISÉS PAR CATÉGORIE
-// Navigation imports - organisés par catégorie
 import 'package:kipik_v5/pages/pro/home_page_pro.dart';
 import 'package:kipik_v5/pages/pro/dashboard_page.dart';
 import 'package:kipik_v5/pages/pro/profil_tatoueur.dart';
@@ -21,10 +20,6 @@ import 'package:kipik_v5/pages/pro/agenda/pro_agenda_notifications_page.dart';
 import 'package:kipik_v5/pages/pro/attente_devis_page.dart';
 import 'package:kipik_v5/pages/chat_projet_page.dart';
 import 'package:kipik_v5/pages/pro/mes_projets_page.dart';
-
-// Portfolio & Réalisations
-import 'package:kipik_v5/pages/pro/mes_realisations_page.dart';
-import 'package:kipik_v5/pages/pro/mon_shop_page.dart';
 
 // Outils Pro
 import 'package:kipik_v5/pages/conventions/convention_map_page.dart';
@@ -44,10 +39,15 @@ import 'package:kipik_v5/pages/pro/notifications_pro_page.dart';
 // ✅ IMPORTS SHARED CORRIGÉS
 import 'package:kipik_v5/pages/shared/inspirations/inspirations_page.dart';
 
-// ✅ NOUVEAUX IMPORTS FLASH (Semaine 2)
+// ✅ NOUVEAUX IMPORTS FLASH SYSTÈME (Phase 5) - Gardés pour les liens directs spécialisés
 import 'package:kipik_v5/pages/pro/flashs/publier_flash_page.dart';
-import 'package:kipik_v5/pages/pro/flashs/gestion_flashs_page.dart';
-import 'package:kipik_v5/pages/shared/flashs/flash_detail_page.dart';
+import 'package:kipik_v5/pages/pro/flashs/flash_minute_create_page.dart';
+import 'package:kipik_v5/pages/pro/flashs/analytics_flashs_page.dart';
+
+// ✅ NOUVEAUX IMPORTS BOOKING SYSTÈME
+import 'package:kipik_v5/pages/pro/booking/demandes_rdv_page.dart';
+// import 'package:kipik_v5/pages/pro/booking/rdv_validation_page.dart'; // ❌ SUPPRIMÉ car nécessite requestId
+// import 'package:kipik_v5/pages/shared/booking/booking_chat_page.dart'; // ❌ SUPPRIMÉ car nécessite booking
 
 class CustomDrawerKipik extends StatelessWidget {
   const CustomDrawerKipik({Key? key}) : super(key: key);
@@ -80,10 +80,10 @@ class CustomDrawerKipik extends StatelessWidget {
       backgroundColor: const Color(0xFF0A0A0A),
       child: Column(
         children: [
-          // ✅ Header avec image aléatoire et thème tatoueur - IDENTIQUE À L'ORIGINAL
+          // ✅ Header avec image aléatoire et thème tatoueur
           _buildDrawerHeader(userData, bgImage),
 
-          // ✅ Menu optimisé avec les nouvelles fonctionnalités Flash
+          // ✅ Menu optimisé avec navigation unifiée vers le profil
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
@@ -108,76 +108,93 @@ class CustomDrawerKipik extends StatelessWidget {
                   context,
                   icon: Icons.person_outline,
                   title: 'Mon profil',
-                  onTap: () => _navigateTo(context, const ProfilTatoueur()),
+                  onTap: () => _navigateToProfilTab(context, 0), // ✅ Tab général
                 ),
 
                 const _SectionDivider(),
                 
-                // ✅ NOUVELLE SECTION : GESTION FLASHS (Semaine 2)
-                _buildSectionHeader('GESTION FLASHS'),
+                // ✅ SECTION UNIFIÉE : MON PROFIL & PORTFOLIO
+                _buildSectionHeader('MON PROFIL & PORTFOLIO'),
                 _buildMenuItem(
                   context,
-                  icon: Icons.add_circle_outline,
-                  title: 'Publier un Flash',
-                  subtitle: 'Créer nouveau flash disponible',
-                  onTap: () => _navigateTo(context, const PublierFlashPage()),
+                  icon: Icons.store_outlined,
+                  title: 'Mon Shop',
+                  subtitle: 'Produits et accessoires',
+                  onTap: () => _navigateToProfilTab(context, 0), // ✅ Tab Shop dans profil
+                ),
+                _buildMenuItem(
+                  context,
+                  icon: Icons.photo_library_outlined,
+                  title: 'Mes Réalisations',
+                  subtitle: 'Portfolio de tatouages terminés',
+                  onTap: () => _navigateToProfilTab(context, 1), // ✅ Tab Réalisations dans profil
                 ),
                 _buildMenuItem(
                   context,
                   icon: Icons.flash_on_outlined,
                   title: 'Mes Flashs',
-                  subtitle: 'Gérer mes flashs publiés',
-                  onTap: () => _navigateTo(context, const GestionFlashsPage()),
+                  subtitle: 'Flashs disponibles et Flash Minute',
+                  badge: '🔥',
+                  onTap: () => _navigateToProfilTab(context, 2), // ✅ Tab Flashs dans profil
+                ),
+
+                const _SectionDivider(),
+                
+                // ✅ SECTION FLASH OUTILS AVANCÉS
+                _buildSectionHeader('OUTILS FLASH AVANCÉS'),
+                _buildMenuItem(
+                  context,
+                  icon: Icons.add_circle_outline,
+                  title: 'Publier un Flash',
+                  subtitle: 'Créer nouveau flash rapidement',
+                  onTap: () => _navigateTo(context, const PublierFlashPage()),
                 ),
                 _buildMenuItem(
                   context,
                   icon: Icons.timer_outlined,
                   title: 'Flash Minute',
                   subtitle: 'Créer offres last-minute',
-                  onTap: () => _showComingSoon(context, 'Flash Minute - Semaine 5'),
+                  badge: '⚡',
+                  onTap: () => _navigateTo(context, const FlashMinuteCreatePage()),
                 ),
                 _buildMenuItem(
                   context,
                   icon: Icons.analytics_outlined,
                   title: 'Analytics Flashs',
                   subtitle: 'Statistiques et performance',
-                  onTap: () => _showComingSoon(context, 'Analytics - Semaine 6'),
+                  onTap: () => _navigateTo(context, const AnalyticsFlashsPage()),
                 ),
 
                 const _SectionDivider(),
                 
-                // ✅ NOUVELLE SECTION : RÉSERVATIONS FLASHS (Semaine 3)
+                // ✅ SECTION RÉSERVATIONS FLASHS
                 _buildSectionHeader('RÉSERVATIONS FLASHS'),
                 _buildMenuItem(
                   context,
                   icon: Icons.request_page_outlined,
                   title: 'Demandes de RDV',
                   subtitle: 'Nouvelles réservations flashs',
-                  onTap: () => _showComingSoon(context, 'Demandes RDV - Semaine 3'),
-                ),
-                _buildMenuItem(
-                  context,
-                  icon: Icons.check_circle_outline,
-                  title: 'Validation RDV',
-                  subtitle: 'Confirmer/refuser créneaux',
-                  onTap: () => _showComingSoon(context, 'Validation RDV - Semaine 3'),
+                  badge: '📬',
+                  onTap: () => _navigateTo(context, const DemandesRdvPage()),
                 ),
                 _buildMenuItem(
                   context,
                   icon: Icons.chat_bubble_outline,
-                  title: 'Chat Réservations',
-                  subtitle: 'Discuter avec clients',
-                  onTap: () => _showComingSoon(context, 'Chat booking - Semaine 3'),
+                  title: 'Mes conversations',
+                  subtitle: 'Chats avec les clients',
+                  badge: '💬',
+                  onTap: () => _navigateToChats(context), // ✅ Navigation vers liste des chats
                 ),
 
                 const _SectionDivider(),
                 
-                // SECTION PROJETS & CLIENTS
-                _buildSectionHeader('PROJETS & CLIENTS'),
+                // SECTION PROJETS & CLIENTS (Devis classiques)
+                _buildSectionHeader('PROJETS PERSONNALISÉS'),
                 _buildMenuItem(
                   context,
                   icon: Icons.request_quote_outlined,
                   title: 'Devis en attente',
+                  subtitle: 'Projets personnalisés',
                   onTap: () => _navigateTo(context, const AttenteDevisPage()),
                 ),
                 _buildMenuItem(
@@ -196,26 +213,14 @@ class CustomDrawerKipik extends StatelessWidget {
 
                 const _SectionDivider(),
                 
-                // SECTION PORTFOLIO & SHOP
-                _buildSectionHeader('PORTFOLIO & CRÉATIONS'),
-                _buildMenuItem(
-                  context,
-                  icon: Icons.photo_library_outlined,
-                  title: 'Mes Réalisations',
-                  onTap: () => _navigateTo(context, const MesRealisationsPage()),
-                ),
+                // SECTION INSPIRATIONS
+                _buildSectionHeader('INSPIRATION & CRÉATIVITÉ'),
                 _buildMenuItem(
                   context,
                   icon: Icons.brush_outlined,
                   title: 'Galerie d\'inspiration',
                   subtitle: 'Explorer les tendances',
                   onTap: () => _navigateTo(context, const InspirationsPage()),
-                ),
-                _buildMenuItem(
-                  context,
-                  icon: Icons.store_outlined,
-                  title: 'Mon Shop',
-                  onTap: () => _navigateTo(context, const MonShopPage()),
                 ),
 
                 const _SectionDivider(),
@@ -272,6 +277,7 @@ class CustomDrawerKipik extends StatelessWidget {
                   icon: Icons.smart_toy_outlined,
                   title: 'Assistant IA Kipik',
                   subtitle: 'Questions, idées, aide navigation',
+                  badge: '🤖',
                   onTap: () => _openAIAssistant(context),
                 ),
                 _buildMenuItem(
@@ -304,10 +310,10 @@ class CustomDrawerKipik extends StatelessWidget {
             ),
           ),
 
-          // ✅ Actions rapides - IDENTIQUES À L'ORIGINAL
+          // ✅ Actions rapides
           _buildQuickActions(context, userData['uid']),
 
-          // ✅ Déconnexion - IDENTIQUE À L'ORIGINAL
+          // ✅ Déconnexion
           _buildLogoutSection(context),
         ],
       ),
@@ -319,7 +325,7 @@ class CustomDrawerKipik extends StatelessWidget {
     try {
       if (currentUser == null) {
         return {
-          'name': 'Utilisateur',
+          'name': 'Tatoueur',
           'email': '',
           'uid': '',
           'profileImageUrl': null,
@@ -399,7 +405,7 @@ class CustomDrawerKipik extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          // Badge PRO - IDENTIQUE À L'ORIGINAL
+          // Badge PRO
           Positioned(
             top: 50,
             right: 16,
@@ -427,7 +433,7 @@ class CustomDrawerKipik extends StatelessWidget {
               ),
             ),
           ),
-          // Effet décoratif - IDENTIQUE À L'ORIGINAL
+          // Effet décoratif
           Positioned(
             top: -30,
             right: -30,
@@ -440,7 +446,7 @@ class CustomDrawerKipik extends StatelessWidget {
               ),
             ),
           ),
-          // Avatar et infos utilisateur - IDENTIQUE À L'ORIGINAL
+          // Avatar et infos utilisateur
           Positioned(
             bottom: 16,
             left: 16,
@@ -512,12 +518,26 @@ class CustomDrawerKipik extends StatelessWidget {
     required IconData icon,
     required String title,
     String? subtitle,
+    String? badge,
     required VoidCallback onTap,
     Color? iconColor,
     Color? textColor,
   }) {
     return ListTile(
-      leading: Icon(icon, color: iconColor ?? Colors.white),
+      leading: Stack(
+        children: [
+          Icon(icon, color: iconColor ?? Colors.white),
+          if (badge != null)
+            Positioned(
+              right: -2,
+              top: -2,
+              child: Text(
+                badge,
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+        ],
+      ),
       title: Text(
         title,
         style: TextStyle(
@@ -617,7 +637,7 @@ class CustomDrawerKipik extends StatelessWidget {
     );
   }
 
-  // ✅ MÉTHODES DE NAVIGATION ET INTERACTION
+  // ✅ MÉTHODES DE NAVIGATION UNIFIÉE
   void _navigateTo(BuildContext context, Widget page) {
     try {
       Navigator.push(
@@ -628,6 +648,40 @@ class CustomDrawerKipik extends StatelessWidget {
       print('❌ Erreur navigation: $e');
       _showError(context, 'Erreur de navigation');
     }
+  }
+
+  // ✅ NOUVELLE MÉTHODE : Navigation vers profil avec onglet spécifique
+  void _navigateToProfilTab(BuildContext context, int tabIndex) {
+    try {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ProfilTatoueur(
+            forceMode: UserRole.tatoueur,
+            tatoueurId: SecureAuthService.instance.currentUserId,
+            initialTab: tabIndex, // ✅ Paramètre pour sélectionner l'onglet
+          ),
+        ),
+      );
+    } catch (e) {
+      print('❌ Erreur navigation profil: $e');
+      _showError(context, 'Erreur de navigation vers le profil');
+    }
+  }
+
+  // ✅ NOUVELLE MÉTHODE : Navigation vers la liste des chats/conversations
+  void _navigateToChats(BuildContext context) {
+    // TODO: Créer une page qui liste toutes les conversations de réservations
+    // Pour le moment, on affiche la page des demandes de RDV
+    _navigateTo(context, const DemandesRdvPage());
+    
+    // Alternative : afficher un message temporaire
+    // ScaffoldMessenger.of(context).showSnackBar(
+    //   SnackBar(
+    //     content: const Text('Liste des conversations - Bientôt disponible'),
+    //     backgroundColor: KipikTheme.rouge,
+    //   ),
+    // );
   }
 
   void _openAIAssistant(BuildContext context) {
@@ -646,16 +700,6 @@ class CustomDrawerKipik extends StatelessWidget {
       print('❌ Erreur ouverture assistant IA: $e');
       _showError(context, 'Erreur ouverture assistant');
     }
-  }
-
-  void _showComingSoon(BuildContext context, String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('🚀 $feature - Bientôt disponible !'),
-        backgroundColor: KipikTheme.rouge,
-        duration: const Duration(seconds: 2),
-      ),
-    );
   }
 
   void _showError(BuildContext context, String message) {

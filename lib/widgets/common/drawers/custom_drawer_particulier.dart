@@ -6,14 +6,24 @@ import 'package:kipik_v5/theme/kipik_theme.dart';
 import 'package:kipik_v5/services/auth/secure_auth_service.dart';
 import 'package:kipik_v5/utils/chat_helper.dart';
 
-// ✅ IMPORTS CORRIGÉS : Pages existantes + nouvelles pages /shared/
+// ✅ IMPORTS PAGES EXISTANTES
 import 'package:kipik_v5/pages/particulier/recherche_tatoueur_page.dart';
-import 'package:kipik_v5/pages/shared/inspirations/inspirations_page.dart'; // ✅ NOUVEAU CHEMIN
 import 'package:kipik_v5/pages/particulier/mes_projets_particulier_page.dart';
 import 'package:kipik_v5/pages/particulier/guide_tatouage_page.dart';
 import 'package:kipik_v5/pages/particulier/aide_support_page.dart';
 import 'package:kipik_v5/pages/particulier/profil_particulier_page.dart';
 import 'package:kipik_v5/pages/particulier/parametres_page.dart';
+
+// ✅ IMPORTS SHARED - PAGES CROSS-RÔLES
+import 'package:kipik_v5/pages/shared/inspirations/inspirations_page.dart'; 
+import 'package:kipik_v5/pages/shared/flashs/flash_swipe_page.dart';
+import 'package:kipik_v5/pages/shared/flashs/flash_minute_feed_page.dart';
+import 'package:kipik_v5/pages/shared/booking/booking_flow_page.dart';
+
+// ✅ NOUVEAUX IMPORTS PARTICULIERS - SYSTÈME FLASH
+import 'package:kipik_v5/pages/particulier/mes_favoris_flashs_page.dart';
+import 'package:kipik_v5/pages/particulier/mes_rdv_flashs_page.dart';
+import 'package:kipik_v5/pages/particulier/historique_flashs_page.dart';
 
 class CustomDrawerParticulier extends StatelessWidget {
   const CustomDrawerParticulier({Key? key}) : super(key: key);
@@ -24,21 +34,17 @@ class CustomDrawerParticulier extends StatelessWidget {
     
     // Vérifications de sécurité
     if (currentUser == null || !SecureAuthService.instance.isAuthenticated) {
-      return Drawer(
-        child: Container(
-          color: Colors.red[50],
-          child: const Center(
-            child: Text('Erreur d\'authentification'),
-          ),
-        ),
-      );
+      return _buildFallbackDrawer();
     }
+
+    // ✅ Extraction sécurisée des données utilisateur
+    final userData = _extractUserData(currentUser);
 
     return Drawer(
       child: Column(
         children: [
           // Header SANS SafeArea pour qu'il occupe tout l'écran
-          _buildHeader(currentUser),
+          _buildHeader(userData),
           
           // Menu principal avec SafeArea seulement pour le contenu
           Expanded(
@@ -52,7 +58,7 @@ class CustomDrawerParticulier extends StatelessWidget {
                   children: [
                     const SizedBox(height: 15),
                     
-                    // ✅ Section Navigation principale - MISE À JOUR
+                    // ✅ SECTION 1 : PROJETS & RECHERCHE (modifiée)
                     _buildMenuSection(
                       'PROJETS & RECHERCHE', // ✅ NOUVEAU NOM
                       [
@@ -77,11 +83,9 @@ class CustomDrawerParticulier extends StatelessWidget {
                       ],
                     ),
                     
-                    // ✅ NOUVELLES SECTIONS POUR PHASE 2 (commentées pour l'instant)
-                    /*
                     const SizedBox(height: 15),
                     
-                    // Section FLASHS & DÉCOUVERTE (Semaine 2)
+                    // ✅ SECTION 2 : FLASHS & DÉCOUVERTE (NOUVELLE)
                     _buildMenuSection(
                       'FLASHS & DÉCOUVERTE',
                       [
@@ -108,7 +112,7 @@ class CustomDrawerParticulier extends StatelessWidget {
                     
                     const SizedBox(height: 15),
                     
-                    // Section MES RÉSERVATIONS (Semaine 3)
+                    // ✅ SECTION 3 : MES RÉSERVATIONS (NOUVELLE)
                     _buildMenuSection(
                       'MES RÉSERVATIONS',
                       [
@@ -124,13 +128,18 @@ class CustomDrawerParticulier extends StatelessWidget {
                           subtitle: 'Mes tatouages terminés',
                           onTap: () => _navigateToPage(context, const HistoriqueFlashsPage()),
                         ),
+                        _MenuItemData(
+                          icon: Icons.chat_bubble_outline,
+                          title: 'Messages Booking',
+                          subtitle: 'Chat avec tatoueurs',
+                          onTap: () => _showComingSoon(context, 'Messages Booking - Semaine 3'),
+                        ),
                       ],
                     ),
-                    */
                     
                     const SizedBox(height: 15),
                     
-                    // Section Aide & Support
+                    // ✅ SECTION 4 : Aide & Support (conservée)
                     _buildMenuSection(
                       'Aide & Support',
                       [
@@ -157,7 +166,7 @@ class CustomDrawerParticulier extends StatelessWidget {
                     
                     const SizedBox(height: 15),
                     
-                    // Section Compte
+                    // ✅ SECTION 5 : Mon compte (conservée)
                     _buildMenuSection(
                       'Mon compte',
                       [
@@ -190,24 +199,78 @@ class CustomDrawerParticulier extends StatelessWidget {
     );
   }
 
-  // ✅ MÉTHODE NAVIGATION SÉCURISÉE CONSERVÉE
-  void _navigateToPage(BuildContext context, Widget page) {
+  // ✅ MÉTHODES HELPER - Extraction sécurisée des données utilisateur
+  Map<String, dynamic> _extractUserData(dynamic currentUser) {
     try {
-      Navigator.pop(context); // Fermer le drawer d'abord
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => page),
-      );
-    } catch (e) {
-      print('❌ Erreur navigation: $e');
-      // En cas d'erreur, fermer quand même le drawer
-      if (Navigator.canPop(context)) {
-        Navigator.pop(context);
+      if (currentUser == null) {
+        return {
+          'name': 'Utilisateur',
+          'email': '',
+          'uid': '',
+          'profileImageUrl': null,
+        };
       }
+
+      Map<String, dynamic> userData;
+      
+      if (currentUser is Map<String, dynamic>) {
+        userData = currentUser;
+      } else {
+        userData = {
+          'displayName': currentUser.displayName,
+          'name': currentUser.displayName,
+          'email': currentUser.email,
+          'photoURL': currentUser.photoURL,
+          'uid': currentUser.uid,
+        };
+      }
+      
+      return {
+        'name': userData['name']?.toString() ?? 
+                userData['displayName']?.toString() ?? 
+                userData['prenom']?.toString() ?? 
+                userData['userName']?.toString() ?? 
+                userData['firstName']?.toString() ?? 
+                'Utilisateur',
+        'email': userData['email']?.toString() ?? '',
+        'uid': userData['uid']?.toString() ?? userData['id']?.toString() ?? '',
+        'profileImageUrl': userData['profileImageUrl']?.toString() ?? 
+                          userData['photoURL']?.toString() ?? 
+                          userData['avatar']?.toString(),
+      };
+    } catch (e) {
+      print('❌ Erreur extraction données utilisateur: $e');
+      return {
+        'name': 'Utilisateur',
+        'email': '',
+        'uid': '',
+        'profileImageUrl': null,
+      };
     }
   }
 
-  Widget _buildHeader(dynamic currentUser) {
+  Widget _buildFallbackDrawer() {
+    return Drawer(
+      child: Container(
+        color: const Color(0xFF0A0A0A),
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error, color: Colors.red, size: 48),
+              SizedBox(height: 16),
+              Text(
+                'Erreur d\'authentification',
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(Map<String, dynamic> userData) {
     // ✅ Images avec fallback sécurisé
     final headerImages = [
       'assets/images/header_tattoo_wallpaper.png',
@@ -216,46 +279,6 @@ class CustomDrawerParticulier extends StatelessWidget {
     ];
     
     final randomImage = headerImages[Random().nextInt(headerImages.length)];
-
-    // ✅ ACCÈS SÉCURISÉ aux données utilisateur
-    String displayName = 'Utilisateur';
-    String email = '';
-    String? profileImageUrl;
-
-    try {
-      if (currentUser != null) {
-        Map<String, dynamic> userData;
-        
-        if (currentUser is Map<String, dynamic>) {
-          userData = currentUser;
-        } else {
-          userData = {
-            'displayName': currentUser.displayName,
-            'email': currentUser.email,
-            'photoURL': currentUser.photoURL,
-            'uid': currentUser.uid,
-          };
-        }
-        
-        displayName = userData['displayName']?.toString() ?? 
-                     userData['name']?.toString() ?? 
-                     userData['prenom']?.toString() ?? 
-                     userData['userName']?.toString() ?? 
-                     userData['firstName']?.toString() ?? 
-                     'Utilisateur';
-                     
-        email = userData['email']?.toString() ?? '';
-        
-        profileImageUrl = userData['profileImageUrl']?.toString() ?? 
-                         userData['photoURL']?.toString() ?? 
-                         userData['avatar']?.toString();
-      }
-    } catch (e) {
-      print('❌ Erreur accès données utilisateur: $e');
-      displayName = 'Utilisateur';
-      email = '';
-      profileImageUrl = null;
-    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -274,7 +297,6 @@ class CustomDrawerParticulier extends StatelessWidget {
                 BlendMode.multiply,
               ),
               onError: (exception, stackTrace) {
-                // Fallback si l'image ne charge pas
                 print('❌ Erreur chargement image header: $exception');
               },
             ),
@@ -332,9 +354,9 @@ class CustomDrawerParticulier extends StatelessWidget {
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(12),
-                          child: (profileImageUrl != null && profileImageUrl.isNotEmpty)
+                          child: (userData['profileImageUrl']?.isNotEmpty == true)
                               ? Image.network(
-                                  profileImageUrl,
+                                  userData['profileImageUrl']!,
                                   fit: BoxFit.cover,
                                   errorBuilder: (context, error, stackTrace) {
                                     return _buildFallbackAvatar();
@@ -352,10 +374,10 @@ class CustomDrawerParticulier extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              displayName,
+                              userData['name'],
                               style: TextStyle(
                                 color: Colors.grey[300],
-                                fontSize: screenHeight < 700 ? 22 : 26,
+                                fontSize: 24,
                                 fontWeight: FontWeight.w800,
                                 fontFamily: 'Roboto',
                                 letterSpacing: 0.5,
@@ -369,13 +391,13 @@ class CustomDrawerParticulier extends StatelessWidget {
                               ),
                             ),
                             
-                            if (email.isNotEmpty) ...[
+                            if (userData['email'].isNotEmpty) ...[
                               const SizedBox(height: 8),
                               Text(
-                                email,
+                                userData['email'],
                                 style: TextStyle(
                                   color: Colors.grey[400],
-                                  fontSize: screenHeight < 700 ? 14 : 16,
+                                  fontSize: 14,
                                   fontFamily: 'Roboto',
                                   fontWeight: FontWeight.w500,
                                   shadows: [
@@ -579,12 +601,39 @@ class CustomDrawerParticulier extends StatelessWidget {
     );
   }
 
+  // ✅ MÉTHODES DE NAVIGATION ET INTERACTION
+  void _navigateToPage(BuildContext context, Widget page) {
+    try {
+      Navigator.pop(context); // Fermer le drawer d'abord
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => page),
+      );
+    } catch (e) {
+      print('❌ Erreur navigation: $e');
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+    }
+  }
+
   void _openAIAssistant(BuildContext context) {
     Navigator.pop(context);
     ChatHelper.openAIAssistant(
       context,
       allowImageGeneration: false,
       contextPage: 'client',
+    );
+  }
+
+  void _showComingSoon(BuildContext context, String feature) {
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('🚀 $feature - Bientôt disponible !'),
+        backgroundColor: KipikTheme.rouge,
+        duration: const Duration(seconds: 2),
+      ),
     );
   }
 

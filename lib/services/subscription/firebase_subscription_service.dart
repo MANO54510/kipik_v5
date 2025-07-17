@@ -2,1092 +2,702 @@
 
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../core/firestore_helper.dart'; // ✅ AJOUTÉ
-import '../../core/database_manager.dart'; // ✅ AJOUTÉ pour détecter le mode
-import '../auth/secure_auth_service.dart'; // ✅ MIGRATION: SecureAuthService
+import 'package:flutter_stripe/flutter_stripe.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../../models/user_subscription.dart';
+import '../../core/database_manager.dart';
+import '../../core/firestore_helper.dart';
+import '../auth/secure_auth_service.dart';
 
-/// Service d'abonnements unifié (Production + Démo)
-/// En mode démo : simule les abonnements avec des données factices
-/// En mode production : utilise Firebase Firestore réel
+/// Service d'abonnement unifié KIPIK
+/// - Abonnements tatoueurs : SEPA automatique (99€ ou 149€/mois)
+/// - Tous paiements via app : Commission 2% (Standard) ou 1% (Premium)
+/// - Aucune limite de montant ou fréquence
 class FirebaseSubscriptionService {
   static FirebaseSubscriptionService? _instance;
   static FirebaseSubscriptionService get instance => _instance ??= FirebaseSubscriptionService._();
   FirebaseSubscriptionService._();
 
-  final FirebaseFirestore _firestore = FirestoreHelper.instance; // ✅ CHANGÉ
+  final FirebaseFirestore _firestore = FirestoreHelper.instance;
+  UserSubscription? _currentSubscription;
+  UserSubscription? get currentSubscription => _currentSubscription;
 
-  // ✅ DONNÉES MOCK POUR LES DÉMOS
+  // Mock data pour démo
   final Map<String, Map<String, dynamic>> _mockSubscriptions = {};
-  final Map<String, List<Map<String, dynamic>>> _mockSubscriptionHistory = {};
+  final Map<String, List<Map<String, dynamic>>> _mockPaymentHistory = {};
   
-  /// ✅ MÉTHODE PRINCIPALE - Détection automatique du mode
   bool get _isDemoMode => DatabaseManager.instance.isDemoMode;
 
-  /// ✅ OBTENIR ABONNEMENT ACTUEL (mode auto)
-  Future<Map<String, dynamic>?> getCurrentSubscription() async {
-    if (_isDemoMode) {
-      print('🎭 Mode démo - Récupération abonnement factice');
-      return await _getCurrentSubscriptionMock();
-    } else {
-      print('🏭 Mode production - Récupération abonnement réel');
-      return await _getCurrentSubscriptionFirebase();
-    }
-  }
-
-  /// ✅ FIREBASE - Abonnement réel
-  Future<Map<String, dynamic>?> _getCurrentSubscriptionFirebase() async {
-    try {
-      final user = SecureAuthService.instance.currentUser;
-      if (user == null) return null;
-
-      final userId = user['uid'] ?? user['id'];
-      if (userId == null) return null;
-
-      final userDoc = await _firestore
-          .collection('users')
-          .doc(userId)
-          .get();
-
-      if (!userDoc.exists) return null;
-      
-      final userData = userDoc.data()!;
-      final subscriptionData = userData['subscription'] as Map<String, dynamic>?;
-      
-      if (subscriptionData == null) return null;
-
-      // Convertir les Timestamps
-      if (subscriptionData['currentPeriodStart'] != null) {
-        subscriptionData['currentPeriodStart'] = 
-            (subscriptionData['currentPeriodStart'] as Timestamp).toDate();
-      }
-      if (subscriptionData['currentPeriodEnd'] != null) {
-        subscriptionData['currentPeriodEnd'] = 
-            (subscriptionData['currentPeriodEnd'] as Timestamp).toDate();
-      }
-      if (subscriptionData['trialEnd'] != null) {
-        subscriptionData['trialEnd'] = 
-            (subscriptionData['trialEnd'] as Timestamp).toDate();
-      }
-      if (subscriptionData['createdAt'] != null) {
-        subscriptionData['createdAt'] = 
-            (subscriptionData['createdAt'] as Timestamp).toDate();
-      }
-      
-      return subscriptionData;
-    } catch (e) {
-      print('Erreur récupération abonnement Firebase: $e');
-      return null;
-    }
-  }
-
-  /// ✅ MOCK - Abonnement factice
-  Future<Map<String, dynamic>?> _getCurrentSubscriptionMock() async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    
-    final user = SecureAuthService.instance.currentUser;
-    if (user == null) return null;
-
-    final userId = user['uid'] ?? user['id'];
-    if (userId == null) return null;
-
-    // Générer un abonnement démo si inexistant
-    if (!_mockSubscriptions.containsKey(userId)) {
-      _generateMockSubscription(userId);
-    }
-
-    return _mockSubscriptions[userId];
-  }
-
-  /// ✅ GÉNÉRER ABONNEMENT DÉMO
-  void _generateMockSubscription(String userId) {
-    final plans = [
-      {
-        'planId': 'demo_basic',
-        'planName': 'KIPIK Basic - Démo',
-        'price': 29.0,
-        'features': {
-          'dashboard': true,
-          'appointments': true,
-          'quotes': false,
-          'portfolio': false,
-          'chat': false,
-        }
-      },
-      {
-        'planId': 'demo_premium',
-        'planName': 'KIPIK Premium - Démo',
-        'price': 79.0,
-        'features': {
-          'dashboard': true,
-          'appointments': true,
-          'quotes': true,
-          'portfolio': true,
-          'chat': false,
-        }
-      },
-      {
-        'planId': 'demo_pro',
-        'planName': 'KIPIK Pro - Démo',
-        'price': 149.0,
-        'features': {
-          'dashboard': true,
-          'appointments': true,
-          'quotes': true,
-          'portfolio': true,
-          'chat': true,
-          'analytics': true,
-          'priority_support': true,
-        }
-      },
-    ];
-
-    final plan = plans[Random().nextInt(plans.length)];
-    final now = DateTime.now();
-    final startDate = now.subtract(Duration(days: Random().nextInt(15)));
-    final endDate = startDate.add(const Duration(days: 30));
-    final isInTrial = Random().nextBool();
-
-    _mockSubscriptions[userId] = {
-      'planId': plan['planId'],
-      'planName': plan['planName'],
-      'description': '[DÉMO] ${plan['planName']} avec toutes les fonctionnalités',
-      'price': plan['price'],
-      'currency': 'EUR',
-      'status': isInTrial ? 'trialing' : 'active',
-      'currentPeriodStart': startDate,
-      'currentPeriodEnd': endDate,
-      'trialEnd': isInTrial ? now.add(const Duration(days: 7)) : null,
-      'isLifetimePromo': plan['planId'] == 'demo_pro' && Random().nextBool(),
-      'paymentMethod': 'stripe',
-      'autoRenew': true,
-      'features': plan['features'],
-      'createdAt': startDate,
-      'lastUpdated': now,
-      '_source': 'mock',
-      '_demoData': true,
-    };
-
-    print('✅ Abonnement démo généré: ${plan['planName']} pour $userId');
-  }
-
-  /// ✅ CRÉER ABONNEMENT (mode auto)
-  Future<String> createSubscription({
-    required String planId,
-    required String planName,
-    required double price,
-    required Duration duration,
-    String? description,
-    Map<String, dynamic>? features,
-  }) async {
-    if (_isDemoMode) {
-      print('🎭 Mode démo - Simulation création abonnement');
-      return await _createSubscriptionMock(
-        planId: planId,
-        planName: planName,
-        price: price,
-        duration: duration,
-        description: description,
-        features: features,
-      );
-    } else {
-      print('🏭 Mode production - Création abonnement réel');
-      return await _createSubscriptionFirebase(
-        planId: planId,
-        planName: planName,
-        price: price,
-        duration: duration,
-        description: description,
-        features: features,
-      );
-    }
-  }
-
-  /// ✅ FIREBASE - Création abonnement réel
-  Future<String> _createSubscriptionFirebase({
-    required String planId,
-    required String planName,
-    required double price,
-    required Duration duration,
-    String? description,
-    Map<String, dynamic>? features,
+  /// ✅ INSCRIPTION AVEC MANDAT SEPA (30j gratuit → prélèvement auto)
+  Future<SubscriptionResult> startFreeTrial({
+    required String userId,
+    required SubscriptionType targetType, // standard ou premium
+    required Map<String, String> sepaDetails, // IBAN, nom, email
   }) async {
     try {
-      final user = SecureAuthService.instance.currentUser;
-      if (user == null) throw Exception('Utilisateur non connecté');
-
-      final userId = user['uid'] ?? user['id'];
-      if (userId == null) throw Exception('ID utilisateur invalide');
-
-      // Annuler l'abonnement actuel s'il existe
-      await _cancelCurrentSubscriptionFirebase();
-
-      final now = DateTime.now();
-      final endDate = now.add(duration);
-      final trialEnd = now.add(const Duration(days: 14)); // 14 jours d'essai
+      print('🚀 Démarrage essai gratuit $targetType avec SEPA...');
       
-      await _firestore.collection('users').doc(userId).update({
-        'subscription': {
-          'planId': planId,
-          'planName': planName,
-          'description': description,
-          'price': price,
-          'currency': 'EUR',
-          'status': 'trialing', // Commence en essai
-          'currentPeriodStart': FieldValue.serverTimestamp(),
-          'currentPeriodEnd': Timestamp.fromDate(endDate),
-          'trialEnd': Timestamp.fromDate(trialEnd),
-          'isLifetimePromo': planId == 'promo_lifetime',
-          'paymentMethod': 'stripe',
-          'autoRenew': true,
-          'features': features,
-          'createdAt': FieldValue.serverTimestamp(),
-          'lastUpdated': FieldValue.serverTimestamp(),
-        }
+      if (_isDemoMode) {
+        return await _startFreeTrialDemo(userId, targetType, sepaDetails);
+      }
+      
+      // 1. Créer Customer Stripe via API directe
+      // Note: createCustomer doit être fait côté serveur pour la sécurité
+      // Ici on simule avec un ID client temporaire
+      final customerId = 'temp_customer_${Random().nextInt(999999)}';
+      
+      print('⚠️ createCustomer doit être implémenté côté serveur');
+      print('Customer ID temporaire: $customerId');
+      
+      // 2. Setup mandat SEPA (via PaymentSheet ou Elements)
+      // Note: Setup Intent doit aussi être créé côté serveur
+      final setupIntentClientSecret = 'temp_setup_intent_${Random().nextInt(999999)}';
+      
+      print('⚠️ createSetupIntent doit être implémenté côté serveur');
+      print('Setup Intent temporaire: $setupIntentClientSecret');
+      
+      // 3. Créer abonnement trial
+      final subscription = UserSubscription.createTrial(
+        userId: userId,
+        targetType: targetType,
+        stripeCustomerId: customerId,
+        sepaSetupIntentId: setupIntentClientSecret,
+      );
+      
+      // 4. Programmer prélèvement J+30
+      await _scheduleSepaPayment(subscription);
+      
+      // 5. Sauvegarder
+      await _saveSubscription(subscription);
+      _currentSubscription = subscription;
+      
+      await _logActivity(userId, 'trial_started', {
+        'target_type': targetType.name,
+        'customer_id': customerId,
       });
-
-      if (planId == 'promo_lifetime') {
-        await _updatePromoTracking(userId);
-      }
-
-      print('✅ Abonnement créé: $planId pour utilisateur $userId');
-      return userId;
+      
+      return SubscriptionResult.success(
+        subscription: subscription,
+        setupIntentClientSecret: setupIntentClientSecret,
+        message: 'Essai gratuit 30j activé. Prélèvement SEPA programmé.',
+      );
+      
     } catch (e) {
-      print('❌ Erreur création abonnement Firebase: $e');
-      throw Exception('Erreur création abonnement: $e');
+      print('❌ Erreur création trial: $e');
+      return SubscriptionResult.error('Erreur création compte: $e');
     }
   }
 
-  /// ✅ MOCK - Création abonnement factice
-  Future<String> _createSubscriptionMock({
-    required String planId,
-    required String planName,
-    required double price,
-    required Duration duration,
-    String? description,
-    Map<String, dynamic>? features,
+  /// ✅ DEMO - Version simplifiée
+  Future<SubscriptionResult> _startFreeTrialDemo(String userId, SubscriptionType targetType, Map<String, String> sepaDetails) async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    final subscription = UserSubscription.createTrial(
+      userId: userId,
+      targetType: targetType,
+      stripeCustomerId: 'demo_customer_$userId',
+      sepaSetupIntentId: 'demo_setup_intent',
+    );
+    
+    await _saveSubscription(subscription);
+    _currentSubscription = subscription;
+    
+    return SubscriptionResult.success(
+      subscription: subscription,
+      setupIntentClientSecret: 'demo_client_secret',
+      message: '[DÉMO] Essai gratuit 30j activé',
+    );
+  }
+
+  /// ✅ PROGRAMMER PRÉLÈVEMENT SEPA J+30
+  Future<void> _scheduleSepaPayment(UserSubscription subscription) async {
+    if (_isDemoMode) return;
+    
+    await _firestore.collection('scheduled_sepa_payments').doc(subscription.userId).set({
+      'user_id': subscription.userId,
+      'stripe_customer_id': subscription.stripeCustomerId,
+      'subscription_type': subscription.targetType!.name,
+      'amount': subscription.targetType!.monthlyPrice,
+      'trigger_date': subscription.trialEndDate,
+      'status': 'scheduled',
+      'created_at': FieldValue.serverTimestamp(),
+    });
+    
+    print('📅 Prélèvement SEPA programmé: ${subscription.targetType!.monthlyPrice}€ le ${subscription.trialEndDate}');
+  }
+
+  /// ✅ ACTIVATION ABONNEMENT (appelé par webhook après prélèvement SEPA réussi)
+  Future<SubscriptionResult> activateSubscription(String userId, {String? stripeSubscriptionId}) async {
+    try {
+      final subscription = await _loadSubscription(userId);
+      if (subscription == null) {
+        return SubscriptionResult.error('Abonnement introuvable');
+      }
+      
+      final activeSubscription = subscription.copyWith(
+        type: subscription.targetType!,
+        status: SubscriptionStatus.active,
+        trialActive: false,
+        startDate: DateTime.now(),
+        endDate: DateTime.now().add(const Duration(days: 30)),
+        enabledFeatures: _getFeaturesForType(subscription.targetType!),
+        stripeSubscriptionId: stripeSubscriptionId,
+      );
+      
+      await _saveSubscription(activeSubscription);
+      _currentSubscription = activeSubscription;
+      
+      await _logActivity(userId, 'subscription_activated', {
+        'type': subscription.targetType!.name,
+      });
+      
+      return SubscriptionResult.success(
+        subscription: activeSubscription,
+        message: 'Abonnement ${subscription.targetType!.displayName} activé !',
+      );
+    } catch (e) {
+      return SubscriptionResult.error('Erreur activation: $e');
+    }
+  }
+
+  /// ✅ DÉSABONNEMENT AVANT J+30
+  Future<bool> cancelTrialBeforeCharge(String userId) async {
+    try {
+      final subscription = await _loadSubscription(userId);
+      if (subscription == null) return false;
+      
+      if (!_isDemoMode) {
+        await _firestore.collection('scheduled_sepa_payments').doc(userId).update({
+          'status': 'cancelled',
+          'cancelled_at': FieldValue.serverTimestamp(),
+        });
+      }
+      
+      final cancelled = subscription.copyWith(
+        status: SubscriptionStatus.cancelled,
+        endDate: DateTime.now(),
+      );
+      
+      await _saveSubscription(cancelled);
+      _currentSubscription = cancelled;
+      
+      await _logActivity(userId, 'trial_cancelled', {});
+      
+      return true;
+    } catch (e) {
+      print('❌ Erreur annulation: $e');
+      return false;
+    }
+  }
+
+  /// ✅ TRAITEMENT PAIEMENT VIA APP (tatouages, conventions, etc.)
+  /// Commission: 2% (Standard) ou 1% (Premium) sur TOUT
+  Future<PaymentResult> processAppPayment({
+    required String payerId, // Client ou tatoueur qui paie
+    required String receiverId, // Tatoueur ou organisateur qui reçoit
+    required double amount,
+    required String type, // 'tattoo', 'convention', 'shop_product', etc.
+    required String description,
+    Map<String, dynamic>? metadata,
+  }) async {
+    try {
+      // Récupérer abonnement du receveur pour calculer commission
+      final receiverSubscription = await _loadSubscription(receiverId);
+      if (receiverSubscription == null) {
+        return PaymentResult.error('Abonnement receveur introuvable');
+      }
+      
+      // Calculer commission KIPIK
+      final commissionRate = receiverSubscription.commissionRate;
+      final kipikCommission = amount * commissionRate;
+      final receiverAmount = amount - kipikCommission;
+      
+      if (_isDemoMode) {
+        return await _processAppPaymentDemo(
+          payerId: payerId,
+          receiverId: receiverId,
+          amount: amount,
+          type: type,
+          commission: kipikCommission,
+        );
+      }
+      
+      // Créer PaymentIntent Stripe (côté serveur en production)
+      // Note: createPaymentIntent doit être fait côté serveur pour la sécurité
+      final paymentClientSecret = 'temp_pi_${Random().nextInt(999999)}';
+      
+      print('⚠️ createPaymentIntent doit être implémenté côté serveur');
+      print('PaymentIntent temporaire: $paymentClientSecret');
+      
+      // Transfer immédiat vers receveur (si compte Stripe Connect configuré)
+      if (receiverSubscription.stripeAccountId != null) {
+        // Note: createTransfer doit être fait côté serveur
+        print('⚠️ createTransfer doit être implémenté côté serveur');
+        print('Transfer: ${receiverAmount}€ vers ${receiverSubscription.stripeAccountId}');
+      }
+      
+      // Log du paiement
+      await _logPayment({
+        'payer_id': payerId,
+        'receiver_id': receiverId,
+        'amount': amount,
+        'kipik_commission': kipikCommission,
+        'commission_rate': commissionRate,
+        'type': type,
+        'description': description,
+        'subscription_type': receiverSubscription.type.name,
+      });
+      
+      return PaymentResult.success(
+        paymentClientSecret: paymentClientSecret,
+        totalAmount: amount,
+        kipikCommission: kipikCommission,
+        receiverAmount: receiverAmount,
+        commissionRate: commissionRate,
+      );
+      
+    } catch (e) {
+      print('❌ Erreur paiement app: $e');
+      return PaymentResult.error('Erreur traitement paiement: $e');
+    }
+  }
+
+  /// ✅ DEMO - Paiement simulé
+  Future<PaymentResult> _processAppPaymentDemo({
+    required String payerId,
+    required String receiverId,
+    required double amount,
+    required String type,
+    required double commission,
   }) async {
     await Future.delayed(const Duration(milliseconds: 600));
     
-    final user = SecureAuthService.instance.currentUser;
-    if (user == null) throw Exception('[DÉMO] Utilisateur non connecté');
-
-    final userId = user['uid'] ?? user['id'];
-    if (userId == null) throw Exception('[DÉMO] ID utilisateur invalide');
-
-    // Simuler l'annulation de l'ancien abonnement
-    await _cancelCurrentSubscriptionMock();
-
-    final now = DateTime.now();
-    final endDate = now.add(duration);
-    final trialEnd = now.add(const Duration(days: 14));
-
-    _mockSubscriptions[userId] = {
-      'planId': planId,
-      'planName': planName,
-      'description': description ?? '[DÉMO] $planName avec toutes les fonctionnalités',
-      'price': price,
-      'currency': 'EUR',
-      'status': 'trialing',
-      'currentPeriodStart': now,
-      'currentPeriodEnd': endDate,
-      'trialEnd': trialEnd,
-      'isLifetimePromo': planId.contains('lifetime') || planId.contains('promo'),
-      'paymentMethod': 'stripe',
-      'autoRenew': true,
-      'features': features ?? {
-        'dashboard': true,
-        'appointments': true,
-        'quotes': true,
-        'portfolio': true,
-        'chat': true,
-      },
-      'createdAt': now,
-      'lastUpdated': now,
-      '_source': 'mock',
-      '_demoData': true,
-    };
-
-    // Ajouter à l'historique
-    if (!_mockSubscriptionHistory.containsKey(userId)) {
-      _mockSubscriptionHistory[userId] = [];
-    }
-    _mockSubscriptionHistory[userId]!.add(Map.from(_mockSubscriptions[userId]!));
-
-    print('✅ Abonnement démo créé: $planName pour $userId');
-    return 'demo_sub_${Random().nextInt(99999)}';
-  }
-
-  /// ✅ ANNULER ABONNEMENT ACTUEL (mode auto)
-  Future<void> cancelCurrentSubscription() async {
-    if (_isDemoMode) {
-      print('🎭 Mode démo - Annulation abonnement factice');
-      await _cancelCurrentSubscriptionMock();
-    } else {
-      print('🏭 Mode production - Annulation abonnement réel');
-      await _cancelCurrentSubscriptionFirebase();
-    }
-  }
-
-  /// ✅ FIREBASE - Annulation réelle
-  Future<void> _cancelCurrentSubscriptionFirebase() async {
-    try {
-      final user = SecureAuthService.instance.currentUser;
-      if (user == null) return;
-
-      final userId = user['uid'] ?? user['id'];
-      if (userId == null) return;
-
-      final userDoc = await _firestore.collection('users').doc(userId).get();
-      
-      if (userDoc.exists && userDoc.data()?['subscription'] != null) {
-        await _firestore.collection('users').doc(userId).update({
-          'subscription.status': 'cancelled',
-          'subscription.cancelledAt': FieldValue.serverTimestamp(),
-          'subscription.lastUpdated': FieldValue.serverTimestamp(),
-        });
-        
-        print('✅ Abonnement annulé pour utilisateur $userId');
-      }
-    } catch (e) {
-      print('❌ Erreur annulation abonnement Firebase: $e');
-      throw Exception('Erreur annulation abonnement: $e');
-    }
-  }
-
-  /// ✅ MOCK - Annulation factice
-  Future<void> _cancelCurrentSubscriptionMock() async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    
-    final user = SecureAuthService.instance.currentUser;
-    if (user == null) return;
-
-    final userId = user['uid'] ?? user['id'];
-    if (userId == null) return;
-
-    if (_mockSubscriptions.containsKey(userId)) {
-      _mockSubscriptions[userId]!['status'] = 'cancelled';
-      _mockSubscriptions[userId]!['cancelledAt'] = DateTime.now();
-      _mockSubscriptions[userId]!['lastUpdated'] = DateTime.now();
-      
-      print('✅ Abonnement démo annulé pour utilisateur $userId');
-    }
-  }
-
-  /// ✅ SUSPENDRE ABONNEMENT (mode auto)
-  Future<void> suspendSubscription(String userId) async {
-    if (_isDemoMode) {
-      await _suspendSubscriptionMock(userId);
-    } else {
-      await _suspendSubscriptionFirebase(userId);
-    }
-  }
-
-  /// ✅ FIREBASE - Suspension réelle
-  Future<void> _suspendSubscriptionFirebase(String userId) async {
-    try {
-      await _firestore.collection('users').doc(userId).update({
-        'subscription.status': 'suspended',
-        'subscription.suspendedAt': FieldValue.serverTimestamp(),
-        'subscription.lastUpdated': FieldValue.serverTimestamp(),
-      });
-      
-      print('✅ Abonnement suspendu pour utilisateur $userId');
-    } catch (e) {
-      print('❌ Erreur suspension abonnement Firebase: $e');
-      throw Exception('Erreur suspension abonnement: $e');
-    }
-  }
-
-  /// ✅ MOCK - Suspension factice
-  Future<void> _suspendSubscriptionMock(String userId) async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    
-    if (_mockSubscriptions.containsKey(userId)) {
-      _mockSubscriptions[userId]!['status'] = 'suspended';
-      _mockSubscriptions[userId]!['suspendedAt'] = DateTime.now();
-      _mockSubscriptions[userId]!['lastUpdated'] = DateTime.now();
-      
-      print('✅ Abonnement démo suspendu pour utilisateur $userId');
-    }
-  }
-
-  /// ✅ RÉACTIVER ABONNEMENT (mode auto)
-  Future<void> reactivateSubscription(String userId) async {
-    if (_isDemoMode) {
-      await _reactivateSubscriptionMock(userId);
-    } else {
-      await _reactivateSubscriptionFirebase(userId);
-    }
-  }
-
-  /// ✅ FIREBASE - Réactivation réelle
-  Future<void> _reactivateSubscriptionFirebase(String userId) async {
-    try {
-      await _firestore.collection('users').doc(userId).update({
-        'subscription.status': 'active',
-        'subscription.reactivatedAt': FieldValue.serverTimestamp(),
-        'subscription.lastUpdated': FieldValue.serverTimestamp(),
-      });
-      
-      print('✅ Abonnement réactivé pour utilisateur $userId');
-    } catch (e) {
-      print('❌ Erreur réactivation abonnement Firebase: $e');
-      throw Exception('Erreur réactivation abonnement: $e');
-    }
-  }
-
-  /// ✅ MOCK - Réactivation factice
-  Future<void> _reactivateSubscriptionMock(String userId) async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    
-    if (_mockSubscriptions.containsKey(userId)) {
-      _mockSubscriptions[userId]!['status'] = 'active';
-      _mockSubscriptions[userId]!['reactivatedAt'] = DateTime.now();
-      _mockSubscriptions[userId]!['lastUpdated'] = DateTime.now();
-      
-      print('✅ Abonnement démo réactivé pour utilisateur $userId');
-    }
-  }
-
-  /// ✅ RENOUVELER ABONNEMENT (mode auto)
-  Future<String> renewSubscription() async {
-    if (_isDemoMode) {
-      return await _renewSubscriptionMock();
-    } else {
-      return await _renewSubscriptionFirebase();
-    }
-  }
-
-  /// ✅ FIREBASE - Renouvellement réel
-  Future<String> _renewSubscriptionFirebase() async {
-    try {
-      final user = SecureAuthService.instance.currentUser;
-      if (user == null) throw Exception('Utilisateur non connecté');
-
-      final userId = user['uid'] ?? user['id'];
-      if (userId == null) throw Exception('ID utilisateur invalide');
-
-      final currentSubscription = await _getCurrentSubscriptionFirebase();
-      if (currentSubscription == null) {
-        throw Exception('Aucun abonnement à renouveler');
-      }
-      
-      final duration = const Duration(days: 30);
-      final newSubscriptionId = await _createSubscriptionFirebase(
-        planId: currentSubscription['planId'],
-        planName: currentSubscription['planName'],
-        price: (currentSubscription['price'] as num).toDouble(),
-        duration: duration,
-        description: currentSubscription['description'],
-        features: currentSubscription['features'],
-      );
-
-      print('✅ Abonnement renouvelé pour utilisateur $userId');
-      return newSubscriptionId;
-    } catch (e) {
-      print('❌ Erreur renouvellement abonnement Firebase: $e');
-      throw Exception('Erreur renouvellement abonnement: $e');
-    }
-  }
-
-  /// ✅ MOCK - Renouvellement factice
-  Future<String> _renewSubscriptionMock() async {
-    await Future.delayed(const Duration(milliseconds: 400));
-    
-    final user = SecureAuthService.instance.currentUser;
-    if (user == null) throw Exception('[DÉMO] Utilisateur non connecté');
-
-    final userId = user['uid'] ?? user['id'];
-    if (userId == null) throw Exception('[DÉMO] ID utilisateur invalide');
-
-    final currentSubscription = await _getCurrentSubscriptionMock();
-    if (currentSubscription == null) {
-      throw Exception('[DÉMO] Aucun abonnement à renouveler');
+    // Stocker en mock
+    if (!_mockPaymentHistory.containsKey(receiverId)) {
+      _mockPaymentHistory[receiverId] = [];
     }
     
-    final duration = const Duration(days: 30);
-    final newSubscriptionId = await _createSubscriptionMock(
-      planId: currentSubscription['planId'],
-      planName: currentSubscription['planName'],
-      price: (currentSubscription['price'] as num).toDouble(),
-      duration: duration,
-      description: currentSubscription['description'],
-      features: currentSubscription['features'],
+    _mockPaymentHistory[receiverId]!.add({
+      'payer_id': payerId,
+      'amount': amount,
+      'commission': commission,
+      'type': type,
+      'created_at': DateTime.now(),
+      'demo_mode': true,
+    });
+    
+    return PaymentResult.success(
+      paymentClientSecret: 'demo_pi_${Random().nextInt(999999)}',
+      totalAmount: amount,
+      kipikCommission: commission,
+      receiverAmount: amount - commission,
+      commissionRate: commission / amount,
     );
-
-    print('✅ Abonnement démo renouvelé pour utilisateur $userId');
-    return newSubscriptionId;
   }
 
-  /// ✅ VÉRIFIER ABONNEMENT ACTIF (mode auto)
-  Future<bool> hasActiveSubscription() async {
-    try {
-      final subscription = await getCurrentSubscription();
-      if (subscription == null) return false;
-
-      final status = subscription['status'] as String?;
-      if (status != 'active' && status != 'trialing') return false;
-
-      final endDate = subscription['currentPeriodEnd'] as DateTime?;
-      if (endDate == null) return false;
-
-      return DateTime.now().isBefore(endDate);
-    } catch (e) {
-      print('❌ Erreur vérification abonnement actif: $e');
-      return false;
-    }
-  }
-
-  /// ✅ VÉRIFIER FONCTIONNALITÉ (mode auto)
-  Future<bool> hasFeature(String featureName) async {
-    try {
-      final subscription = await getCurrentSubscription();
-      if (subscription == null) return false;
-
-      final features = subscription['features'] as Map<String, dynamic>?;
-      if (features == null) return false;
-
-      return features[featureName] == true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  /// ✅ HISTORIQUE ABONNEMENTS (mode auto)
-  Future<List<Map<String, dynamic>>> getSubscriptionHistory() async {
-    if (_isDemoMode) {
-      return await _getSubscriptionHistoryMock();
-    } else {
-      return await _getSubscriptionHistoryFirebase();
-    }
-  }
-
-  /// ✅ FIREBASE - Historique réel
-  Future<List<Map<String, dynamic>>> _getSubscriptionHistoryFirebase() async {
-    try {
-      final user = SecureAuthService.instance.currentUser;
-      if (user == null) return [];
-
-      final userId = user['uid'] ?? user['id'];
-      if (userId == null) return [];
-
-      final currentSubscription = await _getCurrentSubscriptionFirebase();
-      if (currentSubscription == null) return [];
-      
-      return [currentSubscription];
-    } catch (e) {
-      print('❌ Erreur récupération historique Firebase: $e');
-      throw Exception('Erreur récupération historique: $e');
-    }
-  }
-
-  /// ✅ MOCK - Historique factice
-  Future<List<Map<String, dynamic>>> _getSubscriptionHistoryMock() async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    
-    final user = SecureAuthService.instance.currentUser;
-    if (user == null) return [];
-
-    final userId = user['uid'] ?? user['id'];
-    if (userId == null) return [];
-
-    // Générer un historique si inexistant
-    if (!_mockSubscriptionHistory.containsKey(userId)) {
-      _generateMockSubscriptionHistory(userId);
-    }
-
-    return _mockSubscriptionHistory[userId] ?? [];
-  }
-
-  /// ✅ GÉNÉRER HISTORIQUE DÉMO
-  void _generateMockSubscriptionHistory(String userId) {
-    final history = <Map<String, dynamic>>[];
-    
-    for (int i = 0; i < Random().nextInt(3) + 1; i++) {
-      final daysAgo = (i + 1) * 30 + Random().nextInt(15);
-      final startDate = DateTime.now().subtract(Duration(days: daysAgo));
-      final endDate = startDate.add(const Duration(days: 30));
-      
-      history.add({
-        'planId': ['demo_basic', 'demo_premium'][Random().nextInt(2)],
-        'planName': ['KIPIK Basic - Démo', 'KIPIK Premium - Démo'][Random().nextInt(2)],
-        'price': [29.0, 79.0][Random().nextInt(2)],
-        'status': i == 0 ? 'active' : 'expired',
-        'currentPeriodStart': startDate,
-        'currentPeriodEnd': endDate,
-        'createdAt': startDate,
-        '_source': 'mock',
-        '_demoData': true,
-      });
-    }
-    
-    _mockSubscriptionHistory[userId] = history;
-  }
-
-  /// ✅ PLANS DISPONIBLES (mode auto)
-  Future<List<Map<String, dynamic>>> getAvailablePlans() async {
-    if (_isDemoMode) {
-      return await _getAvailablePlansMock();
-    } else {
-      return await _getAvailablePlansFirebase();
-    }
-  }
-
-  /// ✅ FIREBASE - Plans réels
-  Future<List<Map<String, dynamic>>> _getAvailablePlansFirebase() async {
-    try {
-      final canHavePromo = await _canUserHavePromoPrice();
-      
-      final snapshot = await _firestore
-          .collection('subscription_plans')
-          .where('isActive', isEqualTo: true)
-          .orderBy('price', descending: false)
-          .get();
-
-      final plans = snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        
-        if (data['planId'] == 'promo_lifetime' && !canHavePromo) {
-          data['isActive'] = false;
-          data['unavailableReason'] = 'Plus de places disponibles (100 premiers)';
-        }
-        
-        return data;
-      }).toList();
-
-      return plans.where((plan) => plan['isActive'] == true).toList();
-    } catch (e) {
-      print('❌ Erreur récupération plans Firebase: $e');
-      throw Exception('Erreur récupération plans: $e');
-    }
-  }
-
-  /// ✅ MOCK - Plans factices
-  Future<List<Map<String, dynamic>>> _getAvailablePlansMock() async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    
-    return [
-      {
-        'id': 'demo_basic',
-        'planId': 'demo_basic',
-        'planName': 'KIPIK Basic - Démo',
-        'description': '[DÉMO] Fonctionnalités de base pour débuter',
-        'price': 29.0,
-        'currency': 'EUR',
-        'duration': 'monthly',
-        'isActive': true,
-        'features': {
-          'dashboard': true,
-          'appointments': true,
-          'quotes': false,
-          'portfolio': false,
-          'chat': false,
-        },
-        'popularBadge': false,
-        '_source': 'mock',
-        '_demoData': true,
+  /// ✅ RACCOURCIS POUR TYPES DE PAIEMENTS SPÉCIFIQUES
+  
+  /// Paiement tatouage (client → tatoueur)
+  Future<PaymentResult> processTattooPayment({
+    required String clientId,
+    required String tatoueurId,
+    required double amount,
+    required String projectId,
+    int? installments, // Si fractionné
+  }) async {
+    return await processAppPayment(
+      payerId: clientId,
+      receiverId: tatoueurId,
+      amount: amount,
+      type: 'tattoo',
+      description: 'Paiement tatouage',
+      metadata: {
+        'project_id': projectId,
+        'installments': installments?.toString(),
       },
-      {
-        'id': 'demo_premium',
-        'planId': 'demo_premium',
-        'planName': 'KIPIK Premium - Démo',
-        'description': '[DÉMO] Plan complet pour professionnels',
-        'price': 79.0,
-        'currency': 'EUR',
-        'duration': 'monthly',
-        'isActive': true,
-        'features': {
-          'dashboard': true,
-          'appointments': true,
-          'quotes': true,
-          'portfolio': true,
-          'chat': false,
-        },
-        'popularBadge': true,
-        '_source': 'mock',
-        '_demoData': true,
+    );
+  }
+
+  /// Paiement convention (tatoueur → organisateur)
+  Future<PaymentResult> processConventionPayment({
+    required String tatoueurId,
+    required String organisateurId,
+    required double amount,
+    required String conventionId,
+    required String standType,
+  }) async {
+    return await processAppPayment(
+      payerId: tatoueurId,
+      receiverId: organisateurId,
+      amount: amount,
+      type: 'convention',
+      description: 'Réservation stand convention',
+      metadata: {
+        'convention_id': conventionId,
+        'stand_type': standType,
       },
-      {
-        'id': 'demo_pro',
-        'planId': 'demo_pro',
-        'planName': 'KIPIK Pro - Démo',
-        'description': '[DÉMO] Plan professionnel avec toutes les fonctionnalités',
-        'price': 149.0,
-        'currency': 'EUR',
-        'duration': 'monthly',
-        'isActive': true,
-        'features': {
-          'dashboard': true,
-          'appointments': true,
-          'quotes': true,
-          'portfolio': true,
-          'chat': true,
-          'analytics': true,
-          'priority_support': true,
-        },
-        'popularBadge': false,
-        '_source': 'mock',
-        '_demoData': true,
-      },
-    ];
+    );
   }
 
-  /// ✅ VÉRIFIER PROMO DISPONIBLE (mode auto)
-  Future<bool> _canUserHavePromoPrice() async {
-    if (_isDemoMode) {
-      // En mode démo, toujours autoriser la promo
-      return true;
-    } else {
-      try {
-        final promoDoc = await _firestore
-            .collection('promo_tracking')
-            .doc('lifetime_promo_100')
-            .get();
-        
-        if (!promoDoc.exists) return false;
-        
-        final data = promoDoc.data()!;
-        final remainingSlots = data['remainingSlots'] as int;
-        
-        return remainingSlots > 0;
-      } catch (e) {
-        return false;
-      }
-    }
+  /// ✅ VÉRIFICATIONS FONCTIONNALITÉS
+  bool hasAccess(PremiumFeature feature) {
+    final subscription = _currentSubscription;
+    if (subscription == null) return false;
+    return subscription.hasFeature(feature);
   }
 
-  /// ✅ MISE À JOUR AUTO-RENOUVELLEMENT (mode auto)
-  Future<void> updateAutoRenew(bool autoRenew) async {
-    if (_isDemoMode) {
-      await _updateAutoRenewMock(autoRenew);
-    } else {
-      await _updateAutoRenewFirebase(autoRenew);
-    }
-  }
+  bool canUseFractionalPayments() => hasAccess(PremiumFeature.fractionalPayments);
+  bool canAccessConventions() => hasAccess(PremiumFeature.conventions);
+  bool canUseGuestFeatures() => hasAccess(PremiumFeature.guestApplications);
+  bool canUseFlashMinute() => hasAccess(PremiumFeature.flashMinute);
 
-  /// ✅ FIREBASE - Auto-renouvellement réel
-  Future<void> _updateAutoRenewFirebase(bool autoRenew) async {
+  /// ✅ UPGRADE ABONNEMENT
+  Future<SubscriptionResult> upgradeSubscription(SubscriptionType newType) async {
     try {
-      final user = SecureAuthService.instance.currentUser;
-      if (user == null) throw Exception('Utilisateur non connecté');
-
-      final userId = user['uid'] ?? user['id'];
-      if (userId == null) throw Exception('ID utilisateur invalide');
-
-      await _firestore.collection('users').doc(userId).update({
-        'subscription.autoRenew': autoRenew,
-        'subscription.lastUpdated': FieldValue.serverTimestamp(),
-      });
-      
-      print('✅ Auto-renouvellement mis à jour: $autoRenew');
-    } catch (e) {
-      print('❌ Erreur mise à jour auto-renouvellement Firebase: $e');
-      throw Exception('Erreur mise à jour auto-renouvellement: $e');
-    }
-  }
-
-  /// ✅ MOCK - Auto-renouvellement factice
-  Future<void> _updateAutoRenewMock(bool autoRenew) async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    
-    final user = SecureAuthService.instance.currentUser;
-    if (user == null) throw Exception('[DÉMO] Utilisateur non connecté');
-
-    final userId = user['uid'] ?? user['id'];
-    if (userId == null) throw Exception('[DÉMO] ID utilisateur invalide');
-
-    if (_mockSubscriptions.containsKey(userId)) {
-      _mockSubscriptions[userId]!['autoRenew'] = autoRenew;
-      _mockSubscriptions[userId]!['lastUpdated'] = DateTime.now();
-      
-      print('✅ Auto-renouvellement démo mis à jour: $autoRenew');
-    }
-  }
-
-  /// ✅ STATISTIQUES ABONNEMENTS (mode auto - admin uniquement)
-  Future<Map<String, int>> getSubscriptionStats() async {
-    if (_isDemoMode) {
-      return await _getSubscriptionStatsMock();
-    } else {
-      return await _getSubscriptionStatsFirebase();
-    }
-  }
-
-  /// ✅ FIREBASE - Stats réelles
-  Future<Map<String, int>> _getSubscriptionStatsFirebase() async {
-    try {
-      final snapshot = await _firestore
-          .collection('users')
-          .where('subscription', isNotEqualTo: null)
-          .get();
-      
-      int active = 0;
-      int expired = 0;
-      int cancelled = 0;
-      int suspended = 0;
-      int trialing = 0;
-      int lifetimePromo = 0;
-      
-      for (final doc in snapshot.docs) {
-        final subscription = doc.data()['subscription'] as Map<String, dynamic>?;
-        if (subscription == null) continue;
-        
-        final status = subscription['status'] as String?;
-        final isLifetime = subscription['isLifetimePromo'] as bool? ?? false;
-        
-        if (isLifetime) lifetimePromo++;
-        
-        switch (status) {
-          case 'active':
-            active++;
-            break;
-          case 'trialing':
-            trialing++;
-            break;
-          case 'expired':
-            expired++;
-            break;
-          case 'cancelled':
-            cancelled++;
-            break;
-          case 'suspended':
-            suspended++;
-            break;
-        }
+      final currentSub = _currentSubscription;
+      if (currentSub == null) {
+        return SubscriptionResult.error('Aucun abonnement actuel');
       }
       
-      return {
-        'total': snapshot.docs.length,
-        'active': active,
-        'trialing': trialing,
-        'expired': expired,
-        'cancelled': cancelled,
-        'suspended': suspended,
-        'lifetimePromo': lifetimePromo,
-      };
-    } catch (e) {
-      print('❌ Erreur récupération statistiques Firebase: $e');
-      throw Exception('Erreur récupération statistiques: $e');
-    }
-  }
-
-  /// ✅ MOCK - Stats factices
-  Future<Map<String, int>> _getSubscriptionStatsMock() async {
-    await Future.delayed(const Duration(milliseconds: 400));
-    
-    return {
-      'total': 247,
-      'active': 189,
-      'trialing': 23,
-      'expired': 18,
-      'cancelled': 12,
-      'suspended': 3,
-      'lifetimePromo': 47,
-    };
-  }
-
-  /// ✅ STATUT PROMO UTILISATEUR (mode auto)
-  Future<Map<String, dynamic>?> getPromoStatus() async {
-    if (_isDemoMode) {
-      return await _getPromoStatusMock();
-    } else {
-      return await _getPromoStatusFirebase();
-    }
-  }
-
-  /// ✅ FIREBASE - Statut promo réel
-  Future<Map<String, dynamic>?> _getPromoStatusFirebase() async {
-    try {
-      final subscription = await _getCurrentSubscriptionFirebase();
-      if (subscription == null) return null;
-      
-      final isLifetimePromo = subscription['isLifetimePromo'] as bool? ?? false;
-      if (!isLifetimePromo) return null;
-      
-      final promoDoc = await _firestore
-          .collection('promo_tracking')
-          .doc('lifetime_promo_100')
-          .get();
-      
-      if (!promoDoc.exists) return null;
-      
-      final data = promoDoc.data()!;
-      final subscribers = List<Map<String, dynamic>>.from(data['subscribers'] ?? []);
-      
-      final user = SecureAuthService.instance.currentUser;
-      final userId = user?['uid'] ?? user?['id'];
-      
-      final userSubscription = subscribers.firstWhere(
-        (sub) => sub['userId'] == userId,
-        orElse: () => {},
-      );
-      
-      if (userSubscription.isEmpty) return null;
-      
-      return {
-        'isLifetimePromo': true,
-        'position': userSubscription['position'],
-        'price': 79.0,
-        'totalSlots': 100,
-        'subscribedAt': userSubscription['subscribedAt'],
-      };
-    } catch (e) {
-      print('❌ Erreur récupération statut promo Firebase: $e');
-      return null;
-    }
-  }
-
-  /// ✅ MOCK - Statut promo factice
-  Future<Map<String, dynamic>?> _getPromoStatusMock() async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    
-    final subscription = await _getCurrentSubscriptionMock();
-    if (subscription == null) return null;
-    
-    final isLifetimePromo = subscription['isLifetimePromo'] as bool? ?? false;
-    if (!isLifetimePromo) return null;
-    
-    return {
-      'isLifetimePromo': true,
-      'position': Random().nextInt(100) + 1,
-      'price': 79.0,
-      'totalSlots': 100,
-      'subscribedAt': DateTime.now().subtract(Duration(days: Random().nextInt(30))),
-      '_source': 'mock',
-      '_demoData': true,
-    };
-  }
-
-  /// ✅ ABONNEMENT DE TEST (mode auto)
-  Future<void> createTestSubscription() async {
-    try {
-      await createSubscription(
-        planId: _isDemoMode ? 'demo_test' : 'monthly_standard',
-        planName: _isDemoMode ? 'KIPIK Test - Démo' : 'KIPIK Pro - Standard',
-        price: 99.0,
-        duration: const Duration(days: 30),
-        description: _isDemoMode ? '[DÉMO] Abonnement KIPIK Pro de test' : 'Abonnement KIPIK Pro de test',
-        features: {
-          'dashboard': true,
-          'appointments': true,
-          'quotes': true,
-          'portfolio': true,
-          'chat': true,
-        },
-      );
-      print('✅ Abonnement de test créé');
-    } catch (e) {
-      print('❌ Erreur création abonnement test: $e');
-    }
-  }
-
-  /// ✅ MÉTHODE DE DIAGNOSTIC
-  Future<void> debugSubscriptionService() async {
-    print('🔍 Debug FirebaseSubscriptionService:');
-    print('  - Mode démo: $_isDemoMode');
-    print('  - Base active: ${DatabaseManager.instance.activeDatabaseConfig.name}');
-    
-    final user = SecureAuthService.instance.currentUser;
-    final userId = user?['uid'] ?? user?['id'];
-    
-    print('  - User ID: ${userId ?? 'Non connecté'}');
-    
-    if (userId != null) {
-      final subscription = await getCurrentSubscription();
-      print('  - Abonnement actuel: ${subscription != null ? 'Oui' : 'Non'}');
-      
-      if (subscription != null) {
-        print('  - Plan: ${subscription['planId']}');
-        print('  - Statut: ${subscription['status']}');
-        print('  - Prix: ${subscription['price']}€');
-        print('  - Promo à vie: ${subscription['isLifetimePromo'] ?? false}');
-        print('  - Source: ${subscription['_source'] ?? 'firebase'}');
+      if (newType.index <= currentSub.type.index) {
+        return SubscriptionResult.error('Impossible de downgrader');
       }
       
       if (_isDemoMode) {
-        print('  - Abonnements mock: ${_mockSubscriptions.length}');
-        print('  - Historiques mock: ${_mockSubscriptionHistory.length}');
+        final upgraded = currentSub.copyWith(
+          type: newType,
+          enabledFeatures: _getFeaturesForType(newType),
+        );
+        
+        await _saveSubscription(upgraded);
+        _currentSubscription = upgraded;
+        
+        return SubscriptionResult.success(
+          subscription: upgraded,
+          message: '[DÉMO] Abonnement upgradé vers ${newType.displayName}',
+        );
       }
       
-      final plans = await getAvailablePlans();
-      print('  - Plans disponibles: ${plans.length}');
+      // En production: modifier Stripe subscription
+      // TODO: Implémenter modification Stripe
+      
+      return SubscriptionResult.success(
+        subscription: currentSub,
+        message: 'Upgrade en cours...',
+      );
+      
+    } catch (e) {
+      return SubscriptionResult.error('Erreur upgrade: $e');
     }
-    
-    final stats = await getSubscriptionStats();
-    print('  - Stats globales: $stats');
   }
 
-  // ✅ MÉTHODES COMPATIBILITÉ (inchangées mais mode auto)
-  Future<void> checkExpiredSubscriptions() async {
+  /// ✅ CALCUL ÉCONOMIES UPGRADE
+  Map<String, dynamic> calculateUpgradeSavings(SubscriptionType currentType, SubscriptionType targetType) {
+    final priceDiff = targetType.monthlyPrice - currentType.monthlyPrice;
+    final commissionDiff = currentType.commissionRate - targetType.commissionRate;
+    
+    if (commissionDiff <= 0) {
+      return {
+        'no_savings': true,
+        'message': 'Pas d\'économie de commission',
+      };
+    }
+    
+    final breakEvenAmount = priceDiff / commissionDiff;
+    
+    return {
+      'monthly_price_increase': priceDiff,
+      'commission_reduction': '${(commissionDiff * 100).toStringAsFixed(1)}%',
+      'break_even_monthly_ca': breakEvenAmount,
+      'savings_per_1000': commissionDiff * 1000,
+      'recommended': breakEvenAmount <= 7500, // Recommandé si < 7.5k€ CA/mois
+      'message': breakEvenAmount <= 5000 
+          ? 'Upgrade très rentable dès ${breakEvenAmount.toStringAsFixed(0)}€ CA/mois'
+          : 'Upgrade rentable à partir de ${breakEvenAmount.toStringAsFixed(0)}€ CA/mois',
+    };
+  }
+
+  /// ✅ STATISTIQUES COMMISSIONS
+  Future<Map<String, dynamic>> getCommissionStats(String userId, {int months = 1}) async {
     if (_isDemoMode) {
-      print('🎭 Mode démo - Simulation vérification abonnements expirés');
-      // En mode démo, pas besoin de vérifier les expirations
+      final payments = _mockPaymentHistory[userId] ?? [];
+      final totalCommissions = payments.fold(0.0, (sum, p) => sum + (p['commission'] ?? 0));
+      final totalRevenue = payments.fold(0.0, (sum, p) => sum + (p['amount'] ?? 0));
+      
+      return {
+        'total_commissions': totalCommissions,
+        'total_revenue': totalRevenue,
+        'payments_count': payments.length,
+        'avg_commission_rate': totalRevenue > 0 ? totalCommissions / totalRevenue : 0,
+        'period': 'demo_${months}_months',
+        'demo_mode': true,
+      };
+    }
+    
+    try {
+      final fromDate = DateTime.now().subtract(Duration(days: months * 30));
+      
+      final snapshot = await _firestore
+          .collection('payment_logs')
+          .where('receiver_id', isEqualTo: userId)
+          .where('created_at', isGreaterThanOrEqualTo: fromDate)
+          .get();
+      
+      double totalCommissions = 0;
+      double totalRevenue = 0;
+      
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        totalCommissions += (data['kipik_commission'] as num).toDouble();
+        totalRevenue += (data['amount'] as num).toDouble();
+      }
+      
+      return {
+        'total_commissions': totalCommissions,
+        'total_revenue': totalRevenue,
+        'payments_count': snapshot.docs.length,
+        'avg_commission_rate': totalRevenue > 0 ? totalCommissions / totalRevenue : 0,
+        'period': '${months}_months',
+      };
+    } catch (e) {
+      print('❌ Erreur stats commissions: $e');
+      return {};
+    }
+  }
+
+  /// ✅ HISTORIQUE PAIEMENTS
+  Future<List<Map<String, dynamic>>> getPaymentHistory(String userId, {int limit = 50}) async {
+    if (_isDemoMode) {
+      return _mockPaymentHistory[userId] ?? [];
+    }
+    
+    try {
+      final snapshot = await _firestore
+          .collection('payment_logs')
+          .where('receiver_id', isEqualTo: userId)
+          .orderBy('created_at', descending: true)
+          .limit(limit)
+          .get();
+      
+      return snapshot.docs.map((doc) => {
+        'id': doc.id,
+        ...doc.data(),
+      }).toList();
+    } catch (e) {
+      print('❌ Erreur historique paiements: $e');
+      return [];
+    }
+  }
+
+  /// ✅ HELPER - FEATURES POUR TYPE
+  List<PremiumFeature> _getFeaturesForType(SubscriptionType type) {
+    switch (type) {
+      case SubscriptionType.free:
+        return []; // Aucune fonctionnalité premium
+        
+      case SubscriptionType.standard:
+        return [
+          PremiumFeature.professionalAgenda,
+          PremiumFeature.fractionalPayments, // 2% commission
+          PremiumFeature.clientManagement,
+          PremiumFeature.advancedAnalytics,
+          PremiumFeature.advancedFilters,
+        ];
+        
+      case SubscriptionType.premium:
+        return [
+          // Toutes les fonctionnalités Standard
+          PremiumFeature.professionalAgenda,
+          PremiumFeature.fractionalPayments, // 1% commission
+          PremiumFeature.clientManagement,
+          PremiumFeature.advancedAnalytics,
+          PremiumFeature.advancedFilters,
+          // Fonctionnalités Premium exclusives
+          PremiumFeature.conventions,
+          PremiumFeature.guestApplications,
+          PremiumFeature.guestOffers,
+          PremiumFeature.flashMinute,
+        ];
+        
+      case SubscriptionType.enterprise:
+        return PremiumFeature.values; // Toutes les fonctionnalités
+    }
+  }
+
+  /// ✅ GESTION BASE DE DONNÉES
+  Future<void> _saveSubscription(UserSubscription subscription) async {
+    if (_isDemoMode) {
+      _currentSubscription = subscription;
+      _mockSubscriptions[subscription.userId] = subscription.toMap();
       return;
     }
     
-    try {
-      final now = Timestamp.now();
-      final snapshot = await _firestore
-          .collection('users')
-          .where('subscription.status', whereIn: ['active', 'trialing'])
-          .where('subscription.currentPeriodEnd', isLessThan: now)
-          .get();
-
-      final batch = _firestore.batch();
-      
-      for (final doc in snapshot.docs) {
-        batch.update(doc.reference, {
-          'subscription.status': 'expired',
-          'subscription.expiredAt': FieldValue.serverTimestamp(),
-          'subscription.lastUpdated': FieldValue.serverTimestamp(),
-        });
-      }
-      
-      await batch.commit();
-      
-      print('✅ ${snapshot.docs.length} abonnements expirés mis à jour');
-    } catch (e) {
-      print('❌ Erreur vérification abonnements expirés: $e');
-    }
+    await _firestore
+        .collection('user_subscriptions')
+        .doc(subscription.userId)
+        .set(subscription.toMap(), SetOptions(merge: true));
   }
 
-  Future<void> _updatePromoTracking(String userId) async {
-    try {
-      final user = SecureAuthService.instance.currentUser;
-      final userEmail = user?['email'] ?? '';
+  Future<UserSubscription?> _loadSubscription(String userId) async {
+    if (_isDemoMode) {
+      if (_mockSubscriptions.containsKey(userId)) {
+        return UserSubscription.fromMap(_mockSubscriptions[userId]!);
+      }
+      return UserSubscription.createPremiumDemo(userId);
+    }
+    
+    final doc = await _firestore
+        .collection('user_subscriptions')
+        .doc(userId)
+        .get();
+    
+    if (!doc.exists) return null;
+    return UserSubscription.fromFirestore(doc);
+  }
 
-      await _firestore.runTransaction((transaction) async {
-        final promoRef = _firestore.collection('promo_tracking').doc('lifetime_promo_100');
-        final promoDoc = await transaction.get(promoRef);
-        
-        if (promoDoc.exists) {
-          final data = promoDoc.data()!;
-          final currentUsed = data['usedSlots'] as int;
-          final subscribers = List<Map<String, dynamic>>.from(data['subscribers'] ?? []);
-          
-          if (currentUsed < 100) {
-            subscribers.add({
-              'userId': userId,
-              'position': currentUsed + 1,
-              'subscribedAt': FieldValue.serverTimestamp(),
-              'isActive': true,
-              'email': userEmail,
-            });
-            
-            transaction.update(promoRef, {
-              'usedSlots': currentUsed + 1,
-              'remainingSlots': 100 - (currentUsed + 1),
-              'subscribers': subscribers,
-              'updatedAt': FieldValue.serverTimestamp(),
-            });
-            
-            print('✅ Promo tracking mis à jour: position ${currentUsed + 1}/100');
-          }
-        }
+  Future<void> loadUserSubscription(String userId) async {
+    _currentSubscription = await _loadSubscription(userId);
+  }
+
+  /// ✅ LOGGING
+  Future<void> _logActivity(String userId, String action, Map<String, dynamic> metadata) async {
+    if (_isDemoMode) return;
+    
+    try {
+      await _firestore.collection('subscription_activity').add({
+        'user_id': userId,
+        'action': action,
+        'metadata': metadata,
+        'timestamp': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      print('❌ Erreur mise à jour promo tracking: $e');
+      print('❌ Erreur log activité: $e');
     }
   }
+
+  Future<void> _logPayment(Map<String, dynamic> paymentData) async {
+    if (_isDemoMode) return;
+    
+    try {
+      await _firestore.collection('payment_logs').add({
+        ...paymentData,
+        'created_at': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print('❌ Erreur log paiement: $e');
+    }
+  }
+
+  /// ✅ ANALYTICS ABONNEMENT
+  Map<String, dynamic> getSubscriptionAnalytics() {
+    final subscription = _currentSubscription;
+    if (subscription == null) return {'error': 'Aucun abonnement'};
+    
+    return {
+      'type': subscription.type.displayName,
+      'commission_rate': '${(subscription.commissionRate * 100).toStringAsFixed(1)}%',
+      'monthly_price': '${subscription.type.monthlyPrice}€',
+      'features_count': subscription.enabledFeatures.length,
+      'trial_active': subscription.trialActive,
+      'days_remaining': subscription.trialActive && subscription.trialEndDate != null
+          ? subscription.trialEndDate!.difference(DateTime.now()).inDays
+          : null,
+      'status': subscription.status.name,
+    };
+  }
+
+  /// ✅ DEBUG
+  void debugSubscriptionService() {
+    print('🔍 FirebaseSubscriptionService Debug:');
+    print('  Mode: ${_isDemoMode ? "🎭 Démo" : "🏭 Production"}');
+    
+    final sub = _currentSubscription;
+    if (sub != null) {
+      print('  Abonnement: ${sub.type.displayName}');
+      print('  Commission: ${(sub.commissionRate * 100).toStringAsFixed(1)}%');
+      print('  Prix: ${sub.type.monthlyPrice}€/mois');
+      print('  Features: ${sub.enabledFeatures.length}');
+      print('  Status: ${sub.status.name}');
+      
+      if (sub.trialActive) {
+        final daysLeft = sub.trialEndDate?.difference(DateTime.now()).inDays ?? 0;
+        print('  Essai: $daysLeft jours restants');
+      }
+    } else {
+      print('  Aucun abonnement chargé');
+    }
+  }
+}
+
+/// ✅ RÉSULTATS
+class SubscriptionResult {
+  final bool success;
+  final String? error;
+  final UserSubscription? subscription;
+  final String? setupIntentClientSecret;
+  final String? message;
+
+  SubscriptionResult._({
+    required this.success,
+    this.error,
+    this.subscription,
+    this.setupIntentClientSecret,
+    this.message,
+  });
+
+  factory SubscriptionResult.success({
+    required UserSubscription subscription,
+    String? setupIntentClientSecret,
+    String? message,
+  }) => SubscriptionResult._(
+    success: true,
+    subscription: subscription,
+    setupIntentClientSecret: setupIntentClientSecret,
+    message: message,
+  );
+
+  factory SubscriptionResult.error(String error) => SubscriptionResult._(
+    success: false,
+    error: error,
+  );
+}
+
+class PaymentResult {
+  final bool success;
+  final String? error;
+  final String? paymentClientSecret;
+  final double? totalAmount;
+  final double? kipikCommission;
+  final double? receiverAmount;
+  final double? commissionRate;
+
+  PaymentResult._({
+    required this.success,
+    this.error,
+    this.paymentClientSecret,
+    this.totalAmount,
+    this.kipikCommission,
+    this.receiverAmount,
+    this.commissionRate,
+  });
+
+  factory PaymentResult.success({
+    required String paymentClientSecret,
+    required double totalAmount,
+    required double kipikCommission,
+    required double receiverAmount,
+    required double commissionRate,
+  }) => PaymentResult._(
+    success: true,
+    paymentClientSecret: paymentClientSecret,
+    totalAmount: totalAmount,
+    kipikCommission: kipikCommission,
+    receiverAmount: receiverAmount,
+    commissionRate: commissionRate,
+  );
+
+  factory PaymentResult.error(String error) => PaymentResult._(
+    success: false,
+    error: error,
+  );
 }

@@ -1,72 +1,21 @@
-// lib/pages/organisateur/confirmation_inscription_organisateur_page.dart
-
-import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
+import 'package:kipik_v5/pages/organisateur/organisateur_dashboard_page.dart';
 import 'package:kipik_v5/theme/kipik_theme.dart';
 
-class ConfirmationInscriptionOrganisateurPage extends StatefulWidget {
+class ConfirmationInscriptionOrganisateurPage extends StatelessWidget {
   const ConfirmationInscriptionOrganisateurPage({Key? key}) : super(key: key);
 
   @override
-  State<ConfirmationInscriptionOrganisateurPage> createState() =>
-      _ConfirmationInscriptionOrganisateurPageState();
-}
-
-class _ConfirmationInscriptionOrganisateurPageState
-    extends State<ConfirmationInscriptionOrganisateurPage> {
-  late final String _bgAsset;
-  int _countdown = 5; // 5 secondes pour les organisateurs
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    // Choix aléatoire du fond
-    const backgrounds = [
-      'assets/background1.png',
-      'assets/background2.png',
-      'assets/background3.png',
-      'assets/background4.png',
-    ];
-    _bgAsset = backgrounds[Random().nextInt(backgrounds.length)];
-
-    // Démarrer le countdown
-    _startCountdown();
-  }
-
-  void _startCountdown() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_countdown > 0) {
-        setState(() {
-          _countdown--;
-        });
-      } else {
-        _timer?.cancel();
-        _redirectToDashboard();
-      }
-    });
-  }
-
-  void _redirectToDashboard() {
-    if (mounted) {
-      Navigator.pushReplacementNamed(context, '/organisateur/dashboard');
-    }
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final backgrounds = KipikTheme.backgrounds;
+    final bg = backgrounds[Random().nextInt(backgrounds.length)];
+
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: const CustomAppBarKipik(
-        title: '',
+        title: "Bienvenue",
         showBackButton: false,
         showBurger: false,
         showNotificationIcon: false,
@@ -74,16 +23,15 @@ class _ConfirmationInscriptionOrganisateurPageState
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Background avec overlay
-          Image.asset(_bgAsset, fit: BoxFit.cover),
+          Image.asset(bg, fit: BoxFit.cover),
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withOpacity(0.4),
-                  Colors.black.withOpacity(0.7),
+                  Colors.black.withOpacity(0.3),
+                  Colors.black.withOpacity(0.6),
                 ],
               ),
             ),
@@ -95,35 +43,35 @@ class _ConfirmationInscriptionOrganisateurPageState
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // ✅ Icône de succès spéciale organisateur
+                    // Icône de succès
                     Container(
-                      width: 120,
-                      height: 120,
+                      width: 100,
+                      height: 100,
                       decoration: BoxDecoration(
-                        color: Colors.orange,
+                        color: KipikTheme.rouge,
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.orange.withOpacity(0.3),
+                            color: KipikTheme.rouge.withOpacity(0.3),
                             blurRadius: 20,
                             offset: const Offset(0, 10),
                           ),
                         ],
                       ),
                       child: const Icon(
-                        Icons.event_available,
+                        Icons.celebration,
                         color: Colors.white,
-                        size: 70,
+                        size: 60,
                       ),
                     ),
-                    
+
                     const SizedBox(height: 30),
-                    
-                    // ✅ Message de bienvenue organisateur
+
+                    // Message de bienvenue
                     Container(
-                      padding: const EdgeInsets.all(24),
+                      padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
+                        color: Colors.white.withOpacity(0.10),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
                           color: Colors.white.withOpacity(0.3),
@@ -133,7 +81,7 @@ class _ConfirmationInscriptionOrganisateurPageState
                       child: const Column(
                         children: [
                           Text(
-                            "🎊 Inscription organisateur validée !",
+                            "🎉 Inscription validée !",
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontFamily: 'PermanentMarker',
@@ -144,10 +92,9 @@ class _ConfirmationInscriptionOrganisateurPageState
                           ),
                           SizedBox(height: 16),
                           Text(
-                            "Bienvenue dans l'équipe KIPIK !\n\n"
-                            "Votre compte organisateur est en cours de vérification.\n"
-                            "Vous pourrez bientôt créer et gérer vos conventions\n"
-                            "de tatouage sur la plateforme.",
+                            "Bienvenue dans l'univers KIPIK ORGANISATEUR !\n\n"
+                            "Votre compte organisateur est maintenant activé.\n"
+                            "Vous pouvez dès à présent créer et gérer vos événements.",
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontFamily: 'Roboto',
@@ -159,138 +106,70 @@ class _ConfirmationInscriptionOrganisateurPageState
                         ],
                       ),
                     ),
-                    
+
+                    const SizedBox(height: 40),
+
+                    // Bouton principal vers dashboard organisateur
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => OrganisateurDashboardPage(),
+                            ),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: KipikTheme.rouge,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 18,
+                            horizontal: 32,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 8,
+                          shadowColor: KipikTheme.rouge.withOpacity(0.3),
+                          textStyle: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'PermanentMarker',
+                          ),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.dashboard, size: 24),
+                            SizedBox(width: 12),
+                            Text("Accéder à mon espace organisateur"),
+                          ],
+                        ),
+                      ),
+                    ),
+
                     const SizedBox(height: 30),
-                    
-                    // ✅ Statut de vérification
+
+                    // Conseil/astuce
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.orange.withOpacity(0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.pending, color: Colors.orange, size: 24),
-                          SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  "Statut : En attente de vérification",
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontFamily: 'PermanentMarker',
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  "Notre équipe vérifie vos informations sous 24-48h",
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontFamily: 'Roboto',
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 30),
-                    
-                    // ✅ Countdown avec bouton manuel
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: KipikTheme.rouge.withOpacity(0.1),
+                        color: KipikTheme.rouge.withOpacity(0.10),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: KipikTheme.rouge.withOpacity(0.3),
                           width: 1,
                         ),
                       ),
-                      child: Column(
-                        children: [
-                          Text(
-                            "Redirection automatique dans ${_countdown}s",
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontFamily: 'Roboto',
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          
-                          // Bouton pour aller directement au dashboard
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: () {
-                                _timer?.cancel();
-                                _redirectToDashboard();
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: KipikTheme.rouge,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 16,
-                                  horizontal: 32,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                elevation: 8,
-                                shadowColor: KipikTheme.rouge.withOpacity(0.3),
-                                textStyle: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  fontFamily: 'PermanentMarker',
-                                ),
-                              ),
-                              child: const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.dashboard, size: 24),
-                                  SizedBox(width: 12),
-                                  Text("Accéder à mon espace"),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 20),
-                    
-                    // ✅ Message d'information
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.blue.withOpacity(0.3),
-                          width: 1,
-                        ),
-                      ),
                       child: const Row(
                         children: [
-                          Icon(Icons.info, color: Colors.blue, size: 20),
+                          Icon(Icons.tips_and_updates, color: Colors.white, size: 20),
                           SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              "Une fois vérifié, vous pourrez créer des événements et gérer vos conventions de tatouage.",
+                              "Astuce : Commencez par compléter votre profil et créez votre premier événement pour lancer votre aventure avec KIPIK !",
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 14,

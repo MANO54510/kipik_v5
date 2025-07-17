@@ -1,49 +1,80 @@
-import 'dart:math';
-import 'package:flutter/material.dart';
-import 'package:kipik_v5/widgets/common/app_bars/gpt_app_bar.dart';
-import 'package:kipik_v5/widgets/common/drawers/custom_drawer_kipik.dart';
+// lib/pages/admin/conventions/admin_convention_create_page.dart
 
-class AdminConventionCreatePage extends StatelessWidget {
-  const AdminConventionCreatePage({super.key});
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:uuid/uuid.dart';
+import 'package:kipik_v5/theme/kipik_theme.dart';
+import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
+
+class AdminConventionCreatePage extends StatefulWidget {
+  const AdminConventionCreatePage({Key? key}) : super(key: key);
+
+  @override
+  State<AdminConventionCreatePage> createState() => _AdminConventionCreatePageState();
+}
+
+class _AdminConventionCreatePageState extends State<AdminConventionCreatePage> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameCtrl   = TextEditingController();
+  final _statusOpts = ['draft', 'published', 'active', 'finished', 'cancelled'];
+  String _status = 'draft';
 
   @override
   Widget build(BuildContext context) {
-    final backgrounds = [
-      'assets/background1.png',
-      'assets/background2.png',
-      'assets/background3.png',
-      'assets/background4.png',
-    ];
-    final selectedBackground = backgrounds[Random().nextInt(backgrounds.length)];
-
     return Scaffold(
-      appBar: const GptAppBar(
-        title: 'Créer une Convention',
-        showNotificationIcon: true,
-        showBackButton: false,
+      extendBodyBehindAppBar: true,
+      appBar: const CustomAppBarKipik(
+        title: 'Nouvelle Convention',
+        showBackButton: true,
+        useProStyle: true,
       ),
-      drawer: const CustomDrawerKipik(),
-      body: Stack(
-        fit: StackFit.expand,
+      body: KipikTheme.pageContent(
+        scrollable: true,
         children: [
-          Image.asset(selectedBackground, fit: BoxFit.cover),
-          Center(
-            child: Container(
-              margin: const EdgeInsets.all(24),
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Text(
-                'Formulaire de création d’une nouvelle convention.',
-                style: TextStyle(fontSize: 18),
-                textAlign: TextAlign.center,
-              ),
+          Text('Créer une convention', style: KipikTheme.titleStyle),
+          const SizedBox(height: 24),
+
+          Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextFormField(
+                  controller: _nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Nom'),
+                  validator: (v) => v == null || v.isEmpty ? 'Champ requis' : null,
+                ),
+                const SizedBox(height: 16),
+
+                DropdownButtonFormField<String>(
+                  value: _status,
+                  decoration: const InputDecoration(labelText: 'Statut'),
+                  items: _statusOpts.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                  onChanged: (v) => setState(() => _status = v!),
+                ),
+                const SizedBox(height: 32),
+
+                KipikTheme.primaryButton(
+                  text: 'Créer',
+                  onPressed: _create,
+                  isLoading: false,
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _create() async {
+    if (!_formKey.currentState!.validate()) return;
+    final id = const Uuid().v4();
+    await FirebaseFirestore.instance.collection('conventions').doc(id).set({
+      'name': _nameCtrl.text.trim(),
+      'status': _status,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    Navigator.pop(context);
   }
 }

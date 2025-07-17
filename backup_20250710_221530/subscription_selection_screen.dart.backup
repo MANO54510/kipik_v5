@@ -1,0 +1,479 @@
+// lib/screens/subscription/subscription_selection_screen.dart
+
+import 'package:flutter/material.dart';
+import '../../../models/user_subscription.dart';
+import '../../../services/subscription/firebase_subscription_service.dart';
+import '../../../services/auth/secure_auth_service.dart';
+import '../../../screens/subscription/widgets/subscription_card.dart';
+import '../../../screens/subscription/widgets/feature_comparison_table.dart';
+import '../../../screens/subscription/widgets/break_even_calculator.dart';
+
+class SubscriptionSelectionScreen extends StatefulWidget {
+  const SubscriptionSelectionScreen({super.key});
+
+  @override
+  State<SubscriptionSelectionScreen> createState() => _SubscriptionSelectionScreenState();
+}
+
+class _SubscriptionSelectionScreenState extends State<SubscriptionSelectionScreen> {
+  
+  SubscriptionType _selectedType = SubscriptionType.premium;
+  bool _isLoading = false;
+  String? _errorMessage;
+  
+  final _subscriptionService = FirebaseSubscriptionService.instance;
+  
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0A0A0B),
+      body: CustomScrollView(
+        slivers: [
+          _buildAppBar(),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                children: [
+                  _buildHeader(),
+                  const SizedBox(height: 30),
+                  _buildSubscriptionCards(),
+                  const SizedBox(height: 40),
+                  _buildFeatureComparison(),
+                  const SizedBox(height: 40),
+                  _buildBreakEvenCalculator(),
+                  const SizedBox(height: 40),
+                  _buildCTAButton(),
+                  const SizedBox(height: 20),
+                  _buildDemoNotice(),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppBar() {
+    return SliverAppBar(
+      expandedHeight: 120,
+      floating: false,
+      pinned: true,
+      backgroundColor: const Color(0xFF0A0A0B),
+      flexibleSpace: FlexibleSpaceBar(
+        title: const Text(
+          'Choisir votre abonnement',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        background: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF6366F1),
+                Color(0xFF8B5CF6),
+                Color(0xFFEC4899),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Column(
+      children: [
+        const Text(
+          '🚀 KIPIK PRO',
+          style: TextStyle(
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'Choisissez l\'abonnement qui correspond à votre activité',
+          style: TextStyle(
+            fontSize: 16,
+            color: Colors.grey[400],
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 20),
+        _buildCommissionComparison(),
+      ],
+    );
+  }
+
+  Widget _buildCommissionComparison() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A2E),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF6366F1), width: 1),
+      ),
+      child: Column(
+        children: [
+          const Text(
+            '💰 Commission sur vos paiements',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 15),
+          Row(
+            children: [
+              Expanded(
+                child: _buildCommissionItem(
+                  'Standard',
+                  '2%',
+                  'Sur tous vos paiements',
+                  const Color(0xFF10B981),
+                ),
+              ),
+              const SizedBox(width: 15),
+              Expanded(
+                child: _buildCommissionItem(
+                  'Premium',
+                  '1%',
+                  'Commission réduite !',
+                  const Color(0xFF6366F1),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommissionItem(String title, String rate, String subtitle, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+          Text(
+            rate,
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[400],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubscriptionCards() {
+    return Column(
+      children: [
+        // Standard Card
+        SubscriptionCard(
+          type: SubscriptionType.standard,
+          isSelected: _selectedType == SubscriptionType.standard,
+          onTap: () => setState(() => _selectedType = SubscriptionType.standard),
+          isRecommended: false,
+        ),
+        const SizedBox(height: 20),
+        
+        // Premium Card (Recommandé)
+        SubscriptionCard(
+          type: SubscriptionType.premium,
+          isSelected: _selectedType == SubscriptionType.premium,
+          onTap: () => setState(() => _selectedType = SubscriptionType.premium),
+          isRecommended: true,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFeatureComparison() {
+    return const FeatureComparisonTable();
+  }
+
+  Widget _buildBreakEvenCalculator() {
+    if (_selectedType == SubscriptionType.standard) {
+      return BreakEvenCalculator(
+        currentType: SubscriptionType.standard,
+        targetType: SubscriptionType.premium,
+        onUpgradeRecommended: () {
+          setState(() => _selectedType = SubscriptionType.premium);
+        },
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildCTAButton() {
+    return Container(
+      width: double.infinity,
+      height: 60,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+        ),
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF6366F1).withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(30),
+          onTap: _isLoading ? null : _startFreeTrial,
+          child: Center(
+            child: _isLoading
+                ? const CircularProgressIndicator(color: Colors.white)
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '🚀 Essayer ${_selectedType.displayName} GRATUIT',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const Text(
+                        '30 jours sans engagement',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white70,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDemoNotice() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A2E),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline, color: Colors.orange, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '🎭 Mode DÉMO activé - Aucun paiement réel ne sera effectué',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[400],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _startFreeTrial() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      // Obtenir l'utilisateur connecté
+      final user = SecureAuthService.instance.currentUser;
+      if (user == null) {
+        throw Exception('Utilisateur non connecté');
+      }
+
+      final userId = user['uid'] ?? user['id'];
+      if (userId == null) {
+        throw Exception('ID utilisateur invalide');
+      }
+
+      // Détails SEPA de test
+      final sepaDetails = <String, String>{
+        'email': user['email']?.toString() ?? 'demo@kipik.com',
+        'name': user['name']?.toString() ?? 'Demo User',
+        'iban': 'FR7630004000031234567890143', // IBAN de test
+      };
+
+      // Démarrer l'essai gratuit
+      final result = await _subscriptionService.startFreeTrial(
+        userId: userId,
+        targetType: _selectedType,
+        sepaDetails: sepaDetails,
+      );
+
+      if (result.success) {
+        // Succès !
+        _showSuccessDialog(result);
+      } else {
+        setState(() {
+          _errorMessage = result.error ?? 'Erreur inconnue';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Erreur: $e';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _showSuccessDialog(SubscriptionResult result) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          '🎉 Essai gratuit activé !',
+          style: TextStyle(color: Colors.white, fontSize: 20),
+          textAlign: TextAlign.center,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Votre abonnement ${_selectedType.displayName} est maintenant actif !',
+              style: TextStyle(color: Colors.grey[300], fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6366F1).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    '30 jours gratuits',
+                    style: TextStyle(
+                      color: const Color(0xFF6366F1),
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    'Commission ${(_selectedType.commissionRate * 100).toStringAsFixed(1)}%',
+                    style: TextStyle(color: Colors.grey[400]),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    result.message ?? '',
+                    style: TextStyle(
+                      color: Colors.grey[400],
+                      fontSize: 12,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF6366F1),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 15),
+              ),
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pop(); // Retourner à l'écran principal
+              },
+              child: const Text(
+                'Commencer à utiliser KIPIK Pro',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Extension pour obtenir les couleurs des types
+extension SubscriptionTypeColors on SubscriptionType {
+  Color get primaryColor {
+    switch (this) {
+      case SubscriptionType.free:
+        return Colors.grey;
+      case SubscriptionType.standard:
+        return const Color(0xFF10B981);
+      case SubscriptionType.premium:
+        return const Color(0xFF6366F1);
+      case SubscriptionType.enterprise:
+        return const Color(0xFF8B5CF6);
+    }
+  }
+
+  Color get backgroundColor {
+    return primaryColor.withOpacity(0.1);
+  }
+
+  Color get borderColor {
+    return primaryColor.withOpacity(0.3);
+  }
+}

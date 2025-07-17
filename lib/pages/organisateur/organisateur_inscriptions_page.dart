@@ -1,706 +1,577 @@
 // lib/pages/organisateur/organisateur_inscriptions_page.dart
 
 import 'package:flutter/material.dart';
-import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
-import 'package:kipik_v5/widgets/common/drawers/drawer_factory.dart';
-import 'package:kipik_v5/theme/kipik_theme.dart';
-import 'package:intl/intl.dart';
+import 'package:flutter/services.dart';
+import '../../theme/kipik_theme.dart';
+import '../../widgets/common/app_bars/custom_app_bar_kipik.dart';
+import '../../widgets/common/drawers/drawer_factory.dart';
+import '../../widgets/common/buttons/tattoo_assistant_button.dart';
+
+enum RequestStatus { pending, negotiating, accepted, rejected, paid, cancelled }
+enum TattooerType { verified, premium, standard, new_user }
 
 class OrganisateurInscriptionsPage extends StatefulWidget {
   const OrganisateurInscriptionsPage({Key? key}) : super(key: key);
 
   @override
-  _OrganisateurInscriptionsPageState createState() => _OrganisateurInscriptionsPageState();
+  State<OrganisateurInscriptionsPage> createState() => _OrganisateurInscriptionsPageState();
 }
 
-class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsPage> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  bool _isLoading = false;
+class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsPage> 
+    with TickerProviderStateMixin {
   
-  // Filtres
-  String _selectedConvention = 'Toutes les conventions';
-  String _status = 'Tous';
-  
-  // Données fictives
-  final List<Map<String, dynamic>> _inscriptions = [
-    {
-      'id': '1',
-      'artistName': 'Jean Dumont',
-      'studioName': 'Ink Masters Paris',
-      'conventionName': 'Tattoo Expo Paris 2025',
-      'submissionDate': DateTime.now().subtract(Duration(days: 5)),
-      'status': 'En attente',
-      'email': 'jean.dumont@example.com',
-      'phone': '+33 6 12 34 56 78',
-      'category': 'Tatoueur',
-      'portfolio': 'https://example.com/portfolio',
-    },
-    {
-      'id': '2',
-      'artistName': 'Sophie Martin',
-      'studioName': 'Art Ink Studio',
-      'conventionName': 'Tattoo Expo Paris 2025',
-      'submissionDate': DateTime.now().subtract(Duration(days: 10)),
-      'status': 'Accepté',
-      'email': 'sophie.martin@example.com',
-      'phone': '+33 6 98 76 54 32',
-      'category': 'Tatoueur',
-      'portfolio': 'https://example.com/portfolio',
-    },
-    {
-      'id': '3',
-      'artistName': 'MicroNeedle France',
-      'studioName': 'N/A',
-      'conventionName': 'Ink Festival Lyon',
-      'submissionDate': DateTime.now().subtract(Duration(days: 3)),
-      'status': 'En attente',
-      'email': 'contact@microneedle.fr',
-      'phone': '+33 4 56 78 90 12',
-      'category': 'Vendeur',
-      'portfolio': null,
-    },
-    {
-      'id': '4',
-      'artistName': 'Lucie Dupont',
-      'studioName': 'Electric Needle',
-      'conventionName': 'Tattoo Art Show Marseille',
-      'submissionDate': DateTime.now().subtract(Duration(days: 15)),
-      'status': 'Refusé',
-      'email': 'lucie@electricneedle.com',
-      'phone': '+33 7 12 34 56 78',
-      'category': 'Tatoueur',
-      'portfolio': 'https://example.com/portfolio',
-    },
-  ];
-  
-  final List<String> _conventions = [
-    'Toutes les conventions',
-    'Tattoo Expo Paris 2025',
-    'Ink Festival Lyon',
-    'Tattoo Art Show Marseille',
-  ];
-  
-  final List<String> _statuses = [
-    'Tous',
-    'En attente',
-    'Accepté',
-    'Refusé',
-  ];
-  
+  late AnimationController _slideController;
+  late AnimationController _tabController;
+  late Animation<Offset> _slideAnimation;
+  late Animation<double> _tabAnimation;
+
+  int _selectedTabIndex = 0;
+  bool _isLoading = true;
+  String _searchQuery = '';
+  RequestStatus? _statusFilter;
+
+  List<Map<String, dynamic>> _standRequests = [];
+  List<Map<String, dynamic>> _filteredRequests = [];
+  Map<String, dynamic>? _selectedRequest;
+
+  final TextEditingController _searchController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _initializeAnimations();
+    _loadStandRequests();
+    _setupSearchListener();
   }
-  
+
   @override
   void dispose() {
+    _slideController.dispose();
     _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
-  
-  List<Map<String, dynamic>> get _filteredInscriptions {
-    return _inscriptions.where((inscription) {
-      final matchesConvention = _selectedConvention == 'Toutes les conventions' || 
-                              inscription['conventionName'] == _selectedConvention;
-      final matchesStatus = _status == 'Tous' || 
-                          inscription['status'] == _status;
-      
-      if (_tabController.index == 0) {
-        // Onglet Tatoueurs
-        return matchesConvention && matchesStatus && inscription['category'] == 'Tatoueur';
-      } else {
-        // Onglet Vendeurs
-        return matchesConvention && matchesStatus && inscription['category'] == 'Vendeur';
-      }
-    }).toList();
+
+  void _initializeAnimations() {
+    _slideController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    
+    _tabController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 1),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _slideController,
+      curve: Curves.easeOutCubic,
+    ));
+    
+    _tabAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _tabController, curve: Curves.easeOut),
+    );
+
+    _slideController.forward();
+    _tabController.forward();
   }
 
-  // ✅ OPTIMISÉ: InputDecoration compact avec PermanentMarker
-  InputDecoration _inputDecoration(String label) => InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(
-          fontFamily: 'PermanentMarker', // ✅ PermanentMarker conservé
-          fontSize: 11, // ✅ Taille réduite mais lisible
-          color: Colors.white70,
-          height: 0.9, // ✅ Interligne serré
-        ),
-        floatingLabelStyle: const TextStyle(
-          fontFamily: 'PermanentMarker', 
-          fontSize: 12, // ✅ Taille contrôlée quand il flotte
-          color: Colors.white,
-          height: 0.9,
-        ),
-        filled: true,
-        fillColor: Colors.grey[900],
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14, 
-          vertical: 12, // ✅ Padding réduit pour compacter
-        ),
-        isDense: true, // ✅ CRUCIAL: Réduit la hauteur globale
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: KipikTheme.rouge, width: 1),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: KipikTheme.rouge, width: 2),
-        ),
-      );
+  void _setupSearchListener() {
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.toLowerCase();
+      });
+      _filterRequests();
+    });
+  }
 
-  // ✅ NOUVEAU: Widget pour les titres de section
-  Widget _buildSectionTitle(String title, IconData icon) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.95),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: KipikTheme.rouge, width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+  void _loadStandRequests() {
+    Future.delayed(const Duration(seconds: 1), () {
+      setState(() {
+        _standRequests = _generateStandRequestsData();
+        _filteredRequests = _standRequests;
+        _isLoading = false;
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      endDrawer: DrawerFactory.of(context),
+      appBar: CustomAppBarKipik(
+        title: 'Demandes de Stands',
+        subtitle: '${_filteredRequests.length} demandes',
+        showBackButton: true,
+        showBurger: true,
+        useProStyle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.filter_alt, color: Colors.white),
+            onPressed: _showAdvancedFilters,
+          ),
+          IconButton(
+            icon: const Icon(Icons.download, color: Colors.white),
+            onPressed: _exportRequests,
           ),
         ],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          Icon(
-            icon,
-            color: KipikTheme.rouge,
-            size: 18,
+          FloatingActionButton(
+            heroTag: "bulk_actions",
+            onPressed: _showBulkActions,
+            backgroundColor: Colors.orange,
+            child: const Icon(Icons.select_all, color: Colors.white),
           ),
-          const SizedBox(width: 8),
-          Text(
-            title,
-            style: const TextStyle(
-              fontFamily: 'PermanentMarker',
-              fontSize: 14,
-              color: Colors.black87,
-              fontWeight: FontWeight.bold,
+          const SizedBox(height: 16),
+          const TattooAssistantButton(),
+        ],
+      ),
+      body: Stack(
+        children: [
+          // Background
+          Image.asset(
+            'assets/background_charbon.png',
+            fit: BoxFit.cover,
+            width: double.infinity,
+            height: double.infinity,
+          ),
+          
+          SafeArea(
+            child: SlideTransition(
+              position: _slideAnimation,
+              child: _isLoading ? _buildLoadingState() : _buildContent(),
             ),
-            textAlign: TextAlign.center,
           ),
         ],
       ),
     );
   }
-  
-  void _showInscriptionDetails(Map<String, dynamic> inscription) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.8,
-        maxChildSize: 0.95,
-        minChildSize: 0.5,
-        builder: (_, controller) {
-          return Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[900],
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+
+  Widget _buildLoadingState() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(color: Colors.white),
+          SizedBox(height: 16),
+          Text(
+            'Chargement des demandes...',
+            style: TextStyle(
+              fontFamily: 'Roboto',
+              color: Colors.white,
+              fontSize: 16,
             ),
-            padding: EdgeInsets.all(16),
-            child: ListView(
-              controller: controller,
-              children: [
-                // Barre de glissement
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 5,
-                    margin: EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[700],
-                      borderRadius: BorderRadius.circular(2.5),
-                    ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    return Column(
+      children: [
+        const SizedBox(height: 16),
+        _buildSearchAndFilters(),
+        const SizedBox(height: 16),
+        _buildStatusTabs(),
+        const SizedBox(height: 16),
+        _buildStatsHeader(),
+        const SizedBox(height: 16),
+        Expanded(
+          child: _buildRequestsList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSearchAndFilters() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.95),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.search, color: KipikTheme.rouge),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Rechercher un tatoueur, style...',
+                  hintStyle: TextStyle(
+                    fontFamily: 'Roboto',
+                    color: Colors.grey[500],
                   ),
+                  border: InputBorder.none,
                 ),
-                
-                // Entête
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    CircleAvatar(
-                      radius: 30,
-                      backgroundColor: KipikTheme.rouge,
-                      child: Text(
-                        inscription['artistName'][0].toUpperCase(),
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les initiales
-                        ),
+              ),
+            ),
+            if (_searchQuery.isNotEmpty)
+              IconButton(
+                icon: const Icon(Icons.clear, color: Colors.grey),
+                onPressed: () {
+                  _searchController.clear();
+                  _filterRequests();
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusTabs() {
+    final tabs = [
+      {'label': 'Toutes', 'status': null, 'count': _standRequests.length},
+      {'label': 'En attente', 'status': RequestStatus.pending, 'count': _standRequests.where((r) => r['status'] == RequestStatus.pending).length},
+      {'label': 'Négociation', 'status': RequestStatus.negotiating, 'count': _standRequests.where((r) => r['status'] == RequestStatus.negotiating).length},
+      {'label': 'Acceptées', 'status': RequestStatus.accepted, 'count': _standRequests.where((r) => r['status'] == RequestStatus.accepted).length},
+      {'label': 'Payées', 'status': RequestStatus.paid, 'count': _standRequests.where((r) => r['status'] == RequestStatus.paid).length},
+    ];
+
+    return AnimatedBuilder(
+      animation: _tabAnimation,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _tabAnimation.value,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Container(
+              height: 80,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: tabs.length,
+                itemBuilder: (context, index) {
+                  final tab = tabs[index];
+                  final isSelected = _selectedTabIndex == index;
+
+                  return GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _selectedTabIndex = index;
+                        _statusFilter = tab['status'] as RequestStatus?;
+                      });
+                      _filterRequests();
+                      HapticFeedback.lightImpact();
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      decoration: BoxDecoration(
+                        gradient: isSelected ? LinearGradient(
+                          colors: [KipikTheme.rouge, KipikTheme.rouge.withOpacity(0.8)],
+                        ) : null,
+                        color: isSelected ? null : Colors.white.withOpacity(0.95),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
-                    ),
-                    SizedBox(width: 16),
-                    Expanded(
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            inscription['artistName'],
+                            tab['label'] as String,
                             style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les noms
-                            ),
-                          ),
-                          Text(
-                            inscription['studioName'] != 'N/A' ? inscription['studioName'] : '',
-                            style: TextStyle(
-                              color: Colors.grey[400],
+                              fontFamily: 'Roboto',
                               fontSize: 14,
-                              fontFamily: 'Roboto', // ✅ Roboto pour les détails
+                              fontWeight: FontWeight.w600,
+                              color: isSelected ? Colors.white : Colors.grey[700],
                             ),
                           ),
-                          SizedBox(height: 4),
+                          const SizedBox(height: 4),
                           Container(
-                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: _getStatusColor(inscription['status']),
-                              borderRadius: BorderRadius.circular(12),
+                              color: isSelected ? Colors.white.withOpacity(0.2) : KipikTheme.rouge.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              inscription['status'],
+                              '${tab['count']}',
                               style: TextStyle(
-                                color: Colors.white,
+                                fontFamily: 'PermanentMarker',
                                 fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les statuts
+                                color: isSelected ? Colors.white : KipikTheme.rouge,
                               ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ),
-                
-                SizedBox(height: 24),
-                
-                // Détails de la demande
-                _buildDetailSection('Informations de contact'),
-                _buildDetailRow('Email', inscription['email']),
-                _buildDetailRow('Téléphone', inscription['phone']),
-                _buildDetailRow('Convention', inscription['conventionName']),
-                _buildDetailRow('Date de demande', DateFormat('dd/MM/yyyy').format(inscription['submissionDate'])),
-                
-                SizedBox(height: 24),
-                
-                if (inscription['portfolio'] != null)
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      // Ouvrir le portfolio
-                    },
-                    icon: Icon(Icons.photo_library),
-                    label: Text(
-                      'Voir le portfolio',
-                      style: TextStyle(
-                        fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les boutons
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.grey[800],
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                
-                SizedBox(height: 24),
-                
-                // Boutons d'action
-                if (inscription['status'] == 'En attente')
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () {
-                            // Accepter la demande
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Demande acceptée'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: Text(
-                            'Accepter',
-                            style: TextStyle(
-                              fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les boutons
-                            ),
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 16),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () {
-                            // Refuser la demande
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Demande refusée'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: Text(
-                            'Refuser',
-                            style: TextStyle(
-                              fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les boutons
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                
-                if (inscription['status'] != 'En attente')
-                  ElevatedButton(
-                    onPressed: () {
-                      // Contacter le participant
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: KipikTheme.rouge,
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: Text(
-                      'Contacter',
-                      style: TextStyle(
-                        fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les boutons
-                      ),
-                    ),
-                  ),
-              ],
+                  );
+                },
+              ),
             ),
-          );
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatsHeader() {
+    final pendingCount = _standRequests.where((r) => r['status'] == RequestStatus.pending).length;
+    final totalRevenue = _standRequests.where((r) => r['status'] == RequestStatus.paid).fold(0.0, (sum, r) => sum + r['standPrice']);
+    final avgProcessingTime = 2.3; // En jours
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.purple.withOpacity(0.8), Colors.blue.withOpacity(0.8)],
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildStatItem(
+              'En Attente',
+              pendingCount.toString(),
+              Icons.pending,
+              pendingCount > 0 ? Colors.orange : Colors.white,
+            ),
+            _buildStatItem(
+              'Revenus Confirmés',
+              '${totalRevenue.toStringAsFixed(0)}€',
+              Icons.euro,
+              Colors.green,
+            ),
+            _buildStatItem(
+              'Temps Moyen',
+              '${avgProcessingTime}j',
+              Icons.timer,
+              Colors.blue,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String label, String value, IconData icon, Color iconColor) {
+    return Column(
+      children: [
+        Icon(icon, color: iconColor, size: 24),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontFamily: 'PermanentMarker',
+            fontSize: 16,
+            color: Colors.white,
+          ),
+        ),
+        Text(
+          label,
+          style: const TextStyle(
+            fontFamily: 'Roboto',
+            fontSize: 10,
+            color: Colors.white70,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRequestsList() {
+    if (_filteredRequests.isEmpty) {
+      return _buildEmptyState();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: ListView.builder(
+        itemCount: _filteredRequests.length,
+        itemBuilder: (context, index) {
+          return _buildRequestCard(_filteredRequests[index]);
         },
       ),
     );
   }
-  
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'En attente':
-        return Colors.orange;
-      case 'Accepté':
-        return Colors.green;
-      case 'Refusé':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
-  
-  Widget _buildDetailSection(String title) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: TextStyle(
-            color: KipikTheme.rouge,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les titres de section
-          ),
-        ),
-        SizedBox(height: 12),
-      ],
-    );
-  }
-  
-  Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: TextStyle(
-                color: Colors.grey[400],
-                fontSize: 14,
-                fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les labels
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontFamily: 'Roboto', // ✅ Roboto pour les valeurs
-              ),
-            ),
+
+  Widget _buildRequestCard(Map<String, dynamic> request) {
+    final status = request['status'] as RequestStatus;
+    final tattooerType = request['tattooerType'] as TattooerType;
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
-    );
-  }
-  
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: const CustomAppBarKipik(
-        title: 'Inscriptions',
-        showBackButton: true,
-        showBurger: true,
-        showNotificationIcon: true,
-      ),
-      drawer: DrawerFactory.of(context),
-      body: Stack(
-        fit: StackFit.expand,
+      child: Column(
         children: [
-          // Arrière-plan
-          Image.asset(
-            'assets/background_charbon.png',
-            fit: BoxFit.cover,
-          ),
-          
-          // Contenu principal
-          SafeArea(
-            child: Column(
+          // En-tête avec statut
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [_getStatusColor(status), _getStatusColor(status).withOpacity(0.8)],
+              ),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+              ),
+            ),
+            child: Row(
               children: [
-                // ✅ Section Titre avec icône
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  child: _buildSectionTitle('Gestion des inscriptions', Icons.people),
-                ),
-
-                // Onglets (Tatoueurs / Vendeurs) - Optimisés
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.8),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: KipikTheme.rouge, width: 1),
-                  ),
-                  margin: const EdgeInsets.symmetric(horizontal: 16),
-                  child: TabBar(
-                    controller: _tabController,
-                    tabs: [
-                      Tab(
-                        child: Text(
-                          'Tatoueurs',
-                          style: TextStyle(
-                            fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les onglets
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                      Tab(
-                        child: Text(
-                          'Vendeurs',
-                          style: TextStyle(
-                            fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les onglets
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                    ],
-                    labelColor: KipikTheme.rouge,
-                    unselectedLabelColor: Colors.grey[400],
-                    indicatorColor: KipikTheme.rouge,
-                    indicatorSize: TabBarIndicatorSize.tab,
-                    indicator: BoxDecoration(
-                      color: KipikTheme.rouge.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
+                // Avatar et infos tatoueur
+                CircleAvatar(
+                  radius: 25,
+                  backgroundColor: Colors.white.withOpacity(0.2),
+                  child: Text(
+                    request['tattooerName'][0].toUpperCase(),
+                    style: const TextStyle(
+                      fontFamily: 'PermanentMarker',
+                      fontSize: 20,
+                      color: Colors.white,
                     ),
-                    onTap: (_) {
-                      setState(() {
-                        // Mise à jour de la liste filtrée
-                      });
-                    },
                   ),
                 ),
-                
-                const SizedBox(height: 16),
-                
-                // ✅ Filtres optimisés
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  margin: EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.7),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: KipikTheme.rouge.withOpacity(0.5)),
-                  ),
+                const SizedBox(width: 16),
+                Expanded(
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          Icon(
-                            Icons.filter_list,
-                            color: KipikTheme.rouge,
-                            size: 20,
+                          Text(
+                            request['tattooerName'],
+                            style: const TextStyle(
+                              fontFamily: 'PermanentMarker',
+                              fontSize: 16,
+                              color: Colors.white,
+                            ),
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            'Filtres',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontFamily: 'PermanentMarker',
-                              fontSize: 14,
-                            ),
-                          ),
+                          _buildTattooerTypeBadge(tattooerType),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              value: _selectedConvention,
-                              decoration: _inputDecoration('Convention'),
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontFamily: 'Roboto', // ✅ Roboto pour le contenu
-                                fontSize: 14,
-                              ),
-                              dropdownColor: Colors.grey[800],
-                              items: _conventions.map((convention) {
-                                return DropdownMenuItem<String>(
-                                  value: convention,
-                                  child: Text(
-                                    convention,
-                                    style: TextStyle(
-                                      fontFamily: 'Roboto', // ✅ Roboto pour les options
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                              onChanged: (value) {
-                                if (value != null) {
-                                  setState(() {
-                                    _selectedConvention = value;
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-                          SizedBox(width: 16),
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              value: _status,
-                              decoration: _inputDecoration('Statut'),
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontFamily: 'Roboto', // ✅ Roboto pour le contenu
-                                fontSize: 14,
-                              ),
-                              dropdownColor: Colors.grey[800],
-                              items: _statuses.map((status) {
-                                return DropdownMenuItem<String>(
-                                  value: status,
-                                  child: Text(
-                                    status,
-                                    style: TextStyle(
-                                      fontFamily: 'Roboto', // ✅ Roboto pour les options
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                              onChanged: (value) {
-                                if (value != null) {
-                                  setState(() {
-                                    _status = value;
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-                        ],
+                      const SizedBox(height: 4),
+                      Text(
+                        'Demande reçue le ${request['requestDate']}',
+                        style: const TextStyle(
+                          fontFamily: 'Roboto',
+                          fontSize: 12,
+                          color: Colors.white70,
+                        ),
                       ),
+                      if (request['rating'] > 0) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(Icons.star, color: Colors.amber[300], size: 16),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${request['rating']}/5',
+                              style: const TextStyle(
+                                fontFamily: 'Roboto',
+                                fontSize: 12,
+                                color: Colors.white70,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${request['completedConventions']} conventions',
+                              style: const TextStyle(
+                                fontFamily: 'Roboto',
+                                fontSize: 12,
+                                color: Colors.white70,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
+                Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _getStatusLabel(status),
+                        style: const TextStyle(
+                          fontFamily: 'Roboto',
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${request['standPrice']}€',
+                      style: const TextStyle(
+                        fontFamily: 'PermanentMarker',
+                        fontSize: 16,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          
+          // Contenu principal
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                // Détails du stand demandé
+                _buildStandDetails(request),
                 
                 const SizedBox(height: 16),
                 
-                // Liste des inscriptions
-                Expanded(
-                  child: _isLoading
-                      ? Center(child: CircularProgressIndicator(color: KipikTheme.rouge))
-                      : _filteredInscriptions.isEmpty
-                          ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.inbox,
-                                    size: 64,
-                                    color: Colors.grey[600],
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    'Aucune inscription trouvée',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les messages
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Modifiez vos filtres pour voir plus de résultats',
-                                    style: TextStyle(
-                                      color: Colors.grey[400],
-                                      fontFamily: 'Roboto', // ✅ Roboto pour les sous-textes
-                                      fontSize: 14,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                              ),
-                            )
-                          : ListView.builder(
-                              padding: EdgeInsets.all(16),
-                              itemCount: _filteredInscriptions.length,
-                              itemBuilder: (context, index) {
-                                final inscription = _filteredInscriptions[index];
-                                return _buildInscriptionCard(inscription);
-                              },
-                            ),
-                ),
+                // Spécialités et portfolio
+                _buildTattooerInfo(request),
+                
+                const SizedBox(height: 16),
+                
+                // Message du tatoueur
+                if (request['message'] != null) ...[
+                  _buildTattooerMessage(request),
+                  const SizedBox(height: 16),
+                ],
+                
+                // Actions selon le statut
+                _buildRequestActions(request, status),
               ],
             ),
           ),
@@ -708,121 +579,491 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
       ),
     );
   }
-  
-  Widget _buildInscriptionCard(Map<String, dynamic> inscription) {
-    final statusColor = _getStatusColor(inscription['status']);
-    
-    return Card(
-      margin: EdgeInsets.only(bottom: 12),
-      color: Colors.grey[900],
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: KipikTheme.rouge.withOpacity(0.3), // ✅ Bordure Kipik subtile
-          width: 1,
-        ),
+
+  Widget _buildTattooerTypeBadge(TattooerType type) {
+    Color color;
+    String label;
+    IconData icon;
+
+    switch (type) {
+      case TattooerType.verified:
+        color = Colors.green;
+        label = 'VÉRIFIÉ';
+        icon = Icons.verified;
+        break;
+      case TattooerType.premium:
+        color = Colors.purple;
+        label = 'PREMIUM';
+        icon = Icons.star;
+        break;
+      case TattooerType.standard:
+        color = Colors.blue;
+        label = 'STANDARD';
+        icon = Icons.person;
+        break;
+      case TattooerType.new_user:
+        color = Colors.orange;
+        label = 'NOUVEAU';
+        icon = Icons.new_label;
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.5)),
       ),
-      elevation: 4, // ✅ Ombre pour plus de profondeur
-      child: InkWell(
-        onTap: () => _showInscriptionDetails(inscription),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 12),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 8,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStandDetails(Map<String, dynamic> request) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
         borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: KipikTheme.rouge,
-                    child: Text(
-                      inscription['artistName'][0].toUpperCase(),
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les initiales
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          inscription['artistName'],
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les noms
-                          ),
-                        ),
-                        if (inscription['studioName'] != 'N/A')
-                          Text(
-                            inscription['studioName'],
-                            style: TextStyle(
-                              color: Colors.grey[400],
-                              fontSize: 14,
-                              fontFamily: 'Roboto', // ✅ Roboto pour les détails
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: statusColor, width: 1),
-                    ),
-                    child: Text(
-                      inscription['status'],
-                      style: TextStyle(
-                        color: statusColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'PermanentMarker', // ✅ PermanentMarker pour les statuts
-                      ),
-                    ),
-                  ),
-                ],
+              Icon(Icons.store, color: KipikTheme.rouge, size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                'Demande de Stand',
+                style: TextStyle(
+                  fontFamily: 'Roboto',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-              SizedBox(height: 12),
-              Container(
-                padding: EdgeInsets.all(8),
+            ],
+          ),
+          const SizedBox(height: 12),
+          
+          Row(
+            children: [
+              Expanded(
+                child: _buildDetailItem('Taille', request['standSize']),
+              ),
+              Expanded(
+                child: _buildDetailItem('Emplacement', request['preferredLocation'] ?? 'Flexible'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _buildDetailItem('Prix demandé', '${request['standPrice']}€'),
+              ),
+              Expanded(
+                child: _buildDetailItem('Paiement', request['paymentType']),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailItem(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontFamily: 'Roboto',
+            fontSize: 11,
+            color: Colors.grey,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: const TextStyle(
+            fontFamily: 'Roboto',
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTattooerInfo(Map<String, dynamic> request) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue[50],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.palette, color: Colors.blue[600], size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                'Profil Artistique',
+                style: TextStyle(
+                  fontFamily: 'Roboto',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          
+          // Spécialités
+          if (request['specialties'] != null) ...[
+            const Text(
+              'Spécialités:',
+              style: TextStyle(
+                fontFamily: 'Roboto',
+                fontSize: 12,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              children: (request['specialties'] as List).map((specialty) => 
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.blue[100],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    specialty,
+                    style: TextStyle(
+                      fontFamily: 'Roboto',
+                      fontSize: 10,
+                      color: Colors.blue[700],
+                    ),
+                  ),
+                ),
+              ).toList(),
+            ),
+            const SizedBox(height: 8),
+          ],
+          
+          // Portfolio et réseaux
+          Row(
+            children: [
+              if (request['portfolioImages'] > 0) ...[
+                Icon(Icons.photo_library, color: Colors.blue[600], size: 16),
+                const SizedBox(width: 4),
+                Text(
+                  '${request['portfolioImages']} photos',
+                  style: TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 11,
+                    color: Colors.blue[600],
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+              if (request['instagramFollowers'] > 0) ...[
+                Icon(Icons.camera_alt, color: Colors.blue[600], size: 16),
+                const SizedBox(width: 4),
+                Text(
+                  '${_formatNumber(request['instagramFollowers'])} followers',
+                  style: TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 11,
+                    color: Colors.blue[600],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTattooerMessage(Map<String, dynamic> request) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.amber[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.amber[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.message, color: Colors.amber[600], size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                'Message du tatoueur',
+                style: TextStyle(
+                  fontFamily: 'Roboto',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            request['message'],
+            style: const TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 13,
+              color: Colors.black87,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRequestActions(Map<String, dynamic> request, RequestStatus status) {
+    switch (status) {
+      case RequestStatus.pending:
+        return Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _viewTattooerProfile(request),
+                    icon: const Icon(Icons.person, size: 16),
+                    label: const Text('Profil', style: TextStyle(fontFamily: 'Roboto', fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.blue,
+                      side: const BorderSide(color: Colors.blue),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _rejectRequest(request),
+                    icon: const Icon(Icons.close, size: 16),
+                    label: const Text('Refuser', style: TextStyle(fontFamily: 'Roboto', fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: const BorderSide(color: Colors.red),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _acceptRequest(request),
+                    icon: const Icon(Icons.check, size: 16),
+                    label: const Text('Accepter', style: TextStyle(fontFamily: 'Roboto', fontSize: 12)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _startNegotiation(request),
+                icon: const Icon(Icons.forum, size: 16),
+                label: const Text('Négocier', style: TextStyle(fontFamily: 'Roboto', fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.orange,
+                  side: const BorderSide(color: Colors.orange),
+                ),
+              ),
+            ),
+          ],
+        );
+        
+      case RequestStatus.negotiating:
+        return Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => _viewNegotiation(request),
+                icon: const Icon(Icons.chat, size: 16),
+                label: const Text('Chat', style: TextStyle(fontFamily: 'Roboto', fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.orange,
+                  side: const BorderSide(color: Colors.orange),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => _finalizeNegotiation(request),
+                icon: const Icon(Icons.handshake, size: 16),
+                label: const Text('Finaliser', style: TextStyle(fontFamily: 'Roboto', fontSize: 12)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: KipikTheme.rouge,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        );
+        
+      case RequestStatus.accepted:
+        return Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => _sendContract(request),
+                icon: const Icon(Icons.description, size: 16),
+                label: const Text('Contrat', style: TextStyle(fontFamily: 'Roboto', fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.blue,
+                  side: const BorderSide(color: Colors.blue),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.grey[800],
+                  color: Colors.orange[100],
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Row(
-                  children: [
-                    Icon(Icons.event, size: 16, color: KipikTheme.rouge),
-                    SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        inscription['conventionName'],
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontFamily: 'Roboto', // ✅ Roboto pour les détails
-                        ),
-                      ),
-                    ),
-                    Icon(Icons.calendar_today, size: 16, color: Colors.grey[400]),
-                    SizedBox(width: 6),
-                    Text(
-                      DateFormat('dd/MM/yyyy').format(inscription['submissionDate']),
-                      style: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 12,
-                        fontFamily: 'Roboto', // ✅ Roboto pour les dates
-                      ),
-                    ),
-                  ],
+                child: const Text(
+                  'En attente de paiement',
+                  style: TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.orange,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ],
+        );
+        
+      case RequestStatus.paid:
+        return Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => _assignStand(request),
+                icon: const Icon(Icons.place, size: 16),
+                label: const Text('Assigner', style: TextStyle(fontFamily: 'Roboto', fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.purple,
+                  side: const BorderSide(color: Colors.purple),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green[100],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  '✓ Payé - Confirmé',
+                  style: TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.green,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ],
+        );
+        
+      default:
+        return Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => _viewRequestDetails(request),
+                icon: const Icon(Icons.info, size: 16),
+                label: const Text('Détails', style: TextStyle(fontFamily: 'Roboto', fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.grey,
+                  side: const BorderSide(color: Colors.grey),
+                ),
+              ),
+            ),
+          ],
+        );
+    }
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Container(
+          padding: const EdgeInsets.all(32),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.95),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.inbox,
+                size: 64,
+                color: Colors.grey[400],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Aucune demande trouvée',
+                style: TextStyle(
+                  fontFamily: 'PermanentMarker',
+                  fontSize: 18,
+                  color: Colors.grey[600],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Les demandes de stands apparaîtront ici',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Roboto',
+                  fontSize: 14,
+                  color: Colors.grey[500],
                 ),
               ),
             ],
@@ -830,5 +1071,300 @@ class _OrganisateurInscriptionsPageState extends State<OrganisateurInscriptionsP
         ),
       ),
     );
+  }
+
+  // Helper methods
+  Color _getStatusColor(RequestStatus status) {
+    switch (status) {
+      case RequestStatus.pending:
+        return Colors.orange;
+      case RequestStatus.negotiating:
+        return Colors.blue;
+      case RequestStatus.accepted:
+        return Colors.green;
+      case RequestStatus.rejected:
+        return Colors.red;
+      case RequestStatus.paid:
+        return Colors.purple;
+      case RequestStatus.cancelled:
+        return Colors.grey;
+    }
+  }
+
+  String _getStatusLabel(RequestStatus status) {
+    switch (status) {
+      case RequestStatus.pending:
+        return 'EN ATTENTE';
+      case RequestStatus.negotiating:
+        return 'NÉGOCIATION';
+      case RequestStatus.accepted:
+        return 'ACCEPTÉE';
+      case RequestStatus.rejected:
+        return 'REFUSÉE';
+      case RequestStatus.paid:
+        return 'PAYÉE';
+      case RequestStatus.cancelled:
+        return 'ANNULÉE';
+    }
+  }
+
+  String _formatNumber(int number) {
+    if (number >= 1000000) {
+      return '${(number / 1000000).toStringAsFixed(1)}M';
+    } else if (number >= 1000) {
+      return '${(number / 1000).toStringAsFixed(1)}k';
+    }
+    return number.toString();
+  }
+
+  void _filterRequests() {
+    setState(() {
+      _filteredRequests = _standRequests.where((request) {
+        // Filtre par recherche
+        if (_searchQuery.isNotEmpty) {
+          final query = _searchQuery.toLowerCase();
+          if (!request['tattooerName'].toLowerCase().contains(query) &&
+              !(request['specialties'] as List).any((s) => s.toLowerCase().contains(query))) {
+            return false;
+          }
+        }
+        
+        // Filtre par statut
+        if (_statusFilter != null) {
+          if (request['status'] != _statusFilter) {
+            return false;
+          }
+        }
+        
+        return true;
+      }).toList();
+    });
+  }
+
+  // Actions
+  void _showAdvancedFilters() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Filtres avancés - À implémenter'),
+        backgroundColor: Colors.blue,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _exportRequests() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Export des demandes - À implémenter'),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _showBulkActions() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Actions groupées - À implémenter'),
+        backgroundColor: Colors.orange,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _viewTattooerProfile(Map<String, dynamic> request) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Profil ${request['tattooerName']} - À implémenter'),
+        backgroundColor: Colors.blue,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _acceptRequest(Map<String, dynamic> request) {
+    setState(() {
+      request['status'] = RequestStatus.accepted;
+    });
+    _filterRequests();
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Demande de ${request['tattooerName']} acceptée'),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _rejectRequest(Map<String, dynamic> request) {
+    setState(() {
+      request['status'] = RequestStatus.rejected;
+    });
+    _filterRequests();
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Demande de ${request['tattooerName']} refusée'),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _startNegotiation(Map<String, dynamic> request) {
+    setState(() {
+      request['status'] = RequestStatus.negotiating;
+    });
+    _filterRequests();
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Négociation avec ${request['tattooerName']} démarrée'),
+        backgroundColor: Colors.orange,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _viewNegotiation(Map<String, dynamic> request) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Chat avec ${request['tattooerName']} - À implémenter'),
+        backgroundColor: Colors.orange,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _finalizeNegotiation(Map<String, dynamic> request) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Finalisation négociation ${request['tattooerName']} - À implémenter'),
+        backgroundColor: KipikTheme.rouge,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _sendContract(Map<String, dynamic> request) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Envoi contrat ${request['tattooerName']} - À implémenter'),
+        backgroundColor: Colors.blue,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _assignStand(Map<String, dynamic> request) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Attribution stand ${request['tattooerName']} - À implémenter'),
+        backgroundColor: Colors.purple,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _viewRequestDetails(Map<String, dynamic> request) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Détails demande ${request['tattooerName']} - À implémenter'),
+        backgroundColor: Colors.grey,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  // Données de test
+  List<Map<String, dynamic>> _generateStandRequestsData() {
+    return [
+      {
+        'id': '1',
+        'tattooerName': 'Mike Tattoo',
+        'tattooerType': TattooerType.verified,
+        'status': RequestStatus.pending,
+        'requestDate': '22/12/2024',
+        'standSize': '3x3m',
+        'standPrice': 450.0,
+        'preferredLocation': 'Entrée principale',
+        'paymentType': 'Paiement fractionné 3x',
+        'rating': 4.8,
+        'completedConventions': 12,
+        'specialties': ['Réalisme', 'Portraits'],
+        'portfolioImages': 45,
+        'instagramFollowers': 8500,
+        'message': 'Bonjour, je souhaiterais participer à votre convention. Je me spécialise dans le réalisme et les portraits. Merci !',
+      },
+      {
+        'id': '2',
+        'tattooerName': 'Sarah Ink',
+        'tattooerType': TattooerType.premium,
+        'status': RequestStatus.negotiating,
+        'requestDate': '21/12/2024',
+        'standSize': '2x3m',
+        'standPrice': 320.0,
+        'preferredLocation': null,
+        'paymentType': 'Paiement comptant',
+        'rating': 4.6,
+        'completedConventions': 8,
+        'specialties': ['Japonais', 'Traditionnel'],
+        'portfolioImages': 67,
+        'instagramFollowers': 12000,
+        'message': null,
+      },
+      {
+        'id': '3',
+        'tattooerName': 'Alex Neo',
+        'tattooerType': TattooerType.standard,
+        'status': RequestStatus.accepted,
+        'requestDate': '20/12/2024',
+        'standSize': '3x4m',
+        'standPrice': 520.0,
+        'preferredLocation': 'Zone centrale',
+        'paymentType': 'Paiement fractionné 2x',
+        'rating': 4.3,
+        'completedConventions': 5,
+        'specialties': ['Géométrique', 'Blackwork'],
+        'portfolioImages': 32,
+        'instagramFollowers': 4200,
+        'message': 'Première participation à une convention, très motivé !',
+      },
+      {
+        'id': '4',
+        'tattooerName': 'Emma Style',
+        'tattooerType': TattooerType.new_user,
+        'status': RequestStatus.paid,
+        'requestDate': '19/12/2024',
+        'standSize': '2x2m',
+        'standPrice': 280.0,
+        'preferredLocation': null,
+        'paymentType': 'Paiement comptant',
+        'rating': 0,
+        'completedConventions': 0,
+        'specialties': ['Minimaliste', 'Fine Line'],
+        'portfolioImages': 18,
+        'instagramFollowers': 1800,
+        'message': 'Nouvelle sur Kipik, j\'aimerais commencer par une petite convention pour faire mes preuves.',
+      },
+      {
+        'id': '5',
+        'tattooerName': 'David Iron',
+        'tattooerType': TattooerType.verified,
+        'status': RequestStatus.rejected,
+        'requestDate': '18/12/2024',
+        'standSize': '4x4m',
+        'standPrice': 680.0,
+        'preferredLocation': 'Angle de salle',
+        'paymentType': 'Paiement fractionné 4x',
+        'rating': 4.9,
+        'completedConventions': 25,
+        'specialties': ['Old School', 'Pin-up'],
+        'portfolioImages': 89,
+        'instagramFollowers': 15600,
+        'message': null,
+      },
+    ];
   }
 }

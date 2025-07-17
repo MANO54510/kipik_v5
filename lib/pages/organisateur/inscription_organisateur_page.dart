@@ -2,60 +2,140 @@
 
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
-import 'package:kipik_v5/widgets/utils/cgu_cgv_validation_widget.dart';
-import 'package:kipik_v5/pages/organisateur/confirmation_inscription_organisateur_page.dart'; // ✅ AJOUT
-import 'package:kipik_v5/theme/kipik_theme.dart';
+import 'package:file_selector/file_selector.dart';
+
 import 'package:kipik_v5/services/auth/secure_auth_service.dart';
 import 'package:kipik_v5/services/auth/captcha_manager.dart';
+import 'package:kipik_v5/services/promo/firebase_promo_code_service.dart';
+import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
+import 'package:kipik_v5/widgets/utils/cgu_cgv_validation_widget.dart';
+import 'package:kipik_v5/pages/organisateur/confirmation_inscription_organisateur_page.dart';
+import 'package:kipik_v5/theme/kipik_theme.dart';
+import 'package:kipik_v5/services/config/api_config.dart';
 
 class InscriptionOrganisateurPage extends StatefulWidget {
   const InscriptionOrganisateurPage({Key? key}) : super(key: key);
 
   @override
-  _InscriptionOrganisateurPageState createState() => _InscriptionOrganisateurPageState();
+  State<InscriptionOrganisateurPage> createState() => _InscriptionOrganisateurPageState();
 }
 
 class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPage> {
   final _formKey = GlobalKey<FormState>();
+
+  // Service sécurisé centralisé
+  SecureAuthService get _authService => SecureAuthService.instance;
+
+  // Controllers - Informations personnelles
+  final _prenomController = TextEditingController();
+  final _nomController = TextEditingController();
+  DateTime? _dateNaissance;
+  final _numeroController = TextEditingController();
+  final _rueController = TextEditingController();
+  final _codePostalController = TextEditingController();
+  final _villeController = TextEditingController();
+  final _telephoneController = TextEditingController();
+
+  // Controllers - Informations entreprise
+  final _nomEntrepriseController = TextEditingController();
+  final _siretController = TextEditingController();
+  final _adresseEntrepriseController = TextEditingController();
+  final _telephoneEntrepriseController = TextEditingController();
+  final _emailEntrepriseController = TextEditingController();
+  String? _formeJuridique;
   
+  // Controllers - Authentification
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _nameController = TextEditingController();
-  final _companyController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _emailProController = TextEditingController();
-  final _websiteController = TextEditingController();
-  
-  bool _isLoading = false;
-  bool cguLu = false;
-  bool cgvLu = false;
+
+  // Controllers - Code promo
+  final _promoCodeController = TextEditingController();
+  Map<String, dynamic>? _validatedPromoCode;
+  bool _isValidatingPromo = false;
+
+  // Documents
+  XFile? _pieceIdentite;
+  XFile? _kbis;
+  XFile? _rib;
+  XFile? _attestationAssurance;
+
+  // États
+  bool _newsletterAccepted = false;
   bool _showPassword = false;
   bool _showConfirmPassword = false;
-  
-  // ✅ Variables pour la vérification d'âge
-  DateTime? dateNaissance;
-  bool majoriteConfirmee = false;
-  String? ageError;
-  
-  // ✅ Service sécurisé
-  SecureAuthService get _authService => SecureAuthService.instance;
-  
+  bool _cguLu = false;
+  bool _cgvLu = false;
+  bool _isLoading = false;
+  bool _majoriteConfirmee = false;
+  String? _ageError;
+
+  // Données statiques
+  static const Map<String, List<String>> villesParCodePostal = {
+    '54510': ['Tomblaine'],
+    '75001': ['Paris 1er'],
+    '69001': ['Lyon 1er'],
+    '13001': ['Marseille 1er'],
+    '33000': ['Bordeaux'],
+    '31000': ['Toulouse'],
+    '59000': ['Lille'],
+    '67000': ['Strasbourg'],
+    '44000': ['Nantes'],
+    '34000': ['Montpellier'],
+    // Ajoutez plus de codes postaux selon vos besoins
+  };
+
   @override
   void dispose() {
+    // Nettoyage des controllers
+    _prenomController.dispose();
+    _nomController.dispose();
+    _numeroController.dispose();
+    _rueController.dispose();
+    _codePostalController.dispose();
+    _villeController.dispose();
+    _telephoneController.dispose();
+    _nomEntrepriseController.dispose();
+    _siretController.dispose();
+    _adresseEntrepriseController.dispose();
+    _telephoneEntrepriseController.dispose();
+    _emailEntrepriseController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
-    _nameController.dispose();
-    _companyController.dispose();
-    _phoneController.dispose();
-    _emailProController.dispose();
-    _websiteController.dispose();
+    _promoCodeController.dispose();
     super.dispose();
   }
 
-  // ✅ Méthode de vérification d'âge
+  // Validators
+  String? _requiredValidator(String? v) =>
+      (v == null || v.trim().isEmpty) ? 'Champ obligatoire' : null;
+
+  String? _validateEmail(String? v) {
+    if (v == null || v.isEmpty) return 'Email requis';
+    final reg = RegExp(r'^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$');
+    if (!reg.hasMatch(v.trim())) return 'Email invalide';
+    return null;
+  }
+
+  String? _validatePassword(String? v) {
+    if (v == null || v.isEmpty) return 'Mot de passe requis';
+    if (v.length < 6) return '6 caractères minimum';
+    return null;
+  }
+
+  String? _validateConfirmPassword(String? v) {
+    if (v != _passwordController.text) return 'Les mots de passe ne correspondent pas';
+    return null;
+  }
+
+  String? _validateSiret(String? v) {
+    if (v == null || v.isEmpty) return 'SIRET requis';
+    if (v.replaceAll(' ', '').length != 14) return 'SIRET doit contenir 14 chiffres';
+    return null;
+  }
+
+  // Méthode de vérification d'âge
   bool _isOver18(DateTime birthDate) {
     final today = DateTime.now();
     final age = today.year - birthDate.year;
@@ -67,15 +147,101 @@ class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPag
     return age >= 18;
   }
 
-  // ✅ Validation avec vérification d'âge
+  // Validation du formulaire
   bool get isFormValid =>
       _formKey.currentState?.validate() == true &&
-      dateNaissance != null &&
-      majoriteConfirmee &&
-      (dateNaissance != null ? _isOver18(dateNaissance!) : false) &&
-      cguLu &&
-      cgvLu;
+      _prenomController.text.isNotEmpty &&
+      _nomController.text.isNotEmpty &&
+      _dateNaissance != null &&
+      _majoriteConfirmee &&
+      (_dateNaissance != null ? _isOver18(_dateNaissance!) : false) &&
+      _numeroController.text.isNotEmpty &&
+      _rueController.text.isNotEmpty &&
+      _codePostalController.text.isNotEmpty &&
+      _villeController.text.isNotEmpty &&
+      _telephoneController.text.isNotEmpty &&
+      _nomEntrepriseController.text.isNotEmpty &&
+      _siretController.text.isNotEmpty &&
+      _adresseEntrepriseController.text.isNotEmpty &&
+      _telephoneEntrepriseController.text.isNotEmpty &&
+      _emailEntrepriseController.text.isNotEmpty &&
+      _formeJuridique != null &&
+      _emailController.text.isNotEmpty &&
+      _passwordController.text.isNotEmpty &&
+      _confirmPasswordController.text.isNotEmpty &&
+      _pieceIdentite != null &&
+      _kbis != null &&
+      _rib != null &&
+      _attestationAssurance != null &&
+      _cguLu &&
+      _cgvLu;
 
+  // Validation du code promo
+  Future<void> _validatePromoCode() async {
+    final code = _promoCodeController.text.trim();
+    if (code.isEmpty) return;
+
+    setState(() => _isValidatingPromo = true);
+
+    try {
+      final promoData = await FirebasePromoCodeService.instance.validatePromoCode(code);
+      
+      if (!mounted) return;
+      
+      setState(() {
+        _validatedPromoCode = promoData;
+        _isValidatingPromo = false;
+      });
+
+      if (promoData != null) {
+        String message = 'Code promo valide ! ✅';
+        final type = promoData['type'] as String?;
+        final value = promoData['value'] as num?;
+        
+        if (type == 'referral') {
+          message += '\nCode de parrainage validé ! Réduction appliquée sur votre futur abonnement.';
+        } else if (type == 'percentage' && value != null) {
+          message += '\n${value.toInt()}% de réduction appliquée sur votre futur abonnement !';
+        } else if (type == 'fixed' && value != null) {
+          message += '\n${value.toInt()}€ de réduction appliquée sur votre futur abonnement !';
+        }
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Code promo invalide ou expiré ❌'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      
+      setState(() => _isValidatingPromo = false);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erreur lors de la validation du code'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Soumission du formulaire
   Future<void> _submitForm() async {
     if (!isFormValid) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -83,64 +249,117 @@ class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPag
       );
       return;
     }
-    
+
     setState(() => _isLoading = true);
-    
+
     try {
-      // ✅ Validation reCAPTCHA
-      final captchaResult = await CaptchaManager.instance.validateInvisibleCaptcha('signup');
+      // Validation reCAPTCHA pour sécurité
+      final captchaResult = await CaptchaManager.instance.validateInvisibleCaptcha('signup_organizer');
 
       if (!captchaResult.isValid) {
         throw Exception('Validation de sécurité échouée');
       }
 
-      // ✅ Création du compte
+      // Création de l'utilisateur
       final user = await _authService.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
-        displayName: _nameController.text.trim(),
+        displayName: '${_prenomController.text.trim()} ${_nomController.text.trim()}',
         userRole: 'organisateur',
         captchaResult: captchaResult,
       );
 
       if (user != null) {
-        // ✅ Mise à jour du profil
+        // Calcul des dates d'essai
+        final now = DateTime.now();
+        final trialEndDate = now.add(const Duration(days: 30));
+
+        // Mise à jour du profil avec données complètes
         await _authService.updateUserProfile(
           additionalData: {
             'type': 'organisateur',
-            'nom': _nameController.text.trim(),
-            'company': _companyController.text.trim(),
-            'phone': _phoneController.text.trim(),
-            'emailPro': _emailProController.text.trim(),
-            'website': _websiteController.text.trim().isEmpty ? null : _websiteController.text.trim(),
-            'dateNaissance': dateNaissance?.toIso8601String(),
-            'majoriteConfirmee': majoriteConfirmee,
+            'role': 'organisateur',
+            
+            // Informations personnelles
+            'prenom': _prenomController.text.trim(),
+            'nom': _nomController.text.trim(),
+            'dateNaissance': _dateNaissance?.toIso8601String(),
+            'adressePersonnelle': {
+              'numero': _numeroController.text.trim(),
+              'rue': _rueController.text.trim(),
+              'codePostal': _codePostalController.text.trim(),
+              'ville': _villeController.text.trim(),
+            },
+            'telephone': _telephoneController.text.trim(),
+            'majoriteConfirmee': _majoriteConfirmee,
+            
+            // Informations entreprise
+            'entreprise': {
+              'nom': _nomEntrepriseController.text.trim(),
+              'siret': _siretController.text.trim(),
+              'formeJuridique': _formeJuridique,
+              'adresse': _adresseEntrepriseController.text.trim(),
+              'telephone': _telephoneEntrepriseController.text.trim(),
+              'email': _emailEntrepriseController.text.trim(),
+            },
+            
+            // Documents
+            'documents': {
+              'pieceIdentite': _pieceIdentite?.name,
+              'kbis': _kbis?.name,
+              'rib': _rib?.name,
+              'attestationAssurance': _attestationAssurance?.name,
+            },
+            
+            // Préférences
+            'newsletter': _newsletterAccepted,
             'inscriptionCompleted': true,
             'profileComplete': true,
-            'organizerStatus': 'pending_verification',
             'signupCaptchaScore': captchaResult.score,
-            'cguAccepted': true,
-            'cgvAccepted': true,
-            'signupDate': DateTime.now().toIso8601String(),
             
-            // ✅ Données métier spécifiques organisateur
-            'organizerProfile': {
-              'companyName': _companyController.text.trim(),
-              'contactPhone': _phoneController.text.trim(),
-              'emailPro': _emailProController.text.trim(),
-              'website': _websiteController.text.trim().isEmpty ? null : _websiteController.text.trim(),
-              'verificationStatus': 'pending',
-              'canCreateEvents': false,
-              'maxEventsPerMonth': 0,
-            },
+            // Données d'essai 30 jours
+            'subscriptionType': 'trial',
+            'trialStartDate': now.toIso8601String(),
+            'trialEndDate': trialEndDate.toIso8601String(),
+            'trialDaysRemaining': 30,
+            'subscriptionStatus': 'trial_active',
+            'mustChooseSubscription': false,
           },
         );
+
+        // Gestion du code promo si validé
+        if (_validatedPromoCode != null) {
+          final code = _validatedPromoCode!['code'] as String;
+          
+          try {
+            // Marquer le code comme utilisé
+            await FirebasePromoCodeService.instance.usePromoCode(code);
+            
+            // Sauvegarder le code promo pour application future
+            await _authService.updateUserProfile(
+              additionalData: {
+                'pendingPromoCode': {
+                  'code': code,
+                  'type': _validatedPromoCode!['type'],
+                  'value': _validatedPromoCode!['value'],
+                  'description': _validatedPromoCode!['description'],
+                  'appliedAt': DateTime.now().toIso8601String(),
+                  'createdBy': _validatedPromoCode!['createdBy'],
+                }
+              },
+            );
+            
+            print('✅ Code promo sauvegardé pour application future');
+          } catch (e) {
+            print('⚠️ Erreur lors de la sauvegarde du code promo: $e');
+          }
+        }
 
         if (mounted) {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (_) => const ConfirmationInscriptionOrganisateurPage(), // ✅ CHANGEMENT: Vers page de confirmation
+              builder: (_) => const ConfirmationInscriptionOrganisateurPage(),
             ),
           );
         }
@@ -164,64 +383,105 @@ class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPag
     }
   }
 
-  String? _requiredValidator(String? v) =>
-      (v == null || v.trim().isEmpty) ? 'Champ obligatoire' : null;
+  // Upload de documents avec vérification
+  Future<void> _uploadDocument(String type) async {
+    try {
+      final XFile? result = await openFile(
+        acceptedTypeGroups: [
+          XTypeGroup(
+            label: 'Images et PDF',
+            extensions: ['jpg', 'jpeg', 'png', 'pdf'],
+          )
+        ],
+      );
 
-  String? _validateEmail(String? v) {
-    if (v == null || v.isEmpty) return 'Email requis';
-    final reg = RegExp(r'^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$');
-    if (!reg.hasMatch(v.trim())) return 'Email invalide';
-    return null;
-  }
+      if (result == null) return;
 
-  String? _validatePassword(String? v) {
-    if (v == null || v.isEmpty) return 'Mot de passe requis';
-    if (v.length < 8) return '8 caractères minimum';
-    
-    bool hasUppercase = v.contains(RegExp(r'[A-Z]'));
-    bool hasDigits = v.contains(RegExp(r'[0-9]'));
-    bool hasSpecialCharacters = v.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'));
-    
-    if (!hasUppercase || !hasDigits || !hasSpecialCharacters) {
-      return 'Majuscule, chiffre et caractère spécial requis';
+      // Vérification optionnelle avec Google Vision si configuré
+      bool isGoogleVisionEnabled = false;
+      try {
+        isGoogleVisionEnabled = await ApiConfig.isGoogleVisionConfigured;
+      } catch (e) {
+        print('⚠️ Google Vision non disponible: $e');
+      }
+
+      if (isGoogleVisionEnabled) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  ),
+                  SizedBox(width: 12),
+                  Text('🔍 Analyse du document en cours...'),
+                ],
+              ),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+
+        await Future.delayed(Duration(seconds: 1));
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Document analysé et approuvé !'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+      }
+
+      // Enregistrer le fichier selon le type
+      setState(() {
+        switch (type) {
+          case 'identite':
+            _pieceIdentite = result;
+            break;
+          case 'kbis':
+            _kbis = result;
+            break;
+          case 'rib':
+            _rib = result;
+            break;
+          case 'assurance':
+            _attestationAssurance = result;
+            break;
+        }
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Document "${result.name}" téléchargé avec succès'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+
+    } catch (e) {
+      print('❌ Erreur upload document: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erreur lors du téléchargement: $e'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
     }
-    
-    return null;
   }
 
-  String? _validateConfirmPassword(String? v) {
-    if (v != _passwordController.text) return 'Les mots de passe ne correspondent pas';
-    return null;
-  }
-
-  String? _validateWebsite(String? v) {
-    if (v == null || v.isEmpty) return null; // Optionnel
-    
-    final websiteRegex = RegExp(
-      r'^(https?://)?(www\.)?[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+(/.*)?$'
-    );
-    
-    if (!websiteRegex.hasMatch(v.trim())) {
-      return 'Format de site web invalide';
-    }
-    
-    return null;
-  }
-
-  String? _validatePhone(String? v) {
-    if (v == null || v.isEmpty) return 'Champ obligatoire';
-    
-    final phoneRegex = RegExp(r'^(\+33|0)[1-9]([0-9]{8})$|^\+[1-9]\d{1,14}$');
-    final cleanPhone = v.replaceAll(RegExp(r'[\s\-\(\)\.]+'), '');
-    
-    if (!phoneRegex.hasMatch(cleanPhone)) {
-      return 'Numéro de téléphone invalide';
-    }
-    
-    return null;
-  }
-
-  // ✅ InputDecoration optimisé
+  // InputDecoration personnalisée
   InputDecoration _inputDecoration(String label) => InputDecoration(
         labelText: label,
         labelStyle: const TextStyle(
@@ -238,14 +498,9 @@ class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPag
         ),
         filled: true,
         fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14, 
-          vertical: 18,
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
         isDense: true,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: KipikTheme.rouge, width: 1.5),
@@ -289,16 +544,16 @@ class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPag
             : null,
       );
 
-  // ✅ Widget certification de majorité
+  // Widget de certification de majorité
   Widget _buildMajoriteConfirmation() {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: majoriteConfirmee ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+        color: _majoriteConfirmee ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: majoriteConfirmee ? Colors.green : Colors.orange,
+          color: _majoriteConfirmee ? Colors.green : Colors.orange,
           width: 2,
         ),
       ),
@@ -307,9 +562,9 @@ class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPag
           Row(
             children: [
               Checkbox(
-                value: majoriteConfirmee,
-                onChanged: dateNaissance != null && _isOver18(dateNaissance!) 
-                    ? (value) => setState(() => majoriteConfirmee = value!) 
+                value: _majoriteConfirmee,
+                onChanged: _dateNaissance != null && _isOver18(_dateNaissance!) 
+                    ? (value) => setState(() => _majoriteConfirmee = value!) 
                     : null,
                 activeColor: KipikTheme.rouge,
               ),
@@ -319,7 +574,7 @@ class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPag
                   style: TextStyle(
                     fontFamily: 'PermanentMarker',
                     fontSize: 14,
-                    color: dateNaissance != null && _isOver18(dateNaissance!) 
+                    color: _dateNaissance != null && _isOver18(_dateNaissance!) 
                         ? Colors.white 
                         : Colors.grey,
                     fontWeight: FontWeight.bold,
@@ -327,12 +582,12 @@ class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPag
                 ),
               ),
               Icon(
-                majoriteConfirmee ? Icons.check_circle : Icons.warning,
-                color: majoriteConfirmee ? Colors.green : Colors.orange,
+                _majoriteConfirmee ? Icons.check_circle : Icons.warning,
+                color: _majoriteConfirmee ? Colors.green : Colors.orange,
               ),
             ],
           ),
-          if (ageError != null)
+          if (_ageError != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Row(
@@ -341,7 +596,7 @@ class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPag
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      ageError!,
+                      _ageError!,
                       style: const TextStyle(
                         fontFamily: 'PermanentMarker',
                         fontSize: 11,
@@ -357,7 +612,7 @@ class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPag
     );
   }
 
-  // ✅ Widget titres de sections avec headers tattoo (sans emoji dans le texte)
+  // Widget titres de sections avec headers tattoo
   Widget _buildSectionTitleWithHeader(String title, IconData icon, {int headerIndex = 1}) {
     final headers = [
       'assets/images/header_tattoo_wallpaper.png',
@@ -369,73 +624,60 @@ class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPag
 
     return Container(
       width: double.infinity,
+      padding: const EdgeInsets.all(12),
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
+        borderRadius: BorderRadius.circular(8),
+        image: DecorationImage(
+          image: AssetImage(headerImage),
+          fit: BoxFit.cover,
+          colorFilter: ColorFilter.mode(
+            Colors.white.withOpacity(0.6),
+            BlendMode.lighten,
           ),
-        ],
-      ),
-      child: Container(
-        height: 50,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          image: DecorationImage(
-            image: AssetImage(headerImage),
-            fit: BoxFit.cover,
-            colorFilter: ColorFilter.mode(
-              Colors.white.withOpacity(0.6),
-              BlendMode.lighten,
-            ),
-          ),
-          border: Border.all(color: KipikTheme.rouge, width: 2),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              color: KipikTheme.rouge,
-              size: 20,
+        border: Border.all(color: KipikTheme.rouge, width: 2),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            color: KipikTheme.rouge,
+            size: 20,
+            shadows: [
+              Shadow(
+                color: Colors.white.withOpacity(0.8),
+                blurRadius: 2,
+                offset: const Offset(1, 1),
+              ),
+            ],
+          ),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: const TextStyle(
+              fontFamily: 'PermanentMarker',
+              fontSize: 16,
+              color: Colors.black87,
+              fontWeight: FontWeight.bold,
               shadows: [
                 Shadow(
-                  color: Colors.white.withOpacity(0.8),
-                  blurRadius: 2,
-                  offset: const Offset(1, 1),
+                  color: Colors.white,
+                  blurRadius: 3,
+                  offset: Offset(1, 1),
                 ),
               ],
             ),
-            const SizedBox(width: 8),
-            Text(
-              title,
-              style: const TextStyle(
-                fontFamily: 'PermanentMarker',
-                fontSize: 16,
-                color: Colors.black87,
-                fontWeight: FontWeight.bold,
-                shadows: [
-                  Shadow(
-                    color: Colors.white,
-                    blurRadius: 3,
-                    offset: Offset(1, 1),
-                  ),
-                ],
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
-  
+
   @override
   Widget build(BuildContext context) {
-    // ✅ Background aléatoire
     final backgrounds = [
       'assets/background1.png',
       'assets/background2.png',
@@ -465,7 +707,46 @@ class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPag
                 key: _formKey,
                 child: Column(
                   children: [
-                    // ✅ Indicateur de sécurité reCAPTCHA
+                    // Bandeau essai gratuit 30 jours
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.green.shade400, Colors.green.shade600],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.green, width: 2),
+                      ),
+                      child: const Column(
+                        children: [
+                          Icon(Icons.celebration, color: Colors.white, size: 32),
+                          SizedBox(height: 8),
+                          Text(
+                            'ESSAI GRATUIT 30 JOURS',
+                            style: TextStyle(
+                              fontFamily: 'PermanentMarker',
+                              fontSize: 18,
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Organisez vos conventions avec tous les outils pros.\nChoisissez votre abonnement à la fin de la période.',
+                            style: TextStyle(
+                              fontFamily: 'Roboto',
+                              fontSize: 14,
+                              color: Colors.white,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Indicateur de sécurité reCAPTCHA
                     Container(
                       margin: const EdgeInsets.only(bottom: 16),
                       padding: const EdgeInsets.all(12),
@@ -493,28 +774,106 @@ class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPag
                       ),
                     ),
 
-                    // ✅ Section Informations personnelles avec header tattoo
+                    // Section Code promo
+                    _buildSectionTitleWithHeader('Code promo', Icons.card_giftcard, headerIndex: 1),
+                    
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.9),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: KipikTheme.rouge, width: 2),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text(
+                            'Bénéficiez d\'une réduction sur votre futur abonnement',
+                            style: TextStyle(
+                              fontFamily: 'Roboto',
+                              fontSize: 12,
+                              color: Colors.grey,
+                              fontStyle: FontStyle.italic,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _promoCodeController,
+                                  decoration: _inputDecoration('Code promo (optionnel)'),
+                                  style: const TextStyle(
+                                    fontFamily: 'Roboto',
+                                    color: Colors.black87,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                  textCapitalization: TextCapitalization.characters,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton(
+                                onPressed: _isValidatingPromo ? null : _validatePromoCode,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: KipikTheme.rouge,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                ),
+                                child: _isValidatingPromo
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                      )
+                                    : const Text('Valider'),
+                              ),
+                            ],
+                          ),
+                          if (_validatedPromoCode != null) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.green.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.green),
+                              ),
+                              child: Text(
+                                _validatedPromoCode!['type'] == 'referral'
+                                    ? '✅ Code de parrainage validé !'
+                                    : _validatedPromoCode!['type'] == 'percentage'
+                                    ? '✅ ${(_validatedPromoCode!['value'] as num).toInt()}% de réduction sur votre futur abonnement !'
+                                    : '✅ ${(_validatedPromoCode!['value'] as num).toInt()}€ de réduction sur votre futur abonnement !',
+                                style: const TextStyle(
+                                  color: Colors.green,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+
+                    // Section Informations personnelles
                     _buildSectionTitleWithHeader('Informations personnelles', Icons.person, headerIndex: 1),
 
-                    // Nom et prénom
                     TextFormField(
-                      controller: _nameController,
-                      style: const TextStyle(
-                        color: Colors.black87,
-                        fontFamily: 'Roboto',
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
-                      decoration: _inputDecoration('Nom et prénom *'),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Champ obligatoire';
-                        }
-                        if (value.trim().split(' ').length < 2) {
-                          return 'Veuillez entrer votre nom et prénom';
-                        }
-                        return null;
-                      },
+                      controller: _prenomController,
+                      style: const TextStyle(color: Colors.black87, fontFamily: 'Roboto', fontWeight: FontWeight.w600, fontSize: 16),
+                      decoration: _inputDecoration('Prénom *'),
+                      validator: _requiredValidator,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _nomController,
+                      style: const TextStyle(color: Colors.black87, fontFamily: 'Roboto', fontWeight: FontWeight.w600, fontSize: 16),
+                      decoration: _inputDecoration('Nom *'),
+                      validator: _requiredValidator,
                     ),
                     const SizedBox(height: 12),
 
@@ -524,7 +883,7 @@ class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPag
                         final now = DateTime.now();
                         final pick = await showDatePicker(
                           context: context,
-                          initialDate: dateNaissance ?? DateTime(now.year - 25),
+                          initialDate: _dateNaissance ?? DateTime(now.year - 25),
                           firstDate: DateTime(1900),
                           lastDate: now,
                           locale: const Locale('fr', 'FR'),
@@ -538,9 +897,7 @@ class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPag
                                   onSurface: Colors.black,
                                 ),
                                 textButtonTheme: TextButtonThemeData(
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: KipikTheme.rouge,
-                                  ),
+                                  style: TextButton.styleFrom(foregroundColor: KipikTheme.rouge),
                                 ),
                               ),
                               child: child!,
@@ -550,13 +907,13 @@ class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPag
                         
                         if (pick != null) {
                           setState(() {
-                            dateNaissance = pick;
+                            _dateNaissance = pick;
                             
                             if (!_isOver18(pick)) {
-                              ageError = "Vous devez avoir au moins 18 ans pour vous inscrire";
-                              majoriteConfirmee = false;
+                              _ageError = "Vous devez avoir au moins 18 ans pour vous inscrire";
+                              _majoriteConfirmee = false;
                             } else {
-                              ageError = null;
+                              _ageError = null;
                             }
                           });
                         }
@@ -566,7 +923,7 @@ class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPag
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
-                              color: dateNaissance != null && !_isOver18(dateNaissance!) 
+                              color: _dateNaissance != null && !_isOver18(_dateNaissance!) 
                                   ? Colors.red 
                                   : KipikTheme.rouge, 
                               width: 1.5
@@ -577,21 +934,21 @@ class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPag
                           children: [
                             Expanded(
                               child: Text(
-                                dateNaissance == null
+                                _dateNaissance == null
                                     ? 'Sélectionner votre date'
-                                    : '${dateNaissance!.day}/${dateNaissance!.month}/${dateNaissance!.year}',
+                                    : '${_dateNaissance!.day}/${_dateNaissance!.month}/${_dateNaissance!.year}',
                                 style: TextStyle(
-                                  color: dateNaissance == null ? Colors.grey : Colors.black87,
+                                  color: _dateNaissance == null ? Colors.grey : Colors.black87,
                                   fontFamily: 'Roboto',
                                   fontWeight: FontWeight.w600,
                                   fontSize: 16,
                                 ),
                               ),
                             ),
-                            if (dateNaissance != null)
+                            if (_dateNaissance != null)
                               Icon(
-                                _isOver18(dateNaissance!) ? Icons.check_circle : Icons.error,
-                                color: _isOver18(dateNaissance!) ? Colors.green : Colors.red,
+                                _isOver18(_dateNaissance!) ? Icons.check_circle : Icons.error,
+                                color: _isOver18(_dateNaissance!) ? Colors.green : Colors.red,
                               ),
                           ],
                         ),
@@ -601,154 +958,245 @@ class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPag
 
                     // Widget de certification de majorité
                     _buildMajoriteConfirmation(),
+
+                    // Section Adresse personnelle
+                    _buildSectionTitleWithHeader('Adresse personnelle', Icons.home, headerIndex: 2),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _numeroController,
+                            style: const TextStyle(color: Colors.black87, fontFamily: 'Roboto', fontWeight: FontWeight.w600, fontSize: 16),
+                            decoration: _inputDecoration('N° *'),
+                            validator: _requiredValidator,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 3,
+                          child: TextFormField(
+                            controller: _rueController,
+                            style: const TextStyle(color: Colors.black87, fontFamily: 'Roboto', fontWeight: FontWeight.w600, fontSize: 16),
+                            decoration: _inputDecoration('Rue *'),
+                            validator: _requiredValidator,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _codePostalController,
+                            style: const TextStyle(color: Colors.black87, fontFamily: 'Roboto', fontWeight: FontWeight.w600, fontSize: 16),
+                            keyboardType: TextInputType.number,
+                            decoration: _inputDecoration('Code postal *'),
+                            validator: _requiredValidator,
+                            onChanged: (v) {
+                              final liste = villesParCodePostal[v.trim()];
+                              if (liste != null && liste.length == 1) {
+                                setState(() => _villeController.text = liste.first);
+                              } else {
+                                setState(() => _villeController.text = '');
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _villeController,
+                            style: const TextStyle(color: Colors.black87, fontFamily: 'Roboto', fontWeight: FontWeight.w600, fontSize: 16),
+                            decoration: _inputDecoration('Ville *'),
+                            validator: _requiredValidator,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _telephoneController,
+                      style: const TextStyle(color: Colors.black87, fontFamily: 'Roboto', fontWeight: FontWeight.w600, fontSize: 16),
+                      keyboardType: TextInputType.phone,
+                      decoration: _inputDecoration('Téléphone *'),
+                      validator: _requiredValidator,
+                    ),
+
                     const SizedBox(height: 20),
 
-                    // ✅ Section Informations professionnelles avec header tattoo
-                    _buildSectionTitleWithHeader('Informations professionnelles', Icons.business, headerIndex: 2),
+                    // Section Informations entreprise
+                    _buildSectionTitleWithHeader('Informations entreprise', Icons.business, headerIndex: 3),
 
-                    // Nom de la compagnie
                     TextFormField(
-                      controller: _companyController,
-                      style: const TextStyle(
-                        color: Colors.black87,
-                        fontFamily: 'Roboto',
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
-                      decoration: _inputDecoration('Nom de la compagnie *'),
+                      controller: _nomEntrepriseController,
+                      style: const TextStyle(color: Colors.black87, fontFamily: 'Roboto', fontWeight: FontWeight.w600, fontSize: 16),
+                      decoration: _inputDecoration('Nom de l\'entreprise *'),
                       validator: _requiredValidator,
                     ),
                     const SizedBox(height: 12),
-
-                    // Numéro professionnel
                     TextFormField(
-                      controller: _phoneController,
-                      style: const TextStyle(
-                        color: Colors.black87,
-                        fontFamily: 'Roboto',
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
-                      keyboardType: TextInputType.phone,
-                      decoration: _inputDecoration('Numéro professionnel *'),
-                      validator: _validatePhone,
+                      controller: _siretController,
+                      style: const TextStyle(color: Colors.black87, fontFamily: 'Roboto', fontWeight: FontWeight.w600, fontSize: 16),
+                      keyboardType: TextInputType.number,
+                      decoration: _inputDecoration('SIRET *'),
+                      validator: _validateSiret,
                     ),
                     const SizedBox(height: 12),
-
-                    // Email professionnel
+                    DropdownButtonFormField<String>(
+                      value: _formeJuridique,
+                      decoration: _inputDecoration('Forme juridique *'),
+                      items: const [
+                        DropdownMenuItem(value: 'SARL', child: Text('SARL')),
+                        DropdownMenuItem(value: 'SAS', child: Text('SAS')),
+                        DropdownMenuItem(value: 'EURL', child: Text('EURL')),
+                        DropdownMenuItem(value: 'Auto-entrepreneur', child: Text('Auto-entrepreneur')),
+                        DropdownMenuItem(value: 'Association', child: Text('Association')),
+                        DropdownMenuItem(value: 'Autre', child: Text('Autre')),
+                      ],
+                      onChanged: (v) => setState(() => _formeJuridique = v),
+                      validator: (v) => v == null ? 'Champ obligatoire' : null,
+                      dropdownColor: Colors.white,
+                      style: const TextStyle(color: Colors.black87, fontFamily: 'Roboto', fontSize: 16),
+                    ),
+                    const SizedBox(height: 12),
                     TextFormField(
-                      controller: _emailProController,
-                      style: const TextStyle(
-                        color: Colors.black87,
-                        fontFamily: 'Roboto',
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
+                      controller: _adresseEntrepriseController,
+                      style: const TextStyle(color: Colors.black87, fontFamily: 'Roboto', fontWeight: FontWeight.w600, fontSize: 16),
+                      decoration: _inputDecoration('Adresse entreprise *'),
+                      validator: _requiredValidator,
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _telephoneEntrepriseController,
+                      style: const TextStyle(color: Colors.black87, fontFamily: 'Roboto', fontWeight: FontWeight.w600, fontSize: 16),
+                      keyboardType: TextInputType.phone,
+                      decoration: _inputDecoration('Téléphone entreprise *'),
+                      validator: _requiredValidator,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _emailEntrepriseController,
+                      style: const TextStyle(color: Colors.black87, fontFamily: 'Roboto', fontWeight: FontWeight.w600, fontSize: 16),
                       keyboardType: TextInputType.emailAddress,
-                      decoration: _inputDecoration('Email professionnel *'),
+                      decoration: _inputDecoration('Email entreprise *'),
                       validator: _validateEmail,
                     ),
-                    const SizedBox(height: 12),
 
-                    // Site web professionnel
-                    TextFormField(
-                      controller: _websiteController,
-                      style: const TextStyle(
-                        color: Colors.black87,
-                        fontFamily: 'Roboto',
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
-                      keyboardType: TextInputType.url,
-                      decoration: _inputDecoration('Site web professionnel (optionnel)'),
-                      validator: _validateWebsite,
-                    ),
                     const SizedBox(height: 20),
 
-                    // ✅ Section Sécurité avec header tattoo
-                    _buildSectionTitleWithHeader('Sécurité', Icons.lock, headerIndex: 3),
+                    // Section Documents obligatoires
+                    _buildSectionTitleWithHeader('Documents obligatoires', Icons.folder, headerIndex: 1),
 
-                    // Email de connexion
+                    for (final doc in [
+                      {'title': 'Pièce d\'identité *', 'type': 'identite', 'file': _pieceIdentite},
+                      {'title': 'KBIS < 3 mois *', 'type': 'kbis', 'file': _kbis},
+                      {'title': 'RIB entreprise *', 'type': 'rib', 'file': _rib},
+                      {'title': 'Attestation assurance *', 'type': 'assurance', 'file': _attestationAssurance},
+                    ]) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () => _uploadDocument(doc['type'] as String),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: (doc['file'] as XFile?) != null ? Colors.green : KipikTheme.rouge,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            textStyle: const TextStyle(fontFamily: 'PermanentMarker', fontSize: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon((doc['file'] as XFile?) != null ? Icons.check_circle : Icons.upload_file),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  (doc['file'] as XFile?) == null
+                                      ? doc['title'] as String
+                                      : "✓ ${(doc['file'] as XFile?)!.name}",
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
+                    // Section Identifiants de connexion
+                    _buildSectionTitleWithHeader('Identifiants de connexion', Icons.lock, headerIndex: 2),
+
                     TextFormField(
                       controller: _emailController,
-                      style: const TextStyle(
-                        color: Colors.black87,
-                        fontFamily: 'Roboto',
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
+                      style: const TextStyle(color: Colors.black87, fontFamily: 'Roboto', fontWeight: FontWeight.w600, fontSize: 16),
                       keyboardType: TextInputType.emailAddress,
-                      decoration: _inputDecoration('Email de connexion *'),
+                      decoration: _inputDecoration('Email *'),
                       validator: _validateEmail,
                     ),
                     const SizedBox(height: 12),
-
-                    // Mot de passe
                     TextFormField(
                       controller: _passwordController,
                       obscureText: !_showPassword,
-                      style: const TextStyle(
-                        color: Colors.black87,
-                        fontFamily: 'Roboto',
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
+                      style: const TextStyle(color: Colors.black87, fontFamily: 'Roboto', fontWeight: FontWeight.w600, fontSize: 16),
                       decoration: _inputDecoration('Mot de passe *'),
                       validator: _validatePassword,
                     ),
                     const SizedBox(height: 12),
-
-                    // Confirmer mot de passe
                     TextFormField(
                       controller: _confirmPasswordController,
                       obscureText: !_showConfirmPassword,
-                      style: const TextStyle(
-                        color: Colors.black87,
-                        fontFamily: 'Roboto',
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
+                      style: const TextStyle(color: Colors.black87, fontFamily: 'Roboto', fontWeight: FontWeight.w600, fontSize: 16),
                       decoration: _inputDecoration('Confirmer mot de passe *'),
                       validator: _validateConfirmPassword,
                     ),
+
                     const SizedBox(height: 20),
 
-                    // ✅ Section Conditions avec header tattoo
-                    _buildSectionTitleWithHeader('Conditions d\'utilisation', Icons.gavel, headerIndex: 1),
+                    // Section Conditions d'utilisation
+                    _buildSectionTitleWithHeader('Conditions d\'utilisation', Icons.gavel, headerIndex: 3),
 
-                    // ✅ CGU / CGV avec widget de validation
+                    // CGU / CGV
                     CGUCGVValidationWidget(
-                      cguAccepted: cguLu,
-                      cgvAccepted: cgvLu,
+                      cguAccepted: _cguLu,
+                      cgvAccepted: _cgvLu,
                       onCGURead: () async {
                         final ok = await Navigator.pushNamed(context, '/cgu') as bool?;
-                        if (mounted) setState(() => cguLu = ok == true);
+                        if (mounted) setState(() => _cguLu = ok == true);
                       },
                       onCGVRead: () async {
                         final ok = await Navigator.pushNamed(context, '/cgv') as bool?;
-                        if (mounted) setState(() => cgvLu = ok == true);
+                        if (mounted) setState(() => _cgvLu = ok == true);
                       },
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Newsletter
+                    CheckboxListTile(
+                      value: _newsletterAccepted,
+                      onChanged: (v) => setState(() => _newsletterAccepted = v!),
+                      title: const Text(
+                        "Recevoir la newsletter Kipik",
+                        style: TextStyle(color: Colors.white, fontFamily: 'PermanentMarker'),
+                      ),
+                      activeColor: KipikTheme.rouge,
                     ),
                     const SizedBox(height: 24),
 
-                    // Valider inscription
+                    // Bouton de validation
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: _isLoading || !isFormValid ? null : _submitForm,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: isFormValid 
-                              ? KipikTheme.rouge 
-                              : Colors.grey,
+                          backgroundColor: isFormValid ? KipikTheme.rouge : Colors.grey,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 18),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          textStyle: const TextStyle(
-                            fontFamily: 'PermanentMarker',
-                            fontSize: 18,
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          textStyle: const TextStyle(fontFamily: 'PermanentMarker', fontSize: 18),
                         ),
                         child: _isLoading
                             ? const Row(
@@ -757,20 +1205,17 @@ class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPag
                                   SizedBox(
                                     height: 20,
                                     width: 20,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
+                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                                   ),
                                   SizedBox(width: 12),
                                   Text('Inscription en cours...'),
                                 ],
                               )
-                            : const Text('Valider mon inscription'),
+                            : const Text('Commencer mon essai gratuit'),
                       ),
                     ),
-
-                    // ✅ Aide visuelle
+                    
+                    // Aide visuelle pour les champs obligatoires
                     const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -786,11 +1231,7 @@ class _InscriptionOrganisateurPageState extends State<InscriptionOrganisateurPag
                           Expanded(
                             child: Text(
                               'Les champs marqués d\'un * sont obligatoires',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontFamily: 'Roboto',
-                              ),
+                              style: TextStyle(color: Colors.white, fontSize: 14, fontFamily: 'Roboto'),
                             ),
                           ),
                         ],

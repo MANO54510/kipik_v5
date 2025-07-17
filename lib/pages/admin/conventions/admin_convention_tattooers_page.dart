@@ -1,48 +1,60 @@
-import 'dart:math';
+// lib/pages/admin/conventions/admin_convention_tattooers_page.dart
+
 import 'package:flutter/material.dart';
-import 'package:kipik_v5/widgets/common/app_bars/gpt_app_bar.dart';
-import 'package:kipik_v5/widgets/common/drawers/custom_drawer_kipik.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:kipik_v5/theme/kipik_theme.dart';
+import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
 
 class AdminConventionTattooersPage extends StatelessWidget {
-  const AdminConventionTattooersPage({super.key});
+  final String conventionId;
+  const AdminConventionTattooersPage({Key? key, required this.conventionId}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final backgrounds = [
-      'assets/background1.png',
-      'assets/background2.png',
-      'assets/background3.png',
-      'assets/background4.png',
-    ];
-    final selectedBackground = backgrounds[Random().nextInt(backgrounds.length)];
+    final tattooersColl = FirebaseFirestore.instance
+        .collection('conventions')
+        .doc(conventionId)
+        .collection('tattooers');
 
     return Scaffold(
-      appBar: const GptAppBar(
-        title: 'Tatoueurs de la Convention',
-        showNotificationIcon: true,
-        showBackButton: false,
+      extendBodyBehindAppBar: true,
+      appBar: const CustomAppBarKipik(
+        title: 'Tatoueurs inscrits',
+        showBackButton: true,
+        useProStyle: true,
       ),
-      drawer: const CustomDrawerKipik(),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          Image.asset(selectedBackground, fit: BoxFit.cover),
-          Center(
-            child: Container(
-              margin: const EdgeInsets.all(24),
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Text(
-                'Liste des tatoueurs inscrits à cette convention.',
-                style: TextStyle(fontSize: 18),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-        ],
+      body: StreamBuilder<QuerySnapshot>(
+        stream: tattooersColl.snapshots(),
+        builder: (ctx, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            return Center(child: KipikTheme.loading());
+          }
+          final docs = snap.data?.docs ?? [];
+          if (docs.isEmpty) {
+            return const Center(child: Text('Aucun tatoueur inscrit'));
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            itemCount: docs.length,
+            itemBuilder: (ctx, i) {
+              final data = docs[i].data() as Map<String, dynamic>;
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                child: ListTile(
+                  leading: CircleAvatar(child: Text(data['name']?.substring(0,1) ?? '?')),
+                  title: Text(data['name'] ?? 'Sans nom', style: KipikTheme.cardTitleStyle),
+                  subtitle: Text('Stand : ${data['standNumber'] ?? '—'}', style: KipikTheme.bodyTextSecondary),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.remove_red_eye),
+                    onPressed: () {
+                      // TODO: afficher profil détaillé ou actions (annuler inscription…)
+                    },
+                  ),
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }

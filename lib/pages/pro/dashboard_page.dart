@@ -1,7 +1,5 @@
 // lib/pages/pro/dashboard_page.dart
 
-// lib/pages/pro/dashboard_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:kipik_v5/widgets/common/drawers/custom_drawer_kipik.dart';
 import 'package:kipik_v5/widgets/common/app_bars/custom_app_bar_kipik.dart';
@@ -12,6 +10,9 @@ import 'package:kipik_v5/pages/pro/home_page_pro.dart';
 import 'package:kipik_v5/pages/pro/agenda/pro_agenda_home_page.dart';
 import 'package:kipik_v5/pages/pro/attente_devis_page.dart';
 import 'package:kipik_v5/pages/chat_projet_page.dart';
+
+// Import pour le dashboard abonnement
+import 'package:kipik_v5/screens/subscription/subscription_dashboard.dart';
 
 // Modèles pour les notifications
 enum NotificationType { newMessage, newQuote, appointment, payment, review, urgent }
@@ -173,7 +174,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             );
           },
           onNotificationPressed: () {
-            // Ouvrir les notifications au lieu du drawer
             _showNotificationsModal();
           },
         ),
@@ -220,101 +220,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           ),
         ),
       ),
-    );
-  }
-
-  PreferredSizeWidget _buildCustomAppBar() {
-    return AppBar(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      leading: Container(
-        margin: const EdgeInsets.only(left: 16),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: IconButton(
-          icon: const Icon(
-            Icons.arrow_back,
-            color: Colors.white,
-            size: 24,
-          ),
-          onPressed: () {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const HomePagePro()),
-            );
-          },
-        ),
-      ),
-      title: const Text(
-        'Tableau de bord',
-        style: TextStyle(
-          fontFamily: 'PermanentMarker',
-          color: Colors.white,
-          fontSize: 20,
-          fontWeight: FontWeight.w400,
-        ),
-      ),
-      centerTitle: true,
-      actions: [
-        AnimatedBuilder(
-          animation: _pulseAnimation,
-          builder: (context, child) {
-            return Transform.scale(
-              scale: _notificationsUrgentes > 0 ? _pulseAnimation.value : 1.0,
-              child: Container(
-                margin: const EdgeInsets.only(right: 16),
-                decoration: BoxDecoration(
-                  color: _notificationsUrgentes > 0 
-                      ? KipikTheme.rouge.withOpacity(0.2)
-                      : Colors.white.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: IconButton(
-                  icon: Stack(
-                    children: [
-                      const Icon(
-                        Icons.notifications_outlined,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                      if (_notificationsUrgentes > 0)
-                        Positioned(
-                          right: 0,
-                          top: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              color: KipikTheme.rouge,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            constraints: const BoxConstraints(
-                              minWidth: 12,
-                              minHeight: 12,
-                            ),
-                            child: Text(
-                              '$_notificationsUrgentes',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 8,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  onPressed: () {
-                    _scaffoldKey.currentState?.openEndDrawer();
-                  },
-                ),
-              ),
-            );
-          },
-        ),
-      ],
     );
   }
 
@@ -399,7 +304,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             height: 64,
             decoration: BoxDecoration(
               color: KipikTheme.rouge.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12), // Carré avec coins arrondis
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: KipikTheme.rouge.withOpacity(0.3),
                 width: 2,
@@ -460,7 +365,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   Widget _buildNotificationCards() {
-    // Filtrer et trier les notifications par priorité
     final priorityNotifications = _notifications.where((n) => 
       n.count != null && n.count! >= 0
     ).take(6).toList();
@@ -471,16 +375,15 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         _buildSectionTitle('Notifications prioritaires', Icons.priority_high),
         const SizedBox(height: 20),
         
-        // Container avec hauteur suffisante pour 2 rangées complètes
         SizedBox(
-          height: 200, // Hauteur augmentée pour les 2 rangées
+          height: 200,
           child: GridView.builder(
             physics: const NeverScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 3,
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
-              childAspectRatio: 1.2, // Ajusté pour plus d'espace
+              childAspectRatio: 1.2,
             ),
             itemCount: priorityNotifications.length,
             itemBuilder: (context, index) {
@@ -526,7 +429,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Icône avec badge - zone compacte
                 SizedBox(
                   height: 32,
                   child: Stack(
@@ -582,7 +484,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   ),
                 ),
                 const SizedBox(height: 6),
-                // Titre compact
                 Flexible(
                   child: Text(
                     notification.title,
@@ -598,7 +499,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   ),
                 ),
                 const SizedBox(height: 2),
-                // Description compacte
                 Flexible(
                   child: Text(
                     notification.description,
@@ -716,7 +616,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               
               const SizedBox(height: 24),
               
-              // Barre de progression
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -740,7 +639,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                               : const Color(0xFF0A0A0A).withOpacity(0.05),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child:                         Text(
+                        child: Text(
                           '${(_progressCA * 100).toStringAsFixed(1)}%',
                           style: TextStyle(
                             fontSize: 12,
@@ -920,6 +819,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       children: [
         _buildSectionTitle('Actions rapides', Icons.flash_on),
         const SizedBox(height: 20),
+        
+        // Première rangée - Actions classiques
         Row(
           children: [
             Expanded(
@@ -959,7 +860,136 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             ),
           ],
         ),
+        
+        const SizedBox(height: 20),
+        
+        // Deuxième rangée - Bouton abonnement premium
+        _buildPremiumSubscriptionButton(),
       ],
+    );
+  }
+
+  Widget _buildPremiumSubscriptionButton() {
+    return AnimatedBuilder(
+      animation: _pulseAnimation,
+      builder: (context, child) {
+        return Container(
+          width: double.infinity,
+          height: 80,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF0A0A0A),
+                KipikTheme.rouge,
+                const Color(0xFF0A0A0A),
+              ],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: KipikTheme.rouge.withOpacity(0.3),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SubscriptionDashboard(),
+                  ),
+                );
+              },
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                child: Row(
+                  children: [
+                    // Icône tatouage avec animation
+                    Transform.scale(
+                      scale: _pulseAnimation.value,
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.3),
+                            width: 2,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.auto_awesome,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                    ),
+                    
+                    const SizedBox(width: 20),
+                    
+                    // Texte
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text(
+                            'Mon Abonnement Pro',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontFamily: 'PermanentMarker',
+                              fontWeight: FontWeight.w400,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black38,
+                                  offset: Offset(1, 1),
+                                  blurRadius: 3,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Gérez votre plan et vos commissions',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13,
+                              fontFamily: 'Roboto',
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    // Badge avec machine à tatouer
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.arrow_forward_ios,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1237,7 +1267,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         ),
         child: Column(
           children: [
-            // Header
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -1276,7 +1305,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 ],
               ),
             ),
-            // Liste des notifications
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.all(16),
